@@ -10,7 +10,6 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/juju/juju/api/base"
 	jujuparams "github.com/juju/juju/rpc/params"
-	"github.com/juju/names/v5"
 	"github.com/juju/zaputil/zapctx"
 	"go.uber.org/zap"
 
@@ -125,14 +124,5 @@ func proxy(in base.Stream, out base.Stream) error {
 		if err != nil {
 			return err
 		}
-	}
-}
-
-func checkPermission(ctx context.Context, path string, u *openfga.User, mt names.ModelTag) (bool, error) {
-	switch path {
-	case "log":
-		return u.IsModelReader(ctx, mt)
-	default:
-		return false, errors.E("unknown endpoint " + path)
 	}
 }

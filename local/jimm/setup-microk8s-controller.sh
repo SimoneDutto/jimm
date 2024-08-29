@@ -7,5 +7,5 @@
 #   --node-ip=172.16.12.223
 #   to /var/snap/microk8s/current/args/kubelet
 # 4. sudo snap restart microk8s
-juju bootstrap microk8s "qa-microk8s" --config login-token-refresh-url=http://10.0.1.1:17070/.well-known/jwks.json 
+juju bootstrap microk8s "qa-microk8s" --config login-token-refresh-url=http://192.168.168.249:17070/.well-known/jwks.json 
 

@@ -62,6 +62,7 @@ type JIMM interface {
 	GetControllerConfig(ctx context.Context, u *dbmodel.Identity) (*dbmodel.ControllerConfig, error)
 	GetCredentialStore() credentials.CredentialStore
 	GetJimmControllerAccess(ctx context.Context, user *openfga.User, tag names.UserTag) (string, error)
+	GetModel(ctx context.Context, uuid string) (*dbmodel.Model, error)
 	GetUser(ctx context.Context, username string) (*openfga.User, error)
 	GetUserCloudAccess(ctx context.Context, user *openfga.User, cloud names.CloudTag) (string, error)
 	GetUserControllerAccess(ctx context.Context, user *openfga.User, controller names.ControllerTag) (string, error)

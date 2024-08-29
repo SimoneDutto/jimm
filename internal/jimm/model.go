@@ -4,6 +4,7 @@ package jimm
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"math/rand"
 	"sort"
@@ -1098,6 +1099,21 @@ func (j *JIMM) doModelAdmin(ctx context.Context, user *openfga.User, mt names.Mo
 func (j *JIMM) GetUserModelAccess(ctx context.Context, user *openfga.User, model names.ModelTag) (string, error) {
 	accessLevel := user.GetModelAccess(ctx, model)
 	return ToModelAccessString(accessLevel), nil
+}
+
+func (j *JIMM) GetModel(ctx context.Context, uuid string) (*dbmodel.Model, error) {
+	const op = errors.Op("jimm.GetModel")
+	m := dbmodel.Model{
+		UUID: sql.NullString{
+			String: uuid,
+			Valid:  uuid != "",
+		},
+	}
+	err := j.DB().GetModel(ctx, &m)
+	if err != nil {
+		return nil, err
+	}
+	return &m, err
 }
 
 func (j *JIMM) doModel(ctx context.Context, user *openfga.User, mt names.ModelTag, access string, f func(*dbmodel.Model, API) error) error {
