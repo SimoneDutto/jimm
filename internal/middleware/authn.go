@@ -13,15 +13,21 @@ import (
 
 	"github.com/canonical/jimm/v3/internal/auth"
 	"github.com/canonical/jimm/v3/internal/errors"
-	"github.com/canonical/jimm/v3/internal/jujuapi"
 	"github.com/canonical/jimm/v3/internal/openfga"
 )
 
 // identityContextKey is the unique key to extract user from context for basic-auth authentication
 type identityContextKey struct{}
 
+// JIMMAuthner is an interface that requires authentication methods from JIMM.
+type JIMMAuthner interface {
+	AuthenticateBrowserSession(context.Context, http.ResponseWriter, *http.Request) (context.Context, error)
+	LoginWithSessionToken(ctx context.Context, sessionToken string) (*openfga.User, error)
+	UserLogin(ctx context.Context, identityName string) (*openfga.User, error)
+}
+
 // AuthenticateViaCookie performs browser session authentication and puts an identity in the request's context
-func AuthenticateViaCookie(next http.Handler, jimm jujuapi.JIMM) http.Handler {
+func AuthenticateViaCookie(next http.Handler, jimm JIMMAuthner) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx, err := jimm.AuthenticateBrowserSession(r.Context(), w, r)
 		if err != nil {
@@ -44,7 +50,7 @@ var unauthenticatedEndpoints = map[string]struct{}{
 // verifies that the user is a JIMM admin. Note that the method needs the base
 // URL to decide if the request does not require authentication; this is to
 // safeguard against conflicting/similar endpoint names in the future.
-func AuthenticateRebac(baseURL string, next http.Handler, jimm jujuapi.JIMM) http.Handler {
+func AuthenticateRebac(baseURL string, next http.Handler, jimm JIMMAuthner) http.Handler {
 	cookieAuthenticator := AuthenticateViaCookie(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
@@ -83,7 +89,7 @@ func AuthenticateRebac(baseURL string, next http.Handler, jimm jujuapi.JIMM) htt
 
 // AuthenticateWithSessionTokenViaBasicAuth performs basic auth authentication and puts an identity in the request's context.
 // The basic-auth is composed of an empty user, and as a password a jwt token that we parse and use to authenticate the user.
-func AuthenticateWithSessionTokenViaBasicAuth(next http.Handler, jimm jujuapi.JIMM) http.Handler {
+func AuthenticateWithSessionTokenViaBasicAuth(next http.Handler, jimm JIMMAuthner) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		// extract auth token
