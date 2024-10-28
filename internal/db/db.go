@@ -132,7 +132,7 @@ func (d *Database) EnableLogs() {
 	d.DB.Logger.LogMode(logger.Info)
 }
 
-// EnableLogs enables gorm logging.
+// DisableLogs disables gorm logging.
 func (d *Database) DisableLogs() {
 	d.DB.Logger.LogMode(logger.Silent)
 }
