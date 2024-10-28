@@ -65,11 +65,11 @@ func (d *Database) Migrate(ctx context.Context, force bool) error {
 		return errors.E(op, errors.CodeServerConfiguration, "database not configured")
 	}
 	db := d.DB.WithContext(ctx)
-
 	schema, _ := dbmodel.SQL.ReadFile(path.Join("sql", db.Name(), "versions.sql"))
 	if err := db.Exec(string(schema)).Error; err != nil {
 		return errors.E(op, dbError(err))
 	}
+
 	for {
 		v := dbmodel.Version{Component: dbmodel.Component, Major: 1, Minor: 0}
 		if err := db.FirstOrCreate(&v).Error; err != nil {
@@ -101,7 +101,6 @@ func (d *Database) Migrate(ctx context.Context, force bool) error {
 			return errors.E(op, dbError(err))
 		}
 	}
-
 }
 
 // ready checks that the database is ready to accept requests. An error is
