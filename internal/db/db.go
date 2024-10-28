@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 
 	"github.com/canonical/jimm/v3/internal/dbmodel"
 	"github.com/canonical/jimm/v3/internal/errors"
@@ -64,11 +65,11 @@ func (d *Database) Migrate(ctx context.Context, force bool) error {
 		return errors.E(op, errors.CodeServerConfiguration, "database not configured")
 	}
 	db := d.DB.WithContext(ctx)
+
 	schema, _ := dbmodel.SQL.ReadFile(path.Join("sql", db.Name(), "versions.sql"))
 	if err := db.Exec(string(schema)).Error; err != nil {
 		return errors.E(op, dbError(err))
 	}
-
 	for {
 		v := dbmodel.Version{Component: dbmodel.Component, Major: 1, Minor: 0}
 		if err := db.FirstOrCreate(&v).Error; err != nil {
@@ -100,6 +101,7 @@ func (d *Database) Migrate(ctx context.Context, force bool) error {
 			return errors.E(op, dbError(err))
 		}
 	}
+
 }
 
 // ready checks that the database is ready to accept requests. An error is
@@ -124,6 +126,16 @@ func (d *Database) Close() error {
 		return errors.E(err, "failed to close database connection")
 	}
 	return nil
+}
+
+// EnableLogs enables gorm logging.
+func (d *Database) EnableLogs() {
+	d.DB.Logger.LogMode(logger.Info)
+}
+
+// EnableLogs enables gorm logging.
+func (d *Database) DisableLogs() {
+	d.DB.Logger.LogMode(logger.Silent)
 }
 
 // Now returns the current time as a valid sql.NullTime. The time that is
