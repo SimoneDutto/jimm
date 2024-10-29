@@ -2,6 +2,9 @@
 package logger
 
 import (
+	"os"
+	"strconv"
+
 	"github.com/juju/zaputil/zapctx"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -39,8 +42,12 @@ func NewGormTestLogger(t Tester) logger.Interface {
 			zap.DebugLevel,
 		))
 	zapctx.Default = logger
+	logSQL, _ := strconv.ParseBool(os.Getenv("JIMM_TEST_LOG_SQL"))
 	return &gormLogger{
 		t: t,
+		GormLogger: GormLogger{
+			LogSQL: logSQL,
+		},
 	}
 }
 
