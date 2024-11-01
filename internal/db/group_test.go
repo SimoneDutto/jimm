@@ -53,7 +53,6 @@ func (s *dbSuite) TestAddGroup(c *qt.C) {
 	c.Assert(ge.ID, qt.Equals, uint(1))
 	c.Assert(ge.Name, qt.Equals, "test-group")
 	c.Assert(ge.UUID, qt.Equals, uuid)
-	c.Fail()
 }
 
 func (s *dbSuite) TestCountGroups(c *qt.C) {

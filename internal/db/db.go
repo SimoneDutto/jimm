@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 
 	"github.com/canonical/jimm/v3/internal/dbmodel"
 	"github.com/canonical/jimm/v3/internal/errors"
@@ -125,16 +124,6 @@ func (d *Database) Close() error {
 		return errors.E(err, "failed to close database connection")
 	}
 	return nil
-}
-
-// EnableLogs enables gorm logging.
-func (d *Database) EnableLogs() {
-	d.DB.Logger.LogMode(logger.Info)
-}
-
-// DisableLogs disables gorm logging.
-func (d *Database) DisableLogs() {
-	d.DB.Logger.LogMode(logger.Silent)
 }
 
 // Now returns the current time as a valid sql.NullTime. The time that is
