@@ -214,7 +214,7 @@ func (s *dbSuite) TestForEachGroup(c *qt.C) {
 	}
 
 	matchedGroups := []*dbmodel.GroupEntry{}
-	err = s.Database.ForEachGroup(ctx, 5, 0, "%group-1%", func(ge *dbmodel.GroupEntry) error {
+	err = s.Database.ForEachGroup(ctx, 5, 0, "group-1", func(ge *dbmodel.GroupEntry) error {
 		matchedGroups = append(matchedGroups, ge)
 		return nil
 	})
@@ -225,7 +225,7 @@ func (s *dbSuite) TestForEachGroup(c *qt.C) {
 	matchedGroups = []*dbmodel.GroupEntry{}
 	testGroup, err := s.Database.AddGroup(context.Background(), "test-group-matched")
 	c.Assert(err, qt.IsNil)
-	err = s.Database.ForEachGroup(ctx, 5, 0, "%"+testGroup.UUID+"%", func(ge *dbmodel.GroupEntry) error {
+	err = s.Database.ForEachGroup(ctx, 5, 0, testGroup.UUID, func(ge *dbmodel.GroupEntry) error {
 		matchedGroups = append(matchedGroups, ge)
 		return nil
 	})

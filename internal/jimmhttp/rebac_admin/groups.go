@@ -43,7 +43,7 @@ func (s *groupsService) ListGroups(ctx context.Context, params *resources.GetGro
 	page, nextPage, pagination := pagination.CreatePagination(params.Size, params.Page, count)
 	match := ""
 	if params.Filter != nil && *params.Filter != "" {
-		match = "%" + *params.Filter + "%" // fuzzy search on the filter received
+		match = *params.Filter
 	}
 	groups, err := s.jimm.ListGroups(ctx, user, pagination, match)
 	if err != nil {

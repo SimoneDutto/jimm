@@ -98,6 +98,7 @@ func (d *Database) ForEachGroup(ctx context.Context, limit, offset int, match st
 
 	db := d.DB.WithContext(ctx)
 	if match != "" {
+		match = "%" + match + "%"
 		db = db.Where("uuid LIKE ? OR name LIKE ?", match, match)
 	}
 	db = db.Order("name asc")
