@@ -195,7 +195,7 @@ func (s *dbSuite) TestForEachGroup(c *qt.C) {
 	}
 	firstGroups := []*dbmodel.GroupEntry{}
 	ctx := context.Background()
-	err = s.Database.ForEachGroup(ctx, 5, 0, func(ge *dbmodel.GroupEntry) error {
+	err = s.Database.ForEachGroup(ctx, 5, 0, "", func(ge *dbmodel.GroupEntry) error {
 		firstGroups = append(firstGroups, ge)
 		return nil
 	})
@@ -204,7 +204,7 @@ func (s *dbSuite) TestForEachGroup(c *qt.C) {
 		c.Assert(firstGroups[i].Name, qt.Equals, fmt.Sprintf("test-group-%d", i))
 	}
 	secondGroups := []*dbmodel.GroupEntry{}
-	err = s.Database.ForEachGroup(ctx, 5, 5, func(ge *dbmodel.GroupEntry) error {
+	err = s.Database.ForEachGroup(ctx, 5, 5, "", func(ge *dbmodel.GroupEntry) error {
 		secondGroups = append(secondGroups, ge)
 		return nil
 	})
@@ -212,4 +212,24 @@ func (s *dbSuite) TestForEachGroup(c *qt.C) {
 	for i := 0; i < 5; i++ {
 		c.Assert(secondGroups[i].Name, qt.Equals, fmt.Sprintf("test-group-%d", i+5))
 	}
+
+	matchedGroups := []*dbmodel.GroupEntry{}
+	err = s.Database.ForEachGroup(ctx, 5, 0, "%group-1%", func(ge *dbmodel.GroupEntry) error {
+		matchedGroups = append(matchedGroups, ge)
+		return nil
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(matchedGroups, qt.HasLen, 1)
+	c.Assert(matchedGroups[0].Name, qt.Equals, "test-group-1")
+
+	matchedGroups = []*dbmodel.GroupEntry{}
+	testGroup, err := s.Database.AddGroup(context.Background(), "test-group-matched")
+	c.Assert(err, qt.IsNil)
+	err = s.Database.ForEachGroup(ctx, 5, 0, "%"+testGroup.UUID+"%", func(ge *dbmodel.GroupEntry) error {
+		matchedGroups = append(matchedGroups, ge)
+		return nil
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(matchedGroups, qt.HasLen, 1)
+	c.Assert(matchedGroups[0].Name, qt.Equals, testGroup.Name)
 }

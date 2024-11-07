@@ -30,7 +30,7 @@ type GroupService interface {
 	CountGroups(ctx context.Context, user *openfga.User) (int, error)
 	GetGroupByUUID(ctx context.Context, user *openfga.User, uuid string) (*dbmodel.GroupEntry, error)
 	GetGroupByName(ctx context.Context, user *openfga.User, name string) (*dbmodel.GroupEntry, error)
-	ListGroups(ctx context.Context, user *openfga.User, filter pagination.LimitOffsetPagination) ([]dbmodel.GroupEntry, error)
+	ListGroups(ctx context.Context, user *openfga.User, filter pagination.LimitOffsetPagination, match string) ([]dbmodel.GroupEntry, error)
 	RenameGroup(ctx context.Context, user *openfga.User, oldName, newName string) error
 	RemoveGroup(ctx context.Context, user *openfga.User, name string) error
 }
@@ -119,7 +119,7 @@ func (r *controllerRoot) ListGroups(ctx context.Context, req apiparams.ListGroup
 	const op = errors.Op("jujuapi.ListGroups")
 
 	filter := pagination.NewOffsetFilter(req.Limit, req.Offset)
-	groups, err := r.jimm.ListGroups(ctx, r.user, filter)
+	groups, err := r.jimm.ListGroups(ctx, r.user, filter, "")
 	if err != nil {
 		return apiparams.ListGroupResponse{}, errors.E(op, err)
 	}

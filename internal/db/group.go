@@ -85,7 +85,8 @@ func (d *Database) GetGroup(ctx context.Context, group *dbmodel.GroupEntry) (err
 // ForEachGroup iterates through every group calling the given function
 // for each one. If the given function returns an error the iteration
 // will stop immediately and the error will be returned unmodified.
-func (d *Database) ForEachGroup(ctx context.Context, limit, offset int, f func(*dbmodel.GroupEntry) error) (err error) {
+// `match` will filter with the LIKE operator on id or name.
+func (d *Database) ForEachGroup(ctx context.Context, limit, offset int, match string, f func(*dbmodel.GroupEntry) error) (err error) {
 	const op = errors.Op("db.ForEachGroup")
 	if err := d.ready(); err != nil {
 		return errors.E(op, err)
@@ -96,6 +97,9 @@ func (d *Database) ForEachGroup(ctx context.Context, limit, offset int, f func(*
 	defer servermon.ErrorCounter(servermon.DBQueryErrorCount, &err, string(op))
 
 	db := d.DB.WithContext(ctx)
+	if match != "" {
+		db = db.Where("uuid LIKE ? OR name LIKE ?", match, match)
+	}
 	db = db.Order("name asc")
 	db = db.Limit(limit)
 	db = db.Offset(offset)
