@@ -32,4 +32,14 @@ To analyse that we need to understand for each `dbmodel` where the field is writ
 - `CloudRegions`: used by JIMM to set cloud's priority
 - `Models`: not used
 
-
+### Cloud
+- `ID, Created At/Updated At, Name, UUID`: generic fields
+- `Type`: used by JIMM to decide to redact credentials. 
+- `HostCloudRegion`: ??
+- `AuthTypes`: used to display info
+- `Endpoint`: used to display info
+- `IdentityEndpoint`: used to display info
+- `StorageEndpoint`: used to display info
+- `Regions`: ??
+- `CACertificates`: used to display info
+- `Config`: used to display info
