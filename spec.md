@@ -43,3 +43,15 @@ To analyse that we need to understand for each `dbmodel` where the field is writ
 - `Regions`: ??
 - `CACertificates`: used to display info
 - `Config`: used to display info
+
+### CloudCredentials
+- `ID, Created At/Updated At, Name, UUID`: generic fields
+- `CloudName`: used by JIMM to retrieve CloudCredentials
+- `Cloud`: used by JIMM to decide to redact credentials. 
+- `OwnerIdentityName,Owner`: used by JIMM to set/check permissions when retrieving credentials.
+- `AuthType`: used by JIMM to decide to redact credentials. 
+- `Label`: not used
+- `AttributesInVault`: used by JIMM to decide where to retrieve attributes from.
+- `Attributes`: attributes saved in the database.
+- `Valid`: used by JIMM to revoke credentials.
+- `Models`: used by JIMM to retrieve models belonging to credentials. But I can't find any place were we keep this updated (useless?)
