@@ -7,17 +7,29 @@ To analyse that we need to understand for each `dbmodel` where the field is writ
 ### Model
 
 - `ID, Created At/Updated At, Name, UUID`: generic fields
-- `OwnerIdentityName, Owner `:  W in `jimm.AddModel()`, U in `jimm.ImportModel()`. Read all around to get owner's identity.
-- `ControllerID, Controller`: W in `jimm.AddModel()`, U in `jimm.ImportModel()`/`jimm.UpdateMigratedModel`. Read all around to connect to controller's api.
+- `OwnerIdentityName, Owner `:  owner's identity used by JIMM.
+- `ControllerID, Controller`: Controller info to route request to controllers
 - `MigrationControllerID`: not used.
-- `CloudRegionID, CloudRegion`: W in `jimm.AddModel(),jimm.ImportModel()`, R in `jimm.ModelInfo()`
-- `CloudCredentialID,CloudCredential`: W in `jimm.AddModel()`, U in `jimm.ImportModel()`, R in `jimm.ModelInfo()`
-- `Type`: W in `jimm.AddModel(),jimm.ImportModel()`, R in `jimm.ModelInfo()`
-- `IsController`: W in `jimm.AddModel(),jimm.ImportModel()`, R in `jimm.ModelInfo()`
-- `DefaultSeries`: W in `jimm.AddModel(),jimm.ImportModel()`, R in `jimm.ModelInfo()`
-- `Life`: W in `jimm.AddModel(),jimm.ImportModel()`, U in `jimm.DestroyModel(), watcher.watchController()`, R in `watcher.watchController()`
-- `Status`: W in `jimm.AddModel(),jimm.ImportModel()`, U in `watcher.watchController()`, R in `jimm.ModelInfo()`
-- `Machine`: W in `jimm.AddModel(),jimm.ImportModel()`, U in `watcher.watchController()`, R in `jimm.ModelInfo()`
-- `Cores`: W in `jimm.AddModel(),jimm.ImportModel()`, U in `watcher.watchController()`, R in `jimm.ModelInfo()`
-- `Units`: W in `jimm.AddModel(),jimm.ImportModel()`, U in `watcher.watchController()`, R in `jimm.ModelInfo()`
+- `CloudRegionID, CloudRegion`: Used to display info.
+- `CloudCredentialID,CloudCredential`: Used when model is created.
+- `Type`: Used to display info.
+- `IsController`: Used to display info.
+- `DefaultSeries`: Used to display info.
+- `Life`: Used to handle model destroy, updated from the watch controller and jimm methods.
+- `Status`: Used to display info, updated from the watch controller.
+- `Machine`: Used to display info, updated from the watch controller.
+- `Cores`: Used to display info, updated from the watch controller.
+- `Units`: Used to display info, updated from the watch controller.
+
+### Controller
+- `ID, Created At/Updated At, Name, UUID`: generic fields
+- `AdminIdentityName,AdminPassword`: Used to authtenticate requests going to controllers. Potentially removable because we use `CredentialsStore`
+- `CACertificate,PublicAddress,TLSHostname,Addresses`: Used by JIMM to route requests.
+- `CloudName,CloudRegion`: used by JIMM to set cloud's priority
+- `Deprecated`: used by JIMM to deprecate controllers.
+- `AgentVersion`: used to retrieve earliest version of controller registered for JIMM
+- `UnavailableSince`: updated by the watcher when the controller is not available. Used by JIMM to make sure a controller is not available before deleting the models, and the controller from the db.
+- `CloudRegions`: used by JIMM to set cloud's priority
+- `Models`: not used
+
 
