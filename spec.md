@@ -15,11 +15,11 @@ To analyse that we need to understand for each `dbmodel` where the field is writ
 - `Type`: Used to display info.
 - `IsController`: Used to display info.
 - `DefaultSeries`: Used to display info.
-- `Life`: Used to handle model destroy, updated from the watch controller and jimm methods.
-- `Status`: Used to display info, updated from the watch controller.
-- `Machine`: Used to display info, updated from the watch controller.
-- `Cores`: Used to display info, updated from the watch controller.
-- `Units`: Used to display info, updated from the watch controller.
+- `Life`: Used to handle model destroy, updated from the controller's watcher and jimm methods.
+- `Status`: Used to display info, updated from the controller's watcher.
+- `Machine`: Used to display info, updated from the controller's watcher.
+- `Cores`: Used to display info, updated from the controller's watcher.
+- `Units`: Used to display info, updated from the controller's watcher.
 
 ### Controller
 - `ID, Created At/Updated At, Name, UUID`: generic fields
@@ -28,7 +28,7 @@ To analyse that we need to understand for each `dbmodel` where the field is writ
 - `CloudName,CloudRegion`: used by JIMM to set cloud's priority
 - `Deprecated`: used by JIMM to deprecate controllers.
 - `AgentVersion`: used to retrieve earliest version of controller registered for JIMM
-- `UnavailableSince`: updated by the watcher when the controller is not available. Used by JIMM to make sure a controller is not available before deleting the models, and the controller from the db.
+- `UnavailableSince`: updated by the controller's watcher when it is not available. Used by JIMM to make sure a controller is not available before deleting the models, and the controller from the db.
 - `CloudRegions`: used by JIMM to set cloud's priority
 - `Models`: not used
 
@@ -70,3 +70,25 @@ To analyse that we need to understand for each `dbmodel` where the field is writ
 - `Attributes`: attributes saved in the database.
 - `Valid`: used by JIMM to revoke credentials.
 - `Models`: used by JIMM to retrieve models belonging to credentials. But I can't find any place were we keep this updated (useless?)
+
+### ApplicationOffer
+- `ID, Created At/Updated At, Name, UUID`: generic fields
+- `ModelId, Model`: used by JIMM to extract the controller to offer the right url to consume by using JIMM database and controller's api.
+- `ApplicationDescription`: used to display info
+- `URL`: used to consume the offer
+- `Endpoints`: used to display info
+- `Spaces`: not used
+- `Bindings`: not used
+- `Connections`: used to display info
+- `CharmUrl`: used to display info, updated by the controller's watcher
+
+
+### Identity
+
+### IdentityModelDefaults
+
+### Group
+
+### AuditLogEntry
+
+// GORM AUTOJOIN??
