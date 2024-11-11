@@ -84,11 +84,15 @@ To analyse that we need to understand for each `dbmodel` where the field is writ
 
 
 ### Identity
+- `ID, Created At/Updated At, Name, UUID, DisplayName`: generic fields
+- `DisplayName, LastLogin, Disabled, AccessToken, RefreshToken, AccessTokenExpiry, AccessTokenType`: use by JIMM for authentication purposes.
+- `CloudCredentials`: not used
 
 ### IdentityModelDefaults
+- `ID, Created At/Updated At, Name, UUID`: generic fields
+- `IdentityName, Identity`: we never `SetIdentityModelDefaults`, so it's just a wrapper around identity
+- `IdentityModelDefaults`: same as above.
 
 ### Group
+- `ID, Created At/Updated At, Name, UUID`: generic fields
 
-### AuditLogEntry
-
-// GORM AUTOJOIN??
