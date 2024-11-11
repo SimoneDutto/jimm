@@ -44,6 +44,21 @@ To analyse that we need to understand for each `dbmodel` where the field is writ
 - `CACertificates`: used to display info
 - `Config`: used to display info
 
+### CloudRegions
+- `ID, Created At/Updated At, Name, UUID`: generic fields
+- `CloudName, Cloud`: used to display info, used by JIMM to handle access (JWT, openfga)
+- `Endpoint`: used to display info
+- `IdentityEndpoint`: used to display info
+- `StorageEndpoint`: used to display info
+- `Config`: used to display info
+- `Controllers(Priorities)`: used by JIMM to revoke cloud credentials, update Cloud definition, remove Cloud from Controller.
+
+### CloudRegionControllerPriority
+- `ID, Created At/Updated At, Name, UUID`: generic fields
+- `CloudRegionID,CloudRegion`: used by JIMM to handle access (JWT, openfga)
+- `ControllerID,Controller`: ??
+- `Priority`: used by JIMM in AddHostedCloud
+
 ### CloudCredentials
 - `ID, Created At/Updated At, Name, UUID`: generic fields
 - `CloudName`: used by JIMM to retrieve CloudCredentials

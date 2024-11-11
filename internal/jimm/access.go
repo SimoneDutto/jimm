@@ -252,7 +252,7 @@ func (auth *JWTGenerator) MakeLoginToken(ctx context.Context, user *openfga.User
 	}
 	clouds := make(map[names.CloudTag]bool)
 	for _, cloudRegion := range ctl.CloudRegions {
-		clouds[cloudRegion.CloudRegion.Cloud.ResourceTag()] = true
+		clouds[cloudRegion.CloudRegion.Cloud.ResourceTag()] = true // what?
 	}
 	for cloudTag := range clouds {
 		accessLevel, err := auth.accessChecker.GetUserCloudAccess(ctx, auth.user, cloudTag)
