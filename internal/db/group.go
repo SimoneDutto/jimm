@@ -84,7 +84,6 @@ func (d *Database) GetGroup(ctx context.Context, group *dbmodel.GroupEntry) (err
 
 // ListGroups returns a paginated list of groups defined by limit and offset.
 // match is used to filter entries based on name.
-// `match` will filter with the LIKE operator on uuid or name.
 func (d *Database) ListGroups(ctx context.Context, limit, offset int, match string) (_ []dbmodel.GroupEntry, err error) {
 	const op = errors.Op("db.ForEachGroup")
 	if err := d.ready(); err != nil {
