@@ -82,14 +82,13 @@ func (d *Database) GetGroup(ctx context.Context, group *dbmodel.GroupEntry) (err
 	return nil
 }
 
-// ForEachGroup iterates through every group calling the given function
-// for each one. If the given function returns an error the iteration
-// will stop immediately and the error will be returned unmodified.
+// ListGroups returns a paginated list of groups defined by limit and offset.
+// match is used to filter entries based on name.
 // `match` will filter with the LIKE operator on uuid or name.
-func (d *Database) ForEachGroup(ctx context.Context, limit, offset int, match string, f func(*dbmodel.GroupEntry) error) (err error) {
+func (d *Database) ListGroups(ctx context.Context, limit, offset int, match string) (_ []dbmodel.GroupEntry, err error) {
 	const op = errors.Op("db.ForEachGroup")
 	if err := d.ready(); err != nil {
-		return errors.E(op, err)
+		return nil, errors.E(op, err)
 	}
 
 	durationObserver := servermon.DurationObserver(servermon.DBQueryDurationHistogram, string(op))
@@ -98,30 +97,16 @@ func (d *Database) ForEachGroup(ctx context.Context, limit, offset int, match st
 
 	db := d.DB.WithContext(ctx)
 	if match != "" {
-		match = "%" + match + "%"
-		db = db.Where("uuid LIKE ? OR name LIKE ?", match, match)
+		db = db.Where("name LIKE ?", "%"+match+"%")
 	}
 	db = db.Order("name asc")
 	db = db.Limit(limit)
 	db = db.Offset(offset)
-	rows, err := db.Model(&dbmodel.GroupEntry{}).Rows()
-	if err != nil {
-		return errors.E(op, err)
+	var groups []dbmodel.GroupEntry
+	if err := db.Find(&groups).Error; err != nil {
+		return nil, errors.E(op, dbError(err))
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var group dbmodel.GroupEntry
-		if err := db.ScanRows(rows, &group); err != nil {
-			return errors.E(op, err)
-		}
-		if err := f(&group); err != nil {
-			return err
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return errors.E(op, dbError(err))
-	}
-	return nil
+	return groups, nil
 }
 
 // UpdateGroup updates the group identified by its ID.

@@ -798,11 +798,7 @@ func (j *JIMM) ListGroups(ctx context.Context, user *openfga.User, filter pagina
 		return nil, errors.E(op, errors.CodeUnauthorized, "unauthorized")
 	}
 
-	var groups []dbmodel.GroupEntry
-	err := j.Database.ForEachGroup(ctx, filter.Limit(), filter.Offset(), match, func(ge *dbmodel.GroupEntry) error {
-		groups = append(groups, *ge)
-		return nil
-	})
+	groups, err := j.Database.ListGroups(ctx, filter.Limit(), filter.Offset(), match)
 	if err != nil {
 		return nil, errors.E(op, err)
 	}
