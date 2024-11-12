@@ -60,7 +60,7 @@ func TestListIdentities(t *testing.T) {
 	}
 	c := qt.New(t)
 	jimm := jimmtest.JIMM{
-		ListIdentities_: func(ctx context.Context, user *openfga.User, filter pagination.LimitOffsetPagination) ([]openfga.User, error) {
+		ListIdentities_: func(ctx context.Context, user *openfga.User, filter pagination.LimitOffsetPagination, match string) ([]openfga.User, error) {
 			start := filter.Offset()
 			end := start + filter.Limit()
 			if end > len(testUsers) {

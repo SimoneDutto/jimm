@@ -68,8 +68,8 @@ func TestListIdentities(t *testing.T) {
 	u := openfga.NewUser(&dbmodel.Identity{Name: "admin@canonical.com"}, ofgaClient)
 	u.JimmAdmin = true
 
-	filter := pagination.NewOffsetFilter(10, 0)
-	users, err := j.ListIdentities(ctx, u, filter)
+	pag := pagination.NewOffsetFilter(10, 0)
+	users, err := j.ListIdentities(ctx, u, pag, "")
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(users), qt.Equals, 0)
 
@@ -112,8 +112,8 @@ func TestListIdentities(t *testing.T) {
 	}
 	for _, t := range testCases {
 		c.Run(t.desc, func(c *qt.C) {
-			filter = pagination.NewOffsetFilter(t.limit, t.offset)
-			identities, err := j.ListIdentities(ctx, u, filter)
+			pag = pagination.NewOffsetFilter(t.limit, t.offset)
+			identities, err := j.ListIdentities(ctx, u, pag, "")
 			c.Assert(err, qt.IsNil)
 			c.Assert(identities, qt.HasLen, len(t.identities))
 			for i := range len(t.identities) {
