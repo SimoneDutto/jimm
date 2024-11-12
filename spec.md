@@ -21,9 +21,13 @@ To analyse that we need to understand for each `dbmodel` where the field is writ
 - `Cores`: Used to display info, updated from the controller's watcher.
 - `Units`: Used to display info, updated from the controller's watcher.
 
+> Notes
+> All things used to display info we can get from API calls w/o persisting anything.
+> The watcher for applicationoffer can be removed in favor of retrieving Machine, Cores, Units from the api.
+
 ### Controller
 - `ID, Created At/Updated At, Name, UUID`: generic fields
-- `AdminIdentityName,AdminPassword`: Used to authtenticate requests going to controllers. Potentially removable because we use `CredentialsStore`
+- `AdminIdentityName,AdminPassword`: Used to authtenticate requests going to controllers. Potentially removable because we could use `CredentialsStore`
 - `CACertificate,PublicAddress,TLSHostname,Addresses`: Used by JIMM to route requests.
 - `CloudName,CloudRegion`: used by JIMM to set cloud's priority
 - `Deprecated`: used by JIMM to deprecate controllers.
@@ -32,9 +36,12 @@ To analyse that we need to understand for each `dbmodel` where the field is writ
 - `CloudRegions`: used by JIMM to set cloud's priority
 - `Models`: not used
 
+> Notes
+> Priority is a concept related to old JAAS concepts, we can get rid of priorities in an on-prem environment. (?)
+
 ### Cloud
 - `ID, Created At/Updated At, Name, UUID`: generic fields
-- `Type`: used by JIMM to decide to redact credentials. 
+- `Type`: used by JIMM to decide to redact credentials.
 - `HostCloudRegion`: ??
 - `AuthTypes`: used to display info
 - `Endpoint`: used to display info
@@ -53,10 +60,14 @@ To analyse that we need to understand for each `dbmodel` where the field is writ
 - `Config`: used to display info
 - `Controllers(Priorities)`: used by JIMM to revoke cloud credentials, update Cloud definition, remove Cloud from Controller.
 
+> Notes
+> We store information to manage graceful destroy of controllers, clouds, regions.
+> We could avoid taking decisions during facade methods and delete dangling permission, dbmodel in a separate cleanup routine.
+
 ### CloudRegionControllerPriority
 - `ID, Created At/Updated At, Name, UUID`: generic fields
 - `CloudRegionID,CloudRegion`: used by JIMM to handle access (JWT, openfga)
-- `ControllerID,Controller`: ??
+- `ControllerID,Controller`: referenced controller in the cloud priority.
 - `Priority`: used by JIMM in AddHostedCloud
 
 ### CloudCredentials
@@ -82,17 +93,27 @@ To analyse that we need to understand for each `dbmodel` where the field is writ
 - `Connections`: used to display info
 - `CharmUrl`: used to display info, updated by the controller's watcher
 
+> The watcher for applicationoffer can be removed in favor of retrieving CharmUrl from the api.
 
 ### Identity
 - `ID, Created At/Updated At, Name, UUID, DisplayName`: generic fields
 - `DisplayName, LastLogin, Disabled, AccessToken, RefreshToken, AccessTokenExpiry, AccessTokenType`: use by JIMM for authentication purposes.
 - `CloudCredentials`: not used
 
+> Notes
+> Identity is the core dbmodel for JIMM's permission model.
+
 ### IdentityModelDefaults
 - `ID, Created At/Updated At, Name, UUID`: generic fields
-- `IdentityName, Identity`: we never `SetIdentityModelDefaults`, so it's just a wrapper around identity
+- `IdentityName, Identity`: we never `SetIdentityModelDefaults`, so it's just a wrapper around identity. Potentially useless.
 - `IdentityModelDefaults`: same as above.
+
+> Notes
+> I didn't see any use of this.
 
 ### Group
 - `ID, Created At/Updated At, Name, UUID`: generic fields
+
+> Notes
+> Group is the core dbmodel for JIMM's permission model.
 
