@@ -222,17 +222,29 @@ func TestListObjectRelations(t *testing.T) {
 		description    string
 		object         string
 		initialToken   pagination.EntitlementToken
+		pageSize       int32
+		expectNumPages int
 		expectedError  string
 		expectedLength int
 		expectedTuples []ExpectedTuple
 	}{
 		{
-			description:    "test listing all relations",
+			description:    "test listing all relations in single page",
 			object:         user.Tag().String(),
+			pageSize:       10,
+			expectNumPages: 1,
+			expectedLength: 3,
+		},
+		{
+			description:    "test listing all relations in multiple pages",
+			object:         user.Tag().String(),
+			pageSize:       1,
+			expectNumPages: 3,
 			expectedLength: 3,
 		},
 		{
 			description:   "invalid initial token",
+			object:        user.Tag().String(),
 			initialToken:  pagination.NewEntitlementToken("bar"),
 			expectedError: "failed to decode pagination token.*",
 		},
@@ -247,18 +259,21 @@ func TestListObjectRelations(t *testing.T) {
 		c.Run(t.description, func(c *qt.C) {
 			token := t.initialToken
 			tuples := []openfga.Tuple{}
+			numPages := 0
 			for {
-				res, nextToken, err := j.ListObjectRelations(ctx, u, t.object, 10, token)
+				res, nextToken, err := j.ListObjectRelations(ctx, u, t.object, t.pageSize, token)
 				if t.expectedError != "" {
 					c.Assert(err, qt.ErrorMatches, t.expectedError)
 					break
 				}
 				tuples = append(tuples, res...)
+				numPages += 1
 				if nextToken.String() == "" {
 					break
 				}
 				token = nextToken
 			}
+			c.Assert(numPages, qt.Equals, t.expectNumPages)
 			c.Assert(tuples, qt.HasLen, t.expectedLength)
 			for i, expectedTuple := range t.expectedTuples {
 				c.Assert(tuples[i].Relation.String(), qt.Equals, expectedTuple.expectedRelation)
