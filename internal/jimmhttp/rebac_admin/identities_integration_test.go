@@ -60,6 +60,7 @@ func (s *identitiesSuite) TestIdentitiesList(c *gc.C) {
 func (s *identitiesSuite) TestIdentityPatchGroups(c *gc.C) {
 	// initialization
 	ctx := context.Background()
+	ctx = rebac_handlers.ContextWithIdentity(ctx, s.AdminUser)
 	identitySvc := rebac_admin.NewidentitiesService(s.JIMM)
 	groupName := "group-test1"
 	username := s.AdminUser.Name
