@@ -83,7 +83,7 @@ func (d *Database) GetGroup(ctx context.Context, group *dbmodel.GroupEntry) (err
 }
 
 // ListGroups returns a paginated list of groups defined by limit and offset.
-// match is used to fuzzy find based on entries' name using the LIKE operator (ex. LIKE %<match>%).
+// match is used to fuzzy find based on entries' name or uuid using the LIKE operator (ex. LIKE %<match>%).
 func (d *Database) ListGroups(ctx context.Context, limit, offset int, match string) (_ []dbmodel.GroupEntry, err error) {
 	const op = errors.Op("db.ListGroups")
 	if err := d.ready(); err != nil {
@@ -96,7 +96,7 @@ func (d *Database) ListGroups(ctx context.Context, limit, offset int, match stri
 
 	db := d.DB.WithContext(ctx)
 	if match != "" {
-		db = db.Where("name LIKE ?", "%"+match+"%")
+		db = db.Where("name LIKE ? OR uuid LIKE ?", "%"+match+"%", "%"+match+"%")
 	}
 	db = db.Order("name asc")
 	db = db.Limit(limit)

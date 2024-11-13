@@ -221,4 +221,9 @@ func (s *dbSuite) TestForEachGroup(c *qt.C) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(matchedGroups, qt.HasLen, 1)
 	c.Assert(matchedGroups[0].UUID, qt.Equals, tg.UUID)
+
+	matchedGroups, err = s.Database.ListGroups(ctx, 5, 0, tg.UUID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(matchedGroups, qt.HasLen, 1)
+	c.Assert(matchedGroups[0].UUID, qt.Equals, tg.UUID)
 }

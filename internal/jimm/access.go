@@ -790,7 +790,7 @@ func (j *JIMM) RemoveGroup(ctx context.Context, user *openfga.User, name string)
 }
 
 // ListGroups returns a list of groups known to JIMM.
-// `match` will filter the list fuzzy matching group's names.
+// `match` will filter the list fuzzy matching group's name or uuid.
 func (j *JIMM) ListGroups(ctx context.Context, user *openfga.User, pagination pagination.LimitOffsetPagination, match string) ([]dbmodel.GroupEntry, error) {
 	const op = errors.Op("jimm.ListGroups")
 
