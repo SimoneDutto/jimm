@@ -6,12 +6,14 @@ To analyse that we need to understand for each `dbmodel` where the field is writ
 
 ### Model
 
-- `ID, Created At/Updated At, Name, UUID`: generic fields
-- `OwnerIdentityName, Owner `:  owner's identity used by JIMM.
+- `ID, Created At/Updated At, `: generic fields.
+- `Name`: coming from users. 
+- `UUID`: coming from juju controllers.
+- `OwnerIdentityName, Owner`:  owner's identity used by JIMM.
 - `ControllerID, Controller`: Controller info to route request to controllers
 - `MigrationControllerID`: not used.
 - `CloudRegionID, CloudRegion`: Used to display info.
-- `CloudCredentialID,CloudCredential`: Used when model is created.
+- `CloudCredentialID, CloudCredential`: Used to update model's cloud credentials. Potentially removable but not as easy. (potentially rethink cloud credentials associations)
 - `Type`: Used to display info.
 - `IsController`: Used to display info.
 - `DefaultSeries`: Used to display info.
@@ -32,12 +34,10 @@ To analyse that we need to understand for each `dbmodel` where the field is writ
 - `CloudName,CloudRegion`: used by JIMM to set cloud's priority
 - `Deprecated`: used by JIMM to deprecate controllers.
 - `AgentVersion`: used to retrieve earliest version of controller registered for JIMM
-- `UnavailableSince`: updated by the controller's watcher when it is not available. Used by JIMM to make sure a controller is not available before deleting the models, and the controller from the db.
+- `UnavailableSince`: updated by the controller's watcher when it is not available. Used by JIMM to make sure a controller is not available before deleting its models, and the controller from the db.
 - `CloudRegions`: used by JIMM to set cloud's priority
-- `Models`: not used
+- `Models`: not used (gorm reverse link maybe?).
 
-> Notes
-> Priority is a concept related to old JAAS concepts, we can get rid of priorities in an on-prem environment. (?)
 
 ### Cloud
 - `ID, Created At/Updated At, Name, UUID`: generic fields
@@ -47,9 +47,12 @@ To analyse that we need to understand for each `dbmodel` where the field is writ
 - `Endpoint`: used to display info
 - `IdentityEndpoint`: used to display info
 - `StorageEndpoint`: used to display info
-- `Regions`: ??
+- `Regions`: CloudRegions
 - `CACertificates`: used to display info
 - `Config`: used to display info
+
+> Notes
+> we should ONLY allow removing hosted clouds (k8s).. atm you can remove any cloud
 
 ### CloudRegions
 - `ID, Created At/Updated At, Name, UUID`: generic fields
@@ -62,7 +65,7 @@ To analyse that we need to understand for each `dbmodel` where the field is writ
 
 > Notes
 > We store information to manage graceful destroy of controllers, clouds, regions.
-> We could avoid taking decisions during facade methods and delete dangling permission, dbmodel in a separate cleanup routine.
+> We could avoid taking decisions during facade methods and delete dangling permission, dbmodel. What if we do so in a separate cleanup routine.
 
 ### CloudRegionControllerPriority
 - `ID, Created At/Updated At, Name, UUID`: generic fields
@@ -108,8 +111,9 @@ To analyse that we need to understand for each `dbmodel` where the field is writ
 - `IdentityName, Identity`: we never `SetIdentityModelDefaults`, so it's just a wrapper around identity. Potentially useless.
 - `IdentityModelDefaults`: same as above.
 
+
 > Notes
-> I didn't see any use of this.
+> `SetIdentityModelDefaults` is not used.
 
 ### Group
 - `ID, Created At/Updated At, Name, UUID`: generic fields
