@@ -89,6 +89,7 @@ func TestListIdentities(t *testing.T) {
 		desc       string
 		limit      int
 		offset     int
+		match      string
 		identities []string
 	}{
 		{
@@ -109,11 +110,18 @@ func TestListIdentities(t *testing.T) {
 			offset:     6,
 			identities: []string{},
 		},
+		{
+			desc:       "test with match",
+			limit:      5,
+			offset:     0,
+			identities: []string{userNames[0]},
+			match:      userNames[0][:5],
+		},
 	}
 	for _, t := range testCases {
 		c.Run(t.desc, func(c *qt.C) {
 			pag = pagination.NewOffsetFilter(t.limit, t.offset)
-			identities, err := j.ListIdentities(ctx, u, pag, "")
+			identities, err := j.ListIdentities(ctx, u, pag, t.match)
 			c.Assert(err, qt.IsNil)
 			c.Assert(identities, qt.HasLen, len(t.identities))
 			for i := range len(t.identities) {

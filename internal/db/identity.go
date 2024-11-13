@@ -121,7 +121,7 @@ func (d *Database) GetIdentityCloudCredentials(ctx context.Context, u *dbmodel.I
 }
 
 // ListIdentities returns a paginated list of identities defined by limit and offset.
-// match is used to fuzzy find based on entries' name using the LIKE operator (ex. LIKE %<match>%).
+// match is used to fuzzy find based on entries' name or uuid using the LIKE operator (ex. LIKE %<match>%).
 func (d *Database) ListIdentities(ctx context.Context, limit, offset int, match string) (_ []dbmodel.Identity, err error) {
 	const op = errors.Op("db.ListIdentities")
 	if err := d.ready(); err != nil {
