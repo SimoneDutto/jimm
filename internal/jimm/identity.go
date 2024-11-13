@@ -30,7 +30,7 @@ func (j *JIMM) FetchIdentity(ctx context.Context, id string) (*openfga.User, err
 }
 
 // ListIdentities lists a page of users in our database and parse them into openfga entities.
-// `match` will filter the list for fuzzy find on identity name or uuid.
+// `match` will filter the list for fuzzy find on identity name.
 func (j *JIMM) ListIdentities(ctx context.Context, user *openfga.User, pagination pagination.LimitOffsetPagination, match string) ([]openfga.User, error) {
 	const op = errors.Op("jimm.ListIdentities")
 
