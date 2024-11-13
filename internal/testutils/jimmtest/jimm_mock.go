@@ -56,7 +56,7 @@ type JIMM struct {
 	GetJimmControllerAccess_           func(ctx context.Context, user *openfga.User, tag names.UserTag) (string, error)
 	FetchIdentity_                     func(ctx context.Context, username string) (*openfga.User, error)
 	CountIdentities_                   func(ctx context.Context, user *openfga.User) (int, error)
-	ListIdentities_                    func(ctx context.Context, user *openfga.User, filter pagination.LimitOffsetPagination, match string) ([]openfga.User, error)
+	ListIdentities_                    func(ctx context.Context, user *openfga.User, pagination pagination.LimitOffsetPagination, match string) ([]openfga.User, error)
 	GetUserCloudAccess_                func(ctx context.Context, user *openfga.User, cloud names.CloudTag) (string, error)
 	GetUserControllerAccess_           func(ctx context.Context, user *openfga.User, controller names.ControllerTag) (string, error)
 	GetUserModelAccess_                func(ctx context.Context, user *openfga.User, model names.ModelTag) (string, error)
