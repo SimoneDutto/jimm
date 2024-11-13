@@ -54,6 +54,12 @@ To analyse that we need to understand for each `dbmodel` where the field is writ
 > Notes
 > we should ONLY allow removing hosted clouds (k8s).. atm you can remove any cloud
 
+### CloudDefaults
+- `IdentityName,Identity`: used by JIMM to retrieve cloud default.
+- `CloudId,Cloud`: used by JIMM to retrieve cloud default.
+- `Region`: used by JIMM to retrieve cloud default.
+- `Map`: map that holds the default values.
+
 ### CloudRegions
 - `ID, Created At/Updated At, Name, UUID`: generic fields
 - `CloudName, Cloud`: used to display info, used by JIMM to handle access (JWT, openfga)
