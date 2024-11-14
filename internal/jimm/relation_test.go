@@ -192,7 +192,7 @@ func TestListObjectRelations(t *testing.T) {
 	u := openfga.NewUser(&dbmodel.Identity{Name: "admin@canonical.com"}, ofgaClient)
 	u.JimmAdmin = true
 
-	user, _, controller, model, _, _, _ := createTestControllerEnvironment(ctx, c, j.Database)
+	user, group, controller, model, _, cloud, _ := createTestControllerEnvironment(ctx, c, j.Database)
 	c.Assert(err, qt.IsNil)
 
 	err = j.AddRelation(ctx, u, []apiparams.RelationshipTuple{
@@ -211,7 +211,28 @@ func TestListObjectRelations(t *testing.T) {
 			Relation:     names.AuditLogViewerRelation.String(),
 			TargetObject: controller.ResourceTag().String(),
 		},
+		{
+			Object:       user.Tag().String(),
+			Relation:     names.AdministratorRelation.String(),
+			TargetObject: controller.ResourceTag().String(),
+		},
+		{
+			Object:       user.Tag().String(),
+			Relation:     names.AdministratorRelation.String(),
+			TargetObject: cloud.ResourceTag().String(),
+		},
+		{
+			Object:       user.Tag().String(),
+			Relation:     names.CanAddModelRelation.String(),
+			TargetObject: cloud.ResourceTag().String(),
+		},
+		{
+			Object:       user.Tag().String(),
+			Relation:     names.MemberRelation.String(),
+			TargetObject: group.ResourceTag().String(),
+		},
 	})
+
 	c.Assert(err, qt.IsNil)
 	type ExpectedTuple struct {
 		expectedRelation string
@@ -233,14 +254,14 @@ func TestListObjectRelations(t *testing.T) {
 			object:         user.Tag().String(),
 			pageSize:       10,
 			expectNumPages: 1,
-			expectedLength: 3,
+			expectedLength: 7,
 		},
 		{
 			description:    "test listing all relations in multiple pages",
 			object:         user.Tag().String(),
-			pageSize:       1,
-			expectNumPages: 3,
-			expectedLength: 3,
+			pageSize:       2,
+			expectNumPages: 4,
+			expectedLength: 7,
 		},
 		{
 			description:   "invalid initial token",

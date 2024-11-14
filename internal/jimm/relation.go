@@ -114,7 +114,7 @@ func (j *JIMM) ListObjectRelations(ctx context.Context, user *openfga.User, obje
 	if err != nil {
 		return nil, e, errors.E(op, err)
 	}
-	// Verify next page contain some entries. Otherwise return empty nextToken
+	// berify next page contains some entries. Otherwise return empty nextToken.
 	if len(responseTuples) == int(pageSize) && nextToken.String() != "" {
 		responseTuples, _, err := j.getObjectRelationsPage(ctx, object, 1, nextToken)
 		if err != nil {
@@ -137,6 +137,7 @@ func (j *JIMM) getObjectRelationsPage(ctx context.Context, object string, pageSi
 	}
 	var responseTuples []openfga.Tuple
 	nextToken := entitlementToken
+	// loop around entity kinds, each with a different continuation token.
 	for {
 		nextContinuationToken, kind, err := pagination.DecodeEntitlementToken(nextToken)
 		if err != nil {
@@ -151,12 +152,13 @@ func (j *JIMM) getObjectRelationsPage(ctx context.Context, object string, pageSi
 			return nil, e, err
 		}
 		responseTuples = append(responseTuples, t...)
+		// nolint:gosec
 		pageSize -= int32(len(t))
 		nextToken, err = pagination.NextEntitlementToken(kind, nextContinuationToken)
 		if err != nil {
 			return nil, e, err
 		}
-		// either we have a page full or we don't have more entries
+		// break on a full page or no other entries.
 		if pageSize <= 0 || nextToken.String() == "" {
 			break
 		}
