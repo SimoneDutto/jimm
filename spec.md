@@ -127,3 +127,118 @@ To analyse that we need to understand for each `dbmodel` where the field is writ
 > Notes
 > Group is the core dbmodel for JIMM's permission model.
 
+
+
+# Model manager
+
+Analyse model manager facade methods to determine:
+- juju input
+- jimm's representation
+- juju output
+- potential juju api to get info instead of storing.
+- need for jimm db
+
+The goal is to understand what can be extracted from the juju controller's API and removed from JIMM.
+
+## `ChangeModelCredential`
+- input: `jujuparams.ChangeModelCredentialsParams`
+- jimm's representation: `dbmodel.Model`
+- output: `jujuparams.UserModelList`
+- need for jimm db: yes
+- potential 
+
+All info we have stored in JIMM's db. No need to use api.
+
+## `ListModels`
+- input: -
+- jimm's representation: `dbmodel.Model`
+- output: `jujuparams.UserModelList`
+- need for jimm db: yes
+
+All info we have stored in JIMM's db. No need to use api.
+
+## `ListModelSummaries`
+- input: -
+- jimm's representation: `dbmodel.Model`
+- output: `ujuparams.ModelSummaryResults`
+- potential juju api: `api.ModelInfo`
+- need for jimm db: yes
+
+## `CreateModel`
+- input: `jujuparams.ModelCreateArgs`
+- jimm's representation: `dbmodel.Model`
+- output: `jujuparams.ModelInfo`
+- need for jimm db: yes
+
+## `DestroyModels`
+- input: `jujuparams.DestroyModelsParams`
+- jimm's representation: `dbmodel.Model`
+- output: `jujuparams.ErrorResults`
+- need for jimm db: yes
+
+_Note: we don't need a watcher to finally release the model from the database, we can lazily get rid of models when contacting the controller's api to list models, and use newly Ales cleanup routine to remove dangling openfga permission._
+
+## `ModelInfo`
+- input: `jujuparams.Entities`
+- jimm's representation: `dbmodel.Model`
+- output: `jujuparams.ModelInfoResults`
+- potential juju api: `api.ModelInfo`
+- need for jimm db: yes
+
+## `ModelStatus`
+- input: `jujuparams.Entities`
+- jimm's representation: `dbmodel.Model`
+- output: `jujuparams.ModelStatusResults`
+- potential juju api: `api.ModelInfo`
+- need for jimm db: yes
+
+## `DumpModelsDB`
+- input: `jujuparams.Entities`
+- jimm's representation: `dbmodel.Model`
+- output: `jujuparams.MapResults`
+- potential juju api: `api.DumpModelDB`
+- need for jimm db: no
+
+## `DumpModelsDB`
+- input: `jujuparams.Entities`
+- jimm's representation: `dbmodel.Model`
+- output: `jujuparams.StringResults`
+- potential juju api: `api.DumpModel`
+- need for jimm db: no
+
+## `SetModelDefaults`
+- input: `jujuparams.SetModelDefaults`
+- jimm's representation: `dbmodel.CloudDefault`
+- output: `jujuparams.ErrorResults`
+- need for jimm db: yes
+
+## `UnsetModelDefaults`
+- input: `jujuparams.UnsetModelDefaults`
+- jimm's representation: `dbmodel.CloudDefault`
+- output: `jujuparams.ErrorResults`
+- need for jimm db: yes
+
+## `ModelDefaultsForClouds`
+- input: `jujuparams.Entities`
+- jimm's representation: `dbmodel.CloudDefault`
+- output: `jujuparams.ErrorResults`
+- need for jimm db: yes
+
+> question: why do we need to store cloud defaults on our side? Why don't we leave credentials storing to controller, and we just ask controllers "deploy this" and it verifies it has the right credentials.
+
+## `ModifyModelAccess`
+- input: `jujuparams.ModifyModelAccessRequest`
+- jimm's representation: `openfga.Relation`
+- output: `jujuparams.ErrorResults`
+- need for jimm db: yes
+
+## `ValidateModelUpgrades`
+- input: `jujuparams.ValidateModelUpgradeParams`
+- output: `jujuparams.ErrorResults`
+- need for jimm db: no
+
+
+### Potential solution to remove dbmodel fields
+
+From this facade methods we can expect to be able to remove the fields marked as "used to diplay info" in the Database Model Analysis, and we can also remove the fields updated with the watcher by making use of the juju controller's API.
+
