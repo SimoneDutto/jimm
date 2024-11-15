@@ -237,8 +237,47 @@ _Note: we don't need a watcher to finally release the model from the database, w
 - output: `jujuparams.ErrorResults`
 - need for jimm db: no
 
+# Application Offer
 
-### Potential solution to remove dbmodel fields
+## `Offer`
+- input: `jujuparams.AddApplicationOffers`
+- jimm's representation: `jimm.AddApplicationOfferParams`
+- output: `jujuparams.ErrorResults`
+- need for jimm db: yes
 
-From this facade methods we can expect to be able to remove the fields marked as "used to diplay info" in the Database Model Analysis, and we can also remove the fields updated with the watcher by making use of the juju controller's API.
+## `GetConsumeDetails`
+- input: `jujuparams.ConsumeOfferDetailsArg`
+- jimm's representation: `dbmodel.ApplicationOffer`
+- output: `jujuparams.ConsumeOfferDetailsResults`
+- need for jimm db: yes
+
+## `ListApplicationOffers`
+- input: `jujuparams.OfferFilters`
+- jimm's representation: `dbmodel.ApplicationOffer`
+- output: `jujuparams.QueryApplicationOffersResultsV5`
+- need for jimm db: yes
+
+## `ModifyOfferAccess`
+- input: `jujuparams.ModifyOfferAccessRequest`
+- jimm's representation: `dbmodel.ApplicationOffer`
+- output: `jujuparams.ErrorResults`
+- need for jimm db: yes
+
+## `DestroyOffers`
+- input: `jujuparams.DestroyApplicationOffers`
+- jimm's representation: `dbmodel.ApplicationOffer`
+- output: `jujuparams.ErrorResults`
+- need for jimm db: yes
+
+## `FindApplicationOffers`
+- input: `jujuparams.OfferFilters`
+- jimm's representation: `dbmodel.ApplicationOffer`
+- output: `jujuparams.QueryApplicationOffersResultsV5`
+- need for jimm db: yes
+
+## `ApplicationOffers`
+- input: `jujuparams.OfferURLs`
+- jimm's representation: `dbmodel.ApplicationOffer`
+- output: `jujuparams.ApplicationOffersResults`
+- need for jimm db: yes
 
