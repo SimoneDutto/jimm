@@ -54,7 +54,6 @@ func (s *identitiesSuite) TestIdentitiesList(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	c.Assert(res, gc.Not(gc.IsNil))
 	c.Assert(len(res.Data), gc.Equals, pageSize)
-
 }
 
 func (s *identitiesSuite) TestIdentityPatchGroups(c *gc.C) {

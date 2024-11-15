@@ -115,7 +115,7 @@ func TestListIdentities(t *testing.T) {
 			limit:      5,
 			offset:     0,
 			identities: []string{userNames[0]},
-			match:      userNames[0][:5],
+			match:      "bob1",
 		},
 	}
 	for _, t := range testCases {
