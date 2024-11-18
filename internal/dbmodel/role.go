@@ -21,7 +21,7 @@ type RoleEntry struct {
 	Name string `gorm:"index;column:name"`
 
 	// UUID holds the uuid of the role.
-	UUID string `gotm:"index;column:uuid"`
+	UUID string `gorm:"index;column:uuid"`
 }
 
 // TableName overrides the table name gorm will use to find
