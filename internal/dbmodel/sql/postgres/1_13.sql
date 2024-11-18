@@ -6,3 +6,5 @@ CREATE TABLE IF NOT EXISTS roles (
    name TEXT NOT NULL UNIQUE,
    uuid TEXT NOT NULL UNIQUE
 );
+
+UPDATE versions SET major=1, minor=13 WHERE component='jimmdb';
