@@ -26,7 +26,7 @@ type RoleEntry struct {
 
 // TableName overrides the table name gorm will use to find
 // RoleEntry records.
-func (RoleEntry) TableName() string {
+func (*RoleEntry) TableName() string {
 	return "roles"
 }
 
