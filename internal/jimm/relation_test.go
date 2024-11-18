@@ -240,28 +240,28 @@ func TestListObjectRelations(t *testing.T) {
 	}
 
 	testCases := []struct {
-		description    string
-		object         string
-		initialToken   pagination.EntitlementToken
-		pageSize       int32
-		expectNumPages int
-		expectedError  string
-		expectedLength int
-		expectedTuples []ExpectedTuple
+		description          string
+		object               string
+		initialToken         pagination.EntitlementToken
+		pageSize             int32
+		expectNumPages       int
+		expectedError        string
+		expectedTuplesLength int
+		expectedTuples       []ExpectedTuple
 	}{
 		{
-			description:    "test listing all relations in single page",
-			object:         user.Tag().String(),
-			pageSize:       10,
-			expectNumPages: 1,
-			expectedLength: 7,
+			description:          "test listing all relations in single page",
+			object:               user.Tag().String(),
+			pageSize:             10,
+			expectNumPages:       1,
+			expectedTuplesLength: 7,
 		},
 		{
-			description:    "test listing all relations in multiple pages",
-			object:         user.Tag().String(),
-			pageSize:       2,
-			expectNumPages: 4,
-			expectedLength: 7,
+			description:          "test listing all relations in multiple pages",
+			object:               user.Tag().String(),
+			pageSize:             2,
+			expectNumPages:       4,
+			expectedTuplesLength: 7,
 		},
 		{
 			description:   "invalid initial token",
@@ -295,7 +295,7 @@ func TestListObjectRelations(t *testing.T) {
 				token = nextToken
 			}
 			c.Assert(numPages, qt.Equals, t.expectNumPages)
-			c.Assert(tuples, qt.HasLen, t.expectedLength)
+			c.Assert(tuples, qt.HasLen, t.expectedTuplesLength)
 			for i, expectedTuple := range t.expectedTuples {
 				c.Assert(tuples[i].Relation.String(), qt.Equals, expectedTuple.expectedRelation)
 				c.Assert(tuples[i].Target.ID, qt.Equals, expectedTuple.expectedTargetId)

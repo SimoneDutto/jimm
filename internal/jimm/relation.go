@@ -114,7 +114,7 @@ func (j *JIMM) ListObjectRelations(ctx context.Context, user *openfga.User, obje
 	if err != nil {
 		return nil, e, errors.E(op, err)
 	}
-	// berify next page contains some entries. Otherwise return empty nextToken.
+	// verify next page contains some entries. Otherwise return empty nextToken.
 	if len(responseTuples) == int(pageSize) && nextToken.String() != "" {
 		responseTuples, _, err := j.getObjectRelationsPage(ctx, object, 1, nextToken)
 		if err != nil {
