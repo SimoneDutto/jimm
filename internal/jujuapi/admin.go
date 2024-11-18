@@ -109,7 +109,6 @@ func (r *controllerRoot) LoginWithSessionCookie(ctx context.Context) (jujuparams
 	if err != nil {
 		return jujuparams.LoginResult{}, errors.E(op, err)
 	}
-
 	return jujuparams.LoginResult{
 		PublicDNSName: r.params.PublicDNSName,
 		UserInfo:      setupAuthUserInfo(ctx, r, user),

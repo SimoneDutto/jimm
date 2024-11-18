@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/gorilla/websocket"
 	"github.com/juju/zaputil/zapctx"
 	"go.uber.org/zap"
@@ -33,6 +34,10 @@ type WSHandler struct {
 // been started.
 func (h *WSHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
+	if modelUUID := chi.URLParam(req, "uuid"); modelUUID != "" {
+		ctx = zapctx.WithFields(ctx, zap.String("model_uuid", modelUUID))
+	}
+
 	if h.Server == nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return

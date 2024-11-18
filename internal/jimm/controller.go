@@ -369,7 +369,6 @@ func (j *JIMM) GetJimmControllerAccess(ctx context.Context, user *openfga.User, 
 	if !user.JimmAdmin {
 		return "", errors.E(op, errors.CodeUnauthorized, "unauthorized")
 	}
-
 	var targetUser dbmodel.Identity
 	targetUser.SetTag(tag)
 	targetUserTag := openfga.NewUser(&targetUser, j.OpenFGAClient)
@@ -411,7 +410,6 @@ func (j *JIMM) ImportModel(ctx context.Context, user *openfga.User, controllerNa
 		return errors.E(op, "failed to dial the controller", err)
 	}
 	defer api.Close()
-
 	modelInfo := jujuparams.ModelInfo{
 		UUID: modelTag.Id(),
 	}

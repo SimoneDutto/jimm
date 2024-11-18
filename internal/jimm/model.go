@@ -1068,7 +1068,8 @@ func (j *JIMM) RevokeModelAccess(ctx context.Context, user *openfga.User, mt nam
 // the juju API will not have it's code masked.
 func (j *JIMM) DestroyModel(ctx context.Context, user *openfga.User, mt names.ModelTag, destroyStorage, force *bool, maxWait, timeout *time.Duration) error {
 	const op = errors.Op("jimm.DestroyModel")
-
+	// log entrypoint
+	zapctx.Info(ctx, fmt.Sprintf("Destroying model %s", mt.String()))
 	err := j.doModelAdmin(ctx, user, mt, func(m *dbmodel.Model, api API) error {
 		if err := api.DestroyModel(ctx, mt, destroyStorage, force, maxWait, timeout); err != nil {
 			return err
@@ -1077,7 +1078,9 @@ func (j *JIMM) DestroyModel(ctx context.Context, user *openfga.User, mt names.Mo
 		if err := j.Database.UpdateModel(ctx, m); err != nil {
 			// If the database fails to update don't worry too much the
 			// monitor should catch it.
-			zapctx.Error(ctx, "failed to store model change", zaputil.Error(err))
+
+			// log errors with details, expecially uuid
+			zapctx.Error(ctx, fmt.Sprintf("failed to store model change for model %s", mt.String()), zaputil.Error(err))
 		}
 		return nil
 	})
@@ -1192,7 +1195,8 @@ func (j *JIMM) doModel(ctx context.Context, user *openfga.User, mt names.ModelTa
 
 	api, err := j.dial(ctx, &m.Controller, names.ModelTag{})
 	if err != nil {
-		return errors.E(op, err)
+		// should we provide more context here?
+		return errors.E(op, err, "error dialing controller")
 	}
 	defer api.Close()
 	if err := f(&m, api); err != nil {

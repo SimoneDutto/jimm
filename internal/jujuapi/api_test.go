@@ -61,4 +61,5 @@ func (s *apiSuite) TestModelCommandsModelNotFoundf(c *gc.C) {
 	defer response.Body.Close()
 
 	c.Assert(response.StatusCode, gc.Equals, http.StatusNotFound)
+	c.Fail()
 }
