@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -14,22 +15,18 @@ import (
 	"github.com/canonical/jimm/v3/internal/rpc"
 )
 
-func streamEcho(c *websocket.Conn, stopped *bool) error {
-	for {
-		msg := make(map[string]interface{})
-		if *stopped {
-			return errors.New("stopped")
-		}
-		if err := c.ReadJSON(&msg); err != nil {
-			if *stopped {
-				return errors.New("stopped")
-			}
-			return err
-		}
-		if err := c.WriteJSON(msg); err != nil {
-			return err
-		}
+func streamEcho(c *websocket.Conn, stopped *atomic.Bool) error {
+	msg := make(map[string]interface{})
+	if stopped.Load() {
+		return errors.New("stopped")
 	}
+	if err := c.ReadJSON(&msg); err != nil {
+		return err
+	}
+	if err := c.WriteJSON(msg); err != nil {
+		return err
+	}
+	return nil
 }
 
 func verifyEcho(c *qt.C, ws *websocket.Conn, expectedErr string) {
@@ -61,7 +58,7 @@ func TestStreamProxy(t *testing.T) {
 	ctx := context.Background()
 
 	doneChan := make(chan error)
-	stopped := false
+	stopped := atomic.Bool{}
 	srvController := newServer(func(c *websocket.Conn) error { return streamEcho(c, &stopped) })
 	srvJIMM := newServer(func(connClient *websocket.Conn) error {
 		connController, err := srvController.dialer.DialWebsocket(ctx, srvController.URL, nil)
@@ -87,7 +84,32 @@ func TestStreamProxyStoppedController(t *testing.T) {
 	ctx := context.Background()
 
 	doneChan := make(chan error)
-	stopped := false
+	srvController := newServer(func(c *websocket.Conn) error { return errors.New("stopped") })
+	srvJIMM := newServer(func(connClient *websocket.Conn) error {
+		connController, err := srvController.dialer.DialWebsocket(ctx, srvController.URL, nil)
+		c.Assert(err, qt.IsNil)
+		rpc.ProxyStreams(ctx, connClient, connController)
+		doneChan <- nil
+		return nil
+	})
+	defer srvController.Close()
+	defer srvJIMM.Close()
+	ws, err := srvJIMM.dialer.DialWebsocket(ctx, srvJIMM.URL, nil)
+	c.Assert(err, qt.IsNil)
+	defer ws.Close()
+
+	verifyEcho(c, ws, ".*abnormal closure.*")
+
+	ws.Close()
+	<-doneChan // Ensure go routines are cleaned up
+}
+
+func TestStreamProxyStoppedMidwayController(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	doneChan := make(chan error)
+	stopped := atomic.Bool{}
 	srvController := newServer(func(c *websocket.Conn) error { return streamEcho(c, &stopped) })
 	srvJIMM := newServer(func(connClient *websocket.Conn) error {
 		connController, err := srvController.dialer.DialWebsocket(ctx, srvController.URL, nil)
@@ -102,7 +124,8 @@ func TestStreamProxyStoppedController(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	defer ws.Close()
 
-	stopped = true
+	verifyEcho(c, ws, "")
+	stopped.Store(true)
 	verifyEcho(c, ws, ".*abnormal closure.*")
 
 	ws.Close()
