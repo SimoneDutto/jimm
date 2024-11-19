@@ -21,6 +21,9 @@ func streamEcho(c *websocket.Conn, stopped *bool) error {
 			return errors.New("stopped")
 		}
 		if err := c.ReadJSON(&msg); err != nil {
+			if *stopped {
+				return errors.New("stopped")
+			}
 			return err
 		}
 		if err := c.WriteJSON(msg); err != nil {
