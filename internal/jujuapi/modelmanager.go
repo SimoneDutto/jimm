@@ -85,7 +85,6 @@ type ModelManager interface {
 // controller without any changes from JIMM.
 func (r *controllerRoot) DumpModels(ctx context.Context, args jujuparams.DumpModelRequest) jujuparams.StringResults {
 	const op = errors.Op("jujuapi.DumpModels")
-	ctx = zapctx.WithFields(ctx, zap.String("facade", string(op)))
 
 	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
 	defer cancel()
@@ -110,7 +109,6 @@ func (r *controllerRoot) DumpModels(ctx context.Context, args jujuparams.DumpMod
 // authenticated user has access to. The request parameter is ignored.
 func (r *controllerRoot) ListModelSummaries(ctx context.Context, _ jujuparams.ModelSummariesRequest) (jujuparams.ModelSummaryResults, error) {
 	const op = errors.Op("jujuapi.ListModelSummaries")
-	ctx = zapctx.WithFields(ctx, zap.String("facade", string(op)))
 
 	var results []jujuparams.ModelSummaryResult
 	err := r.jimm.ForEachUserModel(ctx, r.user, func(m *dbmodel.Model, access jujuparams.UserAccessPermission) error {
@@ -143,7 +141,6 @@ func (r *controllerRoot) ListModels(ctx context.Context, _ jujuparams.Entity) (j
 // ModelInfo implements the ModelManager facade's ModelInfo method.
 func (r *controllerRoot) ModelInfo(ctx context.Context, args jujuparams.Entities) (jujuparams.ModelInfoResults, error) {
 	const op = errors.Op("jujuapi.ModelInfo")
-	ctx = zapctx.WithFields(ctx, zap.String("facade", string(op)))
 
 	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
 	defer cancel()
@@ -175,7 +172,6 @@ func (r *controllerRoot) ModelInfo(ctx context.Context, args jujuparams.Entities
 // CreateModel implements the ModelManager facade's CreateModel method.
 func (r *controllerRoot) CreateModel(ctx context.Context, args jujuparams.ModelCreateArgs) (jujuparams.ModelInfo, error) {
 	const op = errors.Op("jujuapi.CreateModel")
-	ctx = zapctx.WithFields(ctx, zap.String("facade", string(op)))
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -201,7 +197,6 @@ func (r *controllerRoot) CreateModel(ctx context.Context, args jujuparams.ModelC
 // method used in version 4 onwards.
 func (r *controllerRoot) DestroyModels(ctx context.Context, args jujuparams.DestroyModelsParams) (jujuparams.ErrorResults, error) {
 	const op = errors.Op("jujuapi.DestroyModel")
-	ctx = zapctx.WithFields(ctx, zap.String("facade", string(op)))
 
 	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
 	defer cancel()
@@ -232,7 +227,6 @@ func (r *controllerRoot) DestroyModels(ctx context.Context, args jujuparams.Dest
 // ModifyModelAccess implements the ModelManager facade's ModifyModelAccess method.
 func (r *controllerRoot) ModifyModelAccess(ctx context.Context, args jujuparams.ModifyModelAccessRequest) (jujuparams.ErrorResults, error) {
 	const op = errors.Op("jujuapi.ModifyModelAccess")
-	ctx = zapctx.WithFields(ctx, zap.String("facade", string(op)))
 
 	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
 	defer cancel()
@@ -272,7 +266,6 @@ func (r *controllerRoot) ModifyModelAccess(ctx context.Context, args jujuparams.
 // changes from JIMM.
 func (r *controllerRoot) DumpModelsDB(ctx context.Context, args jujuparams.Entities) jujuparams.MapResults {
 	const op = errors.Op("jujuapi.DumpModelsDB")
-	ctx = zapctx.WithFields(ctx, zap.String("facade", string(op)))
 
 	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
 	defer cancel()
@@ -297,8 +290,6 @@ func (r *controllerRoot) DumpModelsDB(ctx context.Context, args jujuparams.Entit
 // ChangeModelCredential method.
 func (r *controllerRoot) ChangeModelCredential(ctx context.Context, args jujuparams.ChangeModelCredentialsParams) (jujuparams.ErrorResults, error) {
 	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
-	const op = errors.Op("jujuapi.ChangeModelCredential")
-	ctx = zapctx.WithFields(ctx, zap.String("facade", string(op)))
 
 	defer cancel()
 	results := make([]jujuparams.ErrorResult, len(args.Models))
@@ -335,7 +326,6 @@ func (r *controllerRoot) changeModelCredential(ctx context.Context, arg jujupara
 // bad unintended errors down the line.
 func (r *controllerRoot) ValidateModelUpgrades(ctx context.Context, args jujuparams.ValidateModelUpgradeParams) (jujuparams.ErrorResults, error) {
 	const op = errors.Op("jujuapi.ValidateModelUpgrades")
-	ctx = zapctx.WithFields(ctx, zap.String("facade", string(op)))
 
 	results := make([]jujuparams.ErrorResult, len(args.Models))
 	for i, arg := range args.Models {
@@ -355,7 +345,6 @@ func (r *controllerRoot) ValidateModelUpgrades(ctx context.Context, args jujupar
 // SetModelDefaults writes new values for the specified default model settings.
 func (r *controllerRoot) SetModelDefaults(ctx context.Context, args jujuparams.SetModelDefaults) (jujuparams.ErrorResults, error) {
 	const op = errors.Op("jujuapi.ModelDefaultsForClouds")
-	ctx = zapctx.WithFields(ctx, zap.String("facade", string(op)))
 
 	results := make([]jujuparams.ErrorResult, len(args.Config))
 	for i, config := range args.Config {
@@ -375,9 +364,6 @@ func (r *controllerRoot) SetModelDefaults(ctx context.Context, args jujuparams.S
 
 // UnsetModelDefaults removes the specified default model settings.
 func (r *controllerRoot) UnsetModelDefaults(ctx context.Context, args jujuparams.UnsetModelDefaults) (jujuparams.ErrorResults, error) {
-	const op = errors.Op("jujuapi.UnsetModelDefaults")
-	ctx = zapctx.WithFields(ctx, zap.String("facade", string(op)))
-
 	results := make([]jujuparams.ErrorResult, len(args.Keys))
 	for i, key := range args.Keys {
 		cloudTag, err := names.ParseCloudTag(key.CloudTag)
@@ -398,7 +384,6 @@ func (r *controllerRoot) UnsetModelDefaults(ctx context.Context, args jujuparams
 // clouds.
 func (r *controllerRoot) ModelDefaultsForClouds(ctx context.Context, args jujuparams.Entities) (jujuparams.ModelDefaultsResults, error) {
 	const op = errors.Op("jujuapi.ModelDefaultsForClouds")
-	ctx = zapctx.WithFields(ctx, zap.String("facade", string(op)))
 
 	result := jujuparams.ModelDefaultsResults{}
 	result.Results = make([]jujuparams.ModelDefaultsResult, len(args.Entities))
