@@ -14,7 +14,7 @@ import (
 	"github.com/canonical/jimm/v3/internal/rpc"
 )
 
-func streamEcho(c *websocket.Conn) error {
+func echoSingleMessage(c *websocket.Conn) error {
 	msg := make(map[string]interface{})
 	if err := c.ReadJSON(&msg); err != nil {
 		return err
@@ -54,7 +54,7 @@ func TestStreamProxy(t *testing.T) {
 	ctx := context.Background()
 
 	doneChan := make(chan error)
-	srvController := newServer(streamEcho)
+	srvController := newServer(echoSingleMessage)
 	srvJIMM := newServer(func(connClient *websocket.Conn) error {
 		connController, err := srvController.dialer.DialWebsocket(ctx, srvController.URL, nil)
 		c.Assert(err, qt.IsNil)
@@ -104,7 +104,7 @@ func TestStreamProxyStoppedMidwayController(t *testing.T) {
 	ctx := context.Background()
 
 	doneChan := make(chan error)
-	srvController := newServer(streamEcho)
+	srvController := newServer(echoSingleMessage)
 	srvJIMM := newServer(func(connClient *websocket.Conn) error {
 		connController, err := srvController.dialer.DialWebsocket(ctx, srvController.URL, nil)
 		c.Assert(err, qt.IsNil)
