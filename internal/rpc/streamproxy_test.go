@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -15,11 +14,8 @@ import (
 	"github.com/canonical/jimm/v3/internal/rpc"
 )
 
-func streamEcho(c *websocket.Conn, stopped *atomic.Bool) error {
+func streamEcho(c *websocket.Conn) error {
 	msg := make(map[string]interface{})
-	if stopped.Load() {
-		return errors.New("stopped")
-	}
 	if err := c.ReadJSON(&msg); err != nil {
 		return err
 	}
@@ -58,8 +54,7 @@ func TestStreamProxy(t *testing.T) {
 	ctx := context.Background()
 
 	doneChan := make(chan error)
-	stopped := atomic.Bool{}
-	srvController := newServer(func(c *websocket.Conn) error { return streamEcho(c, &stopped) })
+	srvController := newServer(streamEcho)
 	srvJIMM := newServer(func(connClient *websocket.Conn) error {
 		connController, err := srvController.dialer.DialWebsocket(ctx, srvController.URL, nil)
 		c.Assert(err, qt.IsNil)
@@ -109,8 +104,7 @@ func TestStreamProxyStoppedMidwayController(t *testing.T) {
 	ctx := context.Background()
 
 	doneChan := make(chan error)
-	stopped := atomic.Bool{}
-	srvController := newServer(func(c *websocket.Conn) error { return streamEcho(c, &stopped) })
+	srvController := newServer(streamEcho)
 	srvJIMM := newServer(func(connClient *websocket.Conn) error {
 		connController, err := srvController.dialer.DialWebsocket(ctx, srvController.URL, nil)
 		c.Assert(err, qt.IsNil)
@@ -125,7 +119,6 @@ func TestStreamProxyStoppedMidwayController(t *testing.T) {
 	defer ws.Close()
 
 	verifyEcho(c, ws, "")
-	stopped.Store(true)
 	verifyEcho(c, ws, ".*abnormal closure.*")
 
 	ws.Close()
