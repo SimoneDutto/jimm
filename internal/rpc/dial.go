@@ -89,7 +89,13 @@ func Dial(ctx context.Context, ctl *dbmodel.Controller, modelTag names.ModelTag,
 	for _, hps := range ctl.Addresses {
 		for _, hp := range hps {
 			if maybeReachable(hp.Scope) {
-				urls = append(urls, websocketURL(fmt.Sprintf("%s:%d", hp.Value, hp.Port), modelTag, finalPath))
+				var ip string
+				if hp.Type == string(network.IPv6Address) {
+					ip = fmt.Sprintf("[%s]:%d", hp.Value, hp.Port)
+				} else {
+					ip = fmt.Sprintf("%s:%d", hp.Value, hp.Port)
+				}
+				urls = append(urls, websocketURL(ip, modelTag, finalPath))
 			}
 		}
 	}
