@@ -44,11 +44,7 @@ var _ = gc.Suite(&modelManagerSuite{})
 func (s *modelManagerSuite) TestListModelSummaries(c *gc.C) {
 	conn := s.open(c, nil, "bob")
 	defer conn.Close()
-
 	// Add some machines and units to test the counts.
-	s.Model.Machines = 1
-	s.Model.Cores = 2
-	s.Model.Units = 1
 	ctx := context.Background()
 	err := s.JIMM.Database.UpdateModel(ctx, s.Model)
 	c.Assert(err, gc.Equals, nil)
@@ -162,7 +158,7 @@ func (s *modelManagerSuite) TestListModelSummariesWithoutControllerUUIDMasking(c
 	c.Assert(err, gc.Equals, nil)
 
 	client := modelmanager.NewClient(conn)
-	models, err := client.ListModelSummaries("bob", false)
+	models, err := client.ListModelSummaries("bob@canonical.com", false)
 	c.Assert(err, gc.Equals, nil)
 	c.Assert(models, jimmtest.CmpEquals(
 		cmpopts.IgnoreTypes(&time.Time{}),
@@ -185,20 +181,12 @@ func (s *modelManagerSuite) TestListModelSummariesWithoutControllerUUIDMasking(c
 			Data:   map[string]interface{}{},
 		},
 		ModelUserAccess: "admin",
-		Counts: []base.EntityCount{{
-			Entity: "machines",
-			Count:  0,
-		}, {
-			Entity: "cores",
-			Count:  0,
-		}, {
-			Entity: "units",
-			Count:  0,
-		}},
-		AgentVersion: &jujuversion.Current,
-		Type:         "iaas",
+		Counts:          []base.EntityCount{},
+		AgentVersion:    &jujuversion.Current,
+		Type:            "iaas",
 		SLA: &base.SLASummary{
-			Level: "unsupported",
+			Level: "",
+			Owner: "bob@canonical.com",
 		},
 	}, {
 		Name:            "model-3",
@@ -216,20 +204,12 @@ func (s *modelManagerSuite) TestListModelSummariesWithoutControllerUUIDMasking(c
 			Data:   map[string]interface{}{},
 		},
 		ModelUserAccess: "read",
-		Counts: []base.EntityCount{{
-			Entity: "machines",
-			Count:  0,
-		}, {
-			Entity: "cores",
-			Count:  0,
-		}, {
-			Entity: "units",
-			Count:  0,
-		}},
-		AgentVersion: &jujuversion.Current,
-		Type:         "iaas",
+		Counts:          []base.EntityCount{},
+		AgentVersion:    &jujuversion.Current,
+		Type:            "iaas",
 		SLA: &base.SLASummary{
-			Level: "unsupported",
+			Level: "",
+			Owner: "charlie@canonical.com",
 		},
 	}})
 }

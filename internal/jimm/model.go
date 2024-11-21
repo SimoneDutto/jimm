@@ -748,16 +748,64 @@ func (j *JIMM) ModelInfo(ctx context.Context, user *openfga.User, mt names.Model
 	return j.mergeModelInfo(ctx, user, mi, m)
 }
 
+func (j *JIMM) ModelSummaries(ctx context.Context, user *openfga.User, maskingControllerUUID string) (jujuparams.ModelSummaryResults, error) {
+	const op = errors.Op("jimm.ModelSummaries")
+
+	controllerSummaryMap := make(map[uint]bool, 0)
+	modelSummariesMap := make(map[string]jujuparams.ModelSummaryResult, 0)
+	modelSummaryResults := []jujuparams.ModelSummaryResult{}
+
+	err := j.ForEachUserModel(ctx, user, func(m *dbmodel.Model, uap jujuparams.UserAccessPermission) error {
+		// if controllers has not been queried yet, do it for model summaries.
+		if !controllerSummaryMap[m.ControllerID] {
+			api, err := j.dial(ctx, &m.Controller, names.ModelTag{})
+			if err != nil {
+				return errors.E(op, err)
+			}
+			defer api.Close()
+			results, err := api.ListModelSummaries(ctx, jujuparams.ModelSummariesRequest{All: true})
+			if err != nil {
+				return errors.E(op, err)
+			}
+			for _, res := range results.Results {
+				modelSummariesMap[res.Result.UUID] = res
+			}
+		}
+		modelSummaryFromController, ok := modelSummariesMap[m.UUID.String]
+		modelSummaryResult := m.ToJujuModelSummary(modelSummaryFromController.Result, maskingControllerUUID, uap)
+		if modelSummaryFromController.Error == nil {
+			modelSummaryResults = append(modelSummaryResults, jujuparams.ModelSummaryResult{
+				Result: &modelSummaryResult,
+				Error:  modelSummaryFromController.Error,
+			})
+			return nil
+		}
+		if !ok {
+			// handle this case (how a model can be in JIMM but missing in controllers?)
+			return nil
+		}
+		modelSummaryResults = append(modelSummaryResults, jujuparams.ModelSummaryResult{
+			Result: &modelSummaryResult,
+		})
+		return nil
+	})
+	if err != nil {
+		return jujuparams.ModelSummaryResults{}, errors.E(op, err)
+	}
+	return jujuparams.ModelSummaryResults{
+		Results: modelSummaryResults,
+	}, nil
+}
+
 // mergeModelInfo replaces fields on the juju model info object with
 // information from JIMM where JIMM specific information should be used.
 func (j *JIMM) mergeModelInfo(ctx context.Context, user *openfga.User, modelInfo *jujuparams.ModelInfo, jimmModel dbmodel.Model) (*jujuparams.ModelInfo, error) {
 	const op = errors.Op("jimm.mergeModelInfo")
 	zapctx.Info(ctx, string(op))
 
-	jimmSummary := jimmModel.ToJujuModelSummary()
-	modelInfo.CloudCredentialTag = jimmSummary.CloudCredentialTag
-	modelInfo.ControllerUUID = jimmSummary.ControllerUUID
-	modelInfo.OwnerTag = jimmSummary.OwnerTag
+	modelInfo.CloudCredentialTag = jimmModel.CloudCredential.Tag().String()
+	modelInfo.ControllerUUID = jimmModel.Controller.UUID
+	modelInfo.OwnerTag = jimmModel.Owner.Tag().String()
 
 	userAccess := make(map[string]string)
 

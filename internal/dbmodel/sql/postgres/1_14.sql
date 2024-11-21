@@ -1,4 +1,10 @@
--- 1_13.sql is a migration simplifies application offers
+-- 1_14.sql remove non essential fields from model.
+ALTER TABLE models DROP COLUMN default_series, DROP COLUMN migration_controller_id, DROP COLUMN is_controller, DROP COLUMN cores, 
+ DROP COLUMN machines, DROP COLUMN units, DROP COLUMN type, DROP COLUMN status_status, DROP COLUMN status_info, DROP COLUMN status_data, 
+ DROP COLUMN status_since, DROP COLUMN status_version, DROP COLUMN sla_level, DROP COLUMN sla_owner;
+
+UPDATE versions SET major=1, minor=14 WHERE component='jimmdb';
+-- 1_14.sql is a migration simplifies application offers
 DROP INDEX IF EXISTS idx_application_offer_connections_deleted_at;
 DROP INDEX IF EXISTS idx_application_offer_remote_endpoints_deleted_at;
 DROP INDEX IF EXISTS idx_application_offer_remote_spaces_deleted_at;

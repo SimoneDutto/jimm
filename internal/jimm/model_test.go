@@ -250,10 +250,6 @@ users:
 			AuthType: "empty",
 		},
 		Life: state.Alive.String(),
-		Status: dbmodel.Status{
-			Status: "started",
-			Info:   "running a test",
-		},
 	},
 }, {
 	name: "CreateModelWithoutCloudRegion",
@@ -364,10 +360,6 @@ users:
 			AuthType: "empty",
 		},
 		Life: state.Alive.String(),
-		Status: dbmodel.Status{
-			Status: "started",
-			Info:   "running a test",
-		},
 	},
 }, {
 	name: "CreateModelWithCloud",
@@ -457,10 +449,6 @@ users:
 			AuthType: "empty",
 		},
 		Life: state.Alive.String(),
-		Status: dbmodel.Status{
-			Status: "started",
-			Info:   "running a test",
-		},
 	},
 }, {
 	name: "CreateModelInOtherNamespaceAsSuperUser",
@@ -557,10 +545,6 @@ users:
 			AuthType: "empty",
 		},
 		Life: state.Alive.String(),
-		Status: dbmodel.Status{
-			Status: "started",
-			Info:   "running a test",
-		},
 	},
 }, {
 	name: "CreateModelInOtherNamespace",
@@ -981,10 +965,6 @@ users:
 			AuthType: "empty",
 		},
 		Life: state.Alive.String(),
-		Status: dbmodel.Status{
-			Status: "started",
-			Info:   "running a test",
-		},
 	},
 }, {
 	name: "CreateModelWithImplicitCloudAndMultipleClouds",
@@ -1789,8 +1769,7 @@ func TestForEachUserModel(t *testing.T) {
 
 	var res []jujuparams.ModelSummaryResult
 	err = j.ForEachUserModel(ctx, user, func(m *dbmodel.Model, access jujuparams.UserAccessPermission) error {
-		s := m.ToJujuModelSummary()
-		s.UserAccess = access
+		s := m.ToJujuModelSummary(nil, "00000001-0000-0000-0000-000000000001", access)
 		res = append(res, jujuparams.ModelSummaryResult{Result: &s})
 		return nil
 	})
@@ -1799,103 +1778,40 @@ func TestForEachUserModel(t *testing.T) {
 		Result: &jujuparams.ModelSummary{
 			Name:               "model-1",
 			UUID:               "00000002-0000-0000-0000-000000000001",
-			Type:               "iaas",
 			ControllerUUID:     "00000001-0000-0000-0000-000000000001",
 			ProviderType:       "test-provider",
-			DefaultSeries:      "warty",
 			CloudTag:           names.NewCloudTag("test-cloud").String(),
 			CloudRegion:        "test-cloud-region",
 			CloudCredentialTag: names.NewCloudCredentialTag("test-cloud/alice@canonical.com/cred-1").String(),
 			OwnerTag:           names.NewUserTag("alice@canonical.com").String(),
 			Life:               life.Value(state.Alive.String()),
-			Status: jujuparams.EntityStatus{
-				Status: "available",
-				Info:   "OK!",
-				Since:  newDate(2020, 02, 20, 20, 02, 20, 0, time.UTC),
-			},
-			UserAccess: "admin",
-			Counts: []jujuparams.ModelEntityCount{{
-				Entity: "machines",
-				Count:  2,
-			}, {
-				Entity: "cores",
-				Count:  3,
-			}, {
-				Entity: "units",
-				Count:  4,
-			}},
-			SLA: &jujuparams.ModelSLAInfo{
-				Level: "unsupported",
-			},
-			AgentVersion: newVersion("1.2.3"),
+			UserAccess:         "admin",
 		},
 	}, {
 		Result: &jujuparams.ModelSummary{
 			Name:               "model-2",
 			UUID:               "00000002-0000-0000-0000-000000000002",
-			Type:               "iaas",
 			ControllerUUID:     "00000001-0000-0000-0000-000000000001",
 			ProviderType:       "test-provider",
-			DefaultSeries:      "warty",
 			CloudTag:           names.NewCloudTag("test-cloud").String(),
 			CloudRegion:        "test-cloud-region",
 			CloudCredentialTag: names.NewCloudCredentialTag("test-cloud/alice@canonical.com/cred-1").String(),
 			OwnerTag:           names.NewUserTag("alice@canonical.com").String(),
 			Life:               life.Value(state.Alive.String()),
-			Status: jujuparams.EntityStatus{
-				Status: "available",
-				Info:   "OK!",
-				Since:  newDate(2020, 02, 20, 20, 02, 20, 0, time.UTC),
-			},
-			UserAccess: "write",
-			Counts: []jujuparams.ModelEntityCount{{
-				Entity: "machines",
-				Count:  2,
-			}, {
-				Entity: "cores",
-				Count:  3,
-			}, {
-				Entity: "units",
-				Count:  0,
-			}},
-			SLA: &jujuparams.ModelSLAInfo{
-				Level: "unsupported",
-			},
-			AgentVersion: newVersion("1.2.3"),
+			UserAccess:         "write",
 		},
 	}, {
 		Result: &jujuparams.ModelSummary{
 			Name:               "model-4",
 			UUID:               "00000002-0000-0000-0000-000000000004",
-			Type:               "iaas",
 			ControllerUUID:     "00000001-0000-0000-0000-000000000001",
 			ProviderType:       "test-provider",
-			DefaultSeries:      "warty",
 			CloudTag:           names.NewCloudTag("test-cloud").String(),
 			CloudRegion:        "test-cloud-region",
 			CloudCredentialTag: names.NewCloudCredentialTag("test-cloud/alice@canonical.com/cred-1").String(),
 			OwnerTag:           names.NewUserTag("alice@canonical.com").String(),
 			Life:               life.Value(state.Alive.String()),
-			Status: jujuparams.EntityStatus{
-				Status: "available",
-				Info:   "OK!",
-				Since:  newDate(2020, 02, 20, 20, 02, 20, 0, time.UTC),
-			},
-			UserAccess: "read",
-			Counts: []jujuparams.ModelEntityCount{{
-				Entity: "machines",
-				Count:  0,
-			}, {
-				Entity: "cores",
-				Count:  0,
-			}, {
-				Entity: "units",
-				Count:  0,
-			}},
-			SLA: &jujuparams.ModelSLAInfo{
-				Level: "unsupported",
-			},
-			AgentVersion: newVersion("1.2.3"),
+			UserAccess:         "read",
 		},
 	}})
 }
