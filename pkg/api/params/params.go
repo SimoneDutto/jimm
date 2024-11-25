@@ -409,7 +409,6 @@ type GetRoleResponse struct {
 type RenameRoleRequest struct {
 	// Name holds the name of the role.
 	Name string `json:"name"`
-
 	// NewName holds the new name of the role.
 	NewName string `json:"new-name"`
 }

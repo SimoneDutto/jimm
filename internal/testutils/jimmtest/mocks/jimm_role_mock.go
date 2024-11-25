@@ -1,10 +1,5 @@
 // Copyright 2024 Canonical.
 
-// This package contains mocks for each JIMM service.
-// Each file contains a struct providing tests with the ability to mock
-// JIMM services on test-by-test basis. Each struct has a corresponding
-// function field. Whenever the method is called it will delegate to the
-// requested funcion or if the funcion is nil return a NotImplemented error.
 package mocks
 
 import (
