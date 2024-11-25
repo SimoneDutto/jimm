@@ -74,21 +74,19 @@ func (s *JIMMSuite) SetUpTest(c *gc.C) {
 
 	pgdb, databaseName := PostgresDBWithDbName(GocheckTester{c}, nil)
 	s.databaseName = databaseName
-	database := db.Database{
-		DB: pgdb,
-	}
-	roleManager, err := role.NewRoleManager(&database, s.OFGAClient)
-	c.Assert(err, gc.IsNil)
 	// Setup OpenFGA.
 	s.JIMM = &jimm.JIMM{
-		Database:        database,
+		Database: db.Database{
+			DB: pgdb,
+		},
 		CredentialStore: NewInMemoryCredentialStore(),
 		Pubsub:          &pubsub.Hub{MaxConcurrency: 10},
 		UUID:            ControllerUUID,
 		OpenFGAClient:   s.OFGAClient,
-		RoleManager:     roleManager,
 	}
-
+	roleManager, err := role.NewRoleManager(&s.JIMM.Database, s.OFGAClient)
+	c.Assert(err, gc.IsNil)
+	s.JIMM.RoleManager = roleManager
 	ctx, cancel := context.WithCancel(context.Background())
 	s.cancel = cancel
 
