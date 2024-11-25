@@ -130,8 +130,7 @@ require (
 	github.com/gdamore/tcell/v2 v2.5.1 // indirect
 	github.com/getkin/kin-openapi v0.125.0 // indirect
 	github.com/go-goose/goose/v5 v5.0.0-20230421180421-abaee9096e3a // indirect
-	github.com/go-jose/go-jose/v3 v3.0.3 // indirect
-	github.com/go-jose/go-jose/v4 v4.0.1 // indirect
+	github.com/go-jose/go-jose/v4 v4.0.2 // indirect
 	github.com/go-logr/logr v1.4.1 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-macaroon-bakery/macaroonpb v1.0.0 // indirect
