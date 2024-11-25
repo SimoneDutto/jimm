@@ -419,12 +419,13 @@ type RemoveRoleRequest struct {
 	Name string `json:"name"`
 }
 
+// ListRolesRequest holds a request to list roles.
 type ListRolesRequest struct {
 	Limit  int `json:"limit"`
 	Offset int `json:"offset"`
 }
 
-// Role holds the details of a role currently residing in JIMM.
+// Role holds the details of a role currently.
 type Role struct {
 	UUID      string `json:"uuid" yaml:"uuid"`
 	Name      string `json:"name" yaml:"name"`
@@ -432,7 +433,7 @@ type Role struct {
 	UpdatedAt string `json:"updated_at" yaml:"updated_at"`
 }
 
-// ListRoleResponse returns the role tuples currently residing within OpenFGA.
+// ListRoleResponse contains a list of roles
 type ListRoleResponse struct {
 	Roles []Role `json:"name" yaml:"name"`
 }

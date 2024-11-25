@@ -54,6 +54,12 @@ func (s *accessControlSuite) TestGetRole(c *gc.C) {
 
 	_, err = client.GetRole(&apiparams.GetRoleRequest{Name: created.Name, UUID: created.UUID})
 	c.Assert(err, gc.ErrorMatches, ".*only one of.*")
+
+	_, err = client.GetRole(&apiparams.GetRoleRequest{
+		Name: "#####",
+	})
+	c.Assert(err, gc.ErrorMatches, ".*invalid role name.*")
+
 }
 
 func (s *accessControlSuite) TestRemoveRole(c *gc.C) {
@@ -66,6 +72,11 @@ func (s *accessControlSuite) TestRemoveRole(c *gc.C) {
 		Name: "test-role",
 	})
 	c.Assert(err, gc.ErrorMatches, ".*not found.*")
+
+	err = client.RemoveRole(&apiparams.RemoveRoleRequest{
+		Name: "#####",
+	})
+	c.Assert(err, gc.ErrorMatches, ".*invalid role name.*")
 
 	_, err = client.AddRole(&apiparams.AddRoleRequest{Name: "test-role"})
 	c.Assert(err, jc.ErrorIsNil)

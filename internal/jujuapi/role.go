@@ -60,6 +60,8 @@ func (r *controllerRoot) GetRole(ctx context.Context, req apiparams.GetRoleReque
 	switch {
 	case req.UUID != "" && req.Name != "":
 		return apiparams.Role{}, errors.E(op, errors.CodeBadRequest, "only one of UUID or Name should be provided")
+	case req.Name != "" && !jimmnames.IsValidRoleName(req.Name):
+		return apiparams.Role{}, errors.E(op, errors.CodeBadRequest, "invalid role name")
 	case req.UUID != "":
 		roleEntry, err = r.jimm.GetRoleManager().GetRoleByUUID(ctx, r.user, req.UUID)
 	case req.Name != "":
@@ -98,6 +100,10 @@ func (r *controllerRoot) RenameRole(ctx context.Context, req apiparams.RenameRol
 // RemoveRole removes a role within JIMMs DB for reference by OpenFGA.
 func (r *controllerRoot) RemoveRole(ctx context.Context, req apiparams.RemoveRoleRequest) error {
 	const op = errors.Op("jujuapi.RemoveRole")
+
+	if !jimmnames.IsValidRoleName(req.Name) {
+		return errors.E(op, errors.CodeBadRequest, "invalid role name")
+	}
 
 	if err := r.jimm.GetRoleManager().RemoveRole(ctx, r.user, req.Name); err != nil {
 		zapctx.Error(ctx, "failed to remove role", zaputil.Error(err))
