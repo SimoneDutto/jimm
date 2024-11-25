@@ -103,23 +103,19 @@ func (s *accessControlSuite) TestRemoveRoleRemovesTuples(c *gc.C) {
 	err = db.GetRole(ctx, role)
 	c.Assert(err, gc.IsNil)
 
-	tuples := []openfga.Tuple{
-		// This tuple should remain as it has no relation to role2
-		{
-			Object:   ofganames.ConvertTag(user.ResourceTag()),
-			Relation: ofganames.AssigneeRelation,
-			Target:   ofganames.ConvertTag(role.ResourceTag()),
-		},
-		{
-			Object:   ofganames.ConvertTagWithRelation(role.ResourceTag(), ofganames.AssigneeRelation),
-			Relation: "administrator",
-			Target:   ofganames.ConvertTag(controller.ResourceTag()),
-		},
-		{
-			Object:   ofganames.ConvertTagWithRelation(role.ResourceTag(), ofganames.AssigneeRelation),
-			Relation: "writer",
-			Target:   ofganames.ConvertTag(model.ResourceTag()),
-		},
+	tuples := []openfga.Tuple{{
+		Object:   ofganames.ConvertTag(user.ResourceTag()),
+		Relation: ofganames.AssigneeRelation,
+		Target:   ofganames.ConvertTag(role.ResourceTag()),
+	}, {
+		Object:   ofganames.ConvertTagWithRelation(role.ResourceTag(), ofganames.AssigneeRelation),
+		Relation: "administrator",
+		Target:   ofganames.ConvertTag(controller.ResourceTag()),
+	}, {
+		Object:   ofganames.ConvertTagWithRelation(role.ResourceTag(), ofganames.AssigneeRelation),
+		Relation: "writer",
+		Target:   ofganames.ConvertTag(model.ResourceTag()),
+	},
 	}
 
 	u := user.Tag().String()
@@ -199,4 +195,21 @@ func (s *accessControlSuite) TestListRoles(c *gc.C) {
 	c.Assert(roles[1].Name, gc.Equals, "test-role0")
 	c.Assert(roles[2].Name, gc.Equals, "test-role1")
 	c.Assert(roles[3].Name, gc.Equals, "test-role2")
+}
+
+func (s *accessControlSuite) TestUnauthorizedUserForRoleManagerment(c *gc.C) {
+	conn := s.open(c, nil, "not-authorized-user")
+	defer conn.Close()
+	client := api.NewClient(conn)
+
+	_, err := client.GetRole(&apiparams.GetRoleRequest{Name: "name"})
+	c.Assert(err, gc.ErrorMatches, ".*unauthorized.*")
+	err = client.RemoveRole(&apiparams.RemoveRoleRequest{Name: "name"})
+	c.Assert(err, gc.ErrorMatches, ".*unauthorized.*")
+	_, err = client.AddRole(&apiparams.AddRoleRequest{Name: "name"})
+	c.Assert(err, gc.ErrorMatches, ".*unauthorized.*")
+	err = client.RenameRole(&apiparams.RenameRoleRequest{Name: "name", NewName: "rename"})
+	c.Assert(err, gc.ErrorMatches, ".*unauthorized.*")
+	_, err = client.ListRoles(&apiparams.ListRolesRequest{})
+	c.Assert(err, gc.ErrorMatches, ".*unauthorized.*")
 }

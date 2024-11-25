@@ -12,20 +12,9 @@ import (
 	"github.com/canonical/jimm/v3/internal/common/pagination"
 	"github.com/canonical/jimm/v3/internal/dbmodel"
 	"github.com/canonical/jimm/v3/internal/errors"
-	"github.com/canonical/jimm/v3/internal/openfga"
 	apiparams "github.com/canonical/jimm/v3/pkg/api/params"
 	jimmnames "github.com/canonical/jimm/v3/pkg/names"
 )
-
-type RoleManager interface {
-	AddRole(ctx context.Context, user *openfga.User, name string) (*dbmodel.RoleEntry, error)
-	CountRoles(ctx context.Context, user *openfga.User) (int, error)
-	GetRoleByUUID(ctx context.Context, user *openfga.User, uuid string) (*dbmodel.RoleEntry, error)
-	GetRoleByName(ctx context.Context, user *openfga.User, name string) (*dbmodel.RoleEntry, error)
-	ListRoles(ctx context.Context, user *openfga.User, pagination pagination.LimitOffsetPagination, match string) ([]dbmodel.RoleEntry, error)
-	RenameRole(ctx context.Context, user *openfga.User, oldName, newName string) error
-	RemoveRole(ctx context.Context, user *openfga.User, name string) error
-}
 
 // AddRole creates a role within JIMMs DB for reference by OpenFGA.
 func (r *controllerRoot) AddRole(ctx context.Context, req apiparams.AddRoleRequest) (apiparams.AddRoleResponse, error) {
