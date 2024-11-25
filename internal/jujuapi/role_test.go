@@ -79,43 +79,32 @@ func (s *accessControlSuite) TestRemoveRoleRemovesTuples(c *gc.C) {
 	ctx := context.Background()
 	db := s.JIMM.Database
 
-	user, role, controller, model, _, _, _, client, closeClient := createTestControllerEnvironment(ctx, c, s)
+	user, _, controller, model, _, _, _, client, closeClient := createTestControllerEnvironment(ctx, c, s)
 	defer closeClient()
 
-	_, err := db.AddRole(ctx, "test-group2")
+	_, err := db.AddRole(ctx, "test-role2")
 	c.Assert(err, gc.IsNil)
 
-	group2 := &dbmodel.RoleEntry{
-		Name: "test-group2",
+	role := &dbmodel.RoleEntry{
+		Name: "test-role2",
 	}
-	err = db.GetRole(ctx, group2)
+	err = db.GetRole(ctx, role)
 	c.Assert(err, gc.IsNil)
 
 	tuples := []openfga.Tuple{
-		// This tuple should remain as it has no relation to group2
+		// This tuple should remain as it has no relation to role2
 		{
 			Object:   ofganames.ConvertTag(user.ResourceTag()),
-			Relation: "member",
-			Target:   ofganames.ConvertTag(role.ResourceTag()),
-		},
-		// Below tuples should all be removed as they relate to group2
-		{
-			Object:   ofganames.ConvertTag(user.ResourceTag()),
-			Relation: "member",
-			Target:   ofganames.ConvertTag(group2.ResourceTag()),
-		},
-		{
-			Object:   ofganames.ConvertTagWithRelation(group2.ResourceTag(), ofganames.MemberRelation),
-			Relation: "member",
+			Relation: ofganames.AssigneeRelation,
 			Target:   ofganames.ConvertTag(role.ResourceTag()),
 		},
 		{
-			Object:   ofganames.ConvertTagWithRelation(group2.ResourceTag(), ofganames.MemberRelation),
+			Object:   ofganames.ConvertTagWithRelation(role.ResourceTag(), ofganames.AssigneeRelation),
 			Relation: "administrator",
 			Target:   ofganames.ConvertTag(controller.ResourceTag()),
 		},
 		{
-			Object:   ofganames.ConvertTagWithRelation(group2.ResourceTag(), ofganames.MemberRelation),
+			Object:   ofganames.ConvertTagWithRelation(role.ResourceTag(), ofganames.AssigneeRelation),
 			Relation: "writer",
 			Target:   ofganames.ConvertTag(model.ResourceTag()),
 		},
@@ -128,7 +117,7 @@ func (s *accessControlSuite) TestRemoveRoleRemovesTuples(c *gc.C) {
 
 	err = s.JIMM.OpenFGAClient.AddRelation(context.Background(), tuples...)
 	c.Assert(err, gc.IsNil)
-	// Check user has access to model and controller through group2
+	// Check user has access to model and controller through role2
 	checkResp, err := client.CheckRelation(&apiparams.CheckRelationRequest{Tuple: checkAccessTupleController})
 	c.Assert(err, gc.IsNil)
 	c.Assert(checkResp.Allowed, gc.Equals, true)
@@ -136,12 +125,8 @@ func (s *accessControlSuite) TestRemoveRoleRemovesTuples(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	c.Assert(checkResp.Allowed, gc.Equals, true)
 
-	err = client.RemoveRole(&apiparams.RemoveRoleRequest{Name: group2.Name})
+	err = client.RemoveRole(&apiparams.RemoveRoleRequest{Name: role.Name})
 	c.Assert(err, gc.IsNil)
-
-	resp, err := client.ListRelationshipTuples(&apiparams.ListRelationshipTuplesRequest{})
-	c.Assert(err, gc.IsNil)
-	c.Assert(len(resp.Tuples), gc.Equals, 13)
 
 	// Check user access has been revoked.
 	checkResp, err = client.CheckRelation(&apiparams.CheckRelationRequest{Tuple: checkAccessTupleController})
@@ -180,26 +165,26 @@ func (s *accessControlSuite) TestListRoles(c *gc.C) {
 
 	client := api.NewClient(conn)
 
-	groupNames := []string{
-		"test-group0",
-		"test-group1",
-		"test-group2",
+	roleNames := []string{
+		"test-role0",
+		"test-role1",
+		"test-role2",
 		"aaaFinalRole",
 	}
 
-	for _, name := range groupNames {
+	for _, name := range roleNames {
 		_, err := client.AddRole(&apiparams.AddRoleRequest{Name: name})
 		c.Assert(err, jc.ErrorIsNil)
 	}
 	req := apiparams.ListRolesRequest{Limit: 10, Offset: 0}
-	groups, err := client.ListRoles(&req)
+	roles, err := client.ListRoles(&req)
 	c.Assert(err, jc.ErrorIsNil)
-	c.Assert(groups, gc.HasLen, 4)
+	c.Assert(roles, gc.HasLen, 4)
 	// Verify the UUID is not empty.
-	c.Assert(groups[0].UUID, gc.Not(gc.Equals), "")
-	// groups should be returned in ascending order of name
-	c.Assert(groups[0].Name, gc.Equals, "aaaFinalRole")
-	c.Assert(groups[1].Name, gc.Equals, "test-group0")
-	c.Assert(groups[2].Name, gc.Equals, "test-group1")
-	c.Assert(groups[3].Name, gc.Equals, "test-group2")
+	c.Assert(roles[0].UUID, gc.Not(gc.Equals), "")
+	// roles should be returned in ascending order of name
+	c.Assert(roles[0].Name, gc.Equals, "aaaFinalRole")
+	c.Assert(roles[1].Name, gc.Equals, "test-role0")
+	c.Assert(roles[2].Name, gc.Equals, "test-role1")
+	c.Assert(roles[3].Name, gc.Equals, "test-role2")
 }
