@@ -23,6 +23,7 @@ import (
 	"github.com/canonical/jimm/v3/internal/dbmodel"
 	"github.com/canonical/jimm/v3/internal/discharger"
 	"github.com/canonical/jimm/v3/internal/jimm"
+	"github.com/canonical/jimm/v3/internal/jimm/role"
 	"github.com/canonical/jimm/v3/internal/jimmhttp"
 	"github.com/canonical/jimm/v3/internal/jimmjwx"
 	"github.com/canonical/jimm/v3/internal/jujuclient"
@@ -73,16 +74,19 @@ func (s *JIMMSuite) SetUpTest(c *gc.C) {
 
 	pgdb, databaseName := PostgresDBWithDbName(GocheckTester{c}, nil)
 	s.databaseName = databaseName
-
+	database := db.Database{
+		DB: pgdb,
+	}
+	roleManager, err := role.NewRoleManager(&database, s.OFGAClient)
+	c.Assert(err, gc.IsNil)
 	// Setup OpenFGA.
 	s.JIMM = &jimm.JIMM{
-		Database: db.Database{
-			DB: pgdb,
-		},
+		Database:        database,
 		CredentialStore: NewInMemoryCredentialStore(),
 		Pubsub:          &pubsub.Hub{MaxConcurrency: 10},
 		UUID:            ControllerUUID,
 		OpenFGAClient:   s.OFGAClient,
+		RoleManager:     roleManager,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
