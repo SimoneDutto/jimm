@@ -17,7 +17,7 @@ import (
 	jimmnames "github.com/canonical/jimm/v3/pkg/names"
 )
 
-type RoleService interface {
+type RoleManager interface {
 	AddRole(ctx context.Context, user *openfga.User, name string) (*dbmodel.RoleEntry, error)
 	CountRoles(ctx context.Context, user *openfga.User) (int, error)
 	GetRoleByUUID(ctx context.Context, user *openfga.User, uuid string) (*dbmodel.RoleEntry, error)
@@ -36,7 +36,7 @@ func (r *controllerRoot) AddRole(ctx context.Context, req apiparams.AddRoleReque
 		return resp, errors.E(op, errors.CodeBadRequest, "invalid role name")
 	}
 
-	roleEntry, err := r.jimm.AddRole(ctx, r.user, req.Name)
+	roleEntry, err := r.jimm.GetRoleManager().AddRole(ctx, r.user, req.Name)
 	if err != nil {
 		zapctx.Error(ctx, "failed to add role", zaputil.Error(err))
 		return resp, errors.E(op, err)
@@ -61,9 +61,9 @@ func (r *controllerRoot) GetRole(ctx context.Context, req apiparams.GetRoleReque
 	case req.UUID != "" && req.Name != "":
 		return apiparams.Role{}, errors.E(op, errors.CodeBadRequest, "only one of UUID or Name should be provided")
 	case req.UUID != "":
-		roleEntry, err = r.jimm.GetRoleByUUID(ctx, r.user, req.UUID)
+		roleEntry, err = r.jimm.GetRoleManager().GetRoleByUUID(ctx, r.user, req.UUID)
 	case req.Name != "":
-		roleEntry, err = r.jimm.GetRoleByName(ctx, r.user, req.Name)
+		roleEntry, err = r.jimm.GetRoleManager().GetRoleByName(ctx, r.user, req.Name)
 	default:
 		return apiparams.Role{}, errors.E(op, errors.CodeBadRequest, "no UUID or Name provided")
 	}
@@ -88,7 +88,7 @@ func (r *controllerRoot) RenameRole(ctx context.Context, req apiparams.RenameRol
 		return errors.E(op, errors.CodeBadRequest, "invalid role name")
 	}
 
-	if err := r.jimm.RenameRole(ctx, r.user, req.Name, req.NewName); err != nil {
+	if err := r.jimm.GetRoleManager().RenameRole(ctx, r.user, req.Name, req.NewName); err != nil {
 		zapctx.Error(ctx, "failed to rename role", zaputil.Error(err))
 		return errors.E(op, err)
 	}
@@ -99,7 +99,7 @@ func (r *controllerRoot) RenameRole(ctx context.Context, req apiparams.RenameRol
 func (r *controllerRoot) RemoveRole(ctx context.Context, req apiparams.RemoveRoleRequest) error {
 	const op = errors.Op("jujuapi.RemoveRole")
 
-	if err := r.jimm.RemoveRole(ctx, r.user, req.Name); err != nil {
+	if err := r.jimm.GetRoleManager().RemoveRole(ctx, r.user, req.Name); err != nil {
 		zapctx.Error(ctx, "failed to remove role", zaputil.Error(err))
 		return errors.E(op, err)
 	}
@@ -111,7 +111,7 @@ func (r *controllerRoot) ListRoles(ctx context.Context, req apiparams.ListRolesR
 	const op = errors.Op("jujuapi.ListRoles")
 
 	pagination := pagination.NewOffsetFilter(req.Limit, req.Offset)
-	roles, err := r.jimm.ListRoles(ctx, r.user, pagination, "")
+	roles, err := r.jimm.GetRoleManager().ListRoles(ctx, r.user, pagination, "")
 	if err != nil {
 		return apiparams.ListRoleResponse{}, errors.E(op, err)
 	}

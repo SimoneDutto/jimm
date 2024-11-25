@@ -16,8 +16,8 @@ import (
 	"github.com/canonical/jimm/v3/internal/openfga"
 )
 
-// RoleService is an implementation of the jujuapi.RoleService interface.
-type RoleService struct {
+// RoleManager is an implementation of the jujuapi.RoleManager interface.
+type RoleManager struct {
 	AddRole_       func(ctx context.Context, user *openfga.User, name string) (*dbmodel.RoleEntry, error)
 	CountRoles_    func(ctx context.Context, user *openfga.User) (int, error)
 	GetRoleByUUID_ func(ctx context.Context, user *openfga.User, uuid string) (*dbmodel.RoleEntry, error)
@@ -27,49 +27,49 @@ type RoleService struct {
 	RemoveRole_    func(ctx context.Context, user *openfga.User, name string) error
 }
 
-func (j *RoleService) AddRole(ctx context.Context, u *openfga.User, name string) (*dbmodel.RoleEntry, error) {
+func (j RoleManager) AddRole(ctx context.Context, u *openfga.User, name string) (*dbmodel.RoleEntry, error) {
 	if j.AddRole_ == nil {
 		return nil, errors.E(errors.CodeNotImplemented)
 	}
 	return j.AddRole_(ctx, u, name)
 }
 
-func (j *RoleService) CountRoles(ctx context.Context, user *openfga.User) (int, error) {
+func (j RoleManager) CountRoles(ctx context.Context, user *openfga.User) (int, error) {
 	if j.CountRoles_ == nil {
 		return 0, errors.E(errors.CodeNotImplemented)
 	}
 	return j.CountRoles_(ctx, user)
 }
 
-func (j *RoleService) GetRoleByUUID(ctx context.Context, user *openfga.User, uuid string) (*dbmodel.RoleEntry, error) {
+func (j RoleManager) GetRoleByUUID(ctx context.Context, user *openfga.User, uuid string) (*dbmodel.RoleEntry, error) {
 	if j.GetRoleByUUID_ == nil {
 		return nil, errors.E(errors.CodeNotImplemented)
 	}
 	return j.GetRoleByUUID_(ctx, user, uuid)
 }
 
-func (j *RoleService) GetRoleByName(ctx context.Context, user *openfga.User, name string) (*dbmodel.RoleEntry, error) {
+func (j RoleManager) GetRoleByName(ctx context.Context, user *openfga.User, name string) (*dbmodel.RoleEntry, error) {
 	if j.GetRoleByName_ == nil {
 		return nil, errors.E(errors.CodeNotImplemented)
 	}
 	return j.GetRoleByName_(ctx, user, name)
 }
 
-func (j *RoleService) ListRoles(ctx context.Context, user *openfga.User, pagination pagination.LimitOffsetPagination, match string) ([]dbmodel.RoleEntry, error) {
+func (j RoleManager) ListRoles(ctx context.Context, user *openfga.User, pagination pagination.LimitOffsetPagination, match string) ([]dbmodel.RoleEntry, error) {
 	if j.ListRoles_ == nil {
 		return nil, errors.E(errors.CodeNotImplemented)
 	}
 	return j.ListRoles_(ctx, user, pagination, match)
 }
 
-func (j *RoleService) RemoveRole(ctx context.Context, user *openfga.User, name string) error {
+func (j RoleManager) RemoveRole(ctx context.Context, user *openfga.User, name string) error {
 	if j.RemoveRole_ == nil {
 		return errors.E(errors.CodeNotImplemented)
 	}
 	return j.RemoveRole_(ctx, user, name)
 }
 
-func (j *RoleService) RenameRole(ctx context.Context, user *openfga.User, oldName, newName string) error {
+func (j RoleManager) RenameRole(ctx context.Context, user *openfga.User, oldName, newName string) error {
 	if j.RenameRole_ == nil {
 		return errors.E(errors.CodeNotImplemented)
 	}
