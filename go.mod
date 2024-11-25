@@ -27,7 +27,7 @@ require (
 	github.com/canonical/go-service v1.0.0
 	github.com/canonical/ofga v0.10.0
 	github.com/canonical/rebac-admin-ui-handlers v0.1.2
-	github.com/coreos/go-oidc/v3 v3.9.0
+	github.com/coreos/go-oidc/v3 v3.11.0
 	github.com/dustinkirkland/golang-petname v0.0.0-20231002161417-6a283f1aaaf2
 	github.com/frankban/quicktest v1.14.6
 	github.com/go-chi/chi/v5 v5.0.12
