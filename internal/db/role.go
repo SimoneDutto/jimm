@@ -64,10 +64,10 @@ func (d *Database) GetRole(ctx context.Context, role *dbmodel.RoleEntry) (err er
 }
 
 // UpdateRoleName updates the name of a role identified by UUID.
-func (d *Database) UpdateRoleName(ctx context.Context, uuid, name string) (err error) {
+func (d *Database) UpdateRoleName(ctx context.Context, oldname, name string) (err error) {
 	const op = errors.Op("db.UpdateRole")
 
-	if uuid == "" {
+	if oldname == "" {
 		return errors.E(op, "uuid must be specified")
 	}
 
@@ -80,7 +80,7 @@ func (d *Database) UpdateRoleName(ctx context.Context, uuid, name string) (err e
 	defer servermon.ErrorCounter(servermon.DBQueryErrorCount, &err, string(op))
 
 	model := d.DB.WithContext(ctx).Model(&dbmodel.RoleEntry{})
-	model.Where("uuid = ?", uuid)
+	model.Where("name = ?", oldname)
 	if model.Update("name", name).RowsAffected == 0 {
 		return errors.E(op, errors.CodeNotFound, "role not found")
 	}
