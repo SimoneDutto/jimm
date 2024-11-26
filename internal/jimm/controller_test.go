@@ -1443,19 +1443,12 @@ controllers:
   agent-version: 3.3
 models:
 - name: model-1
-  type: iaas
   uuid: 00000002-0000-0000-0000-000000000003
   controller: controller-1
-  default-series: mantic
   cloud: test-cloud
   region: test-region-1
   cloud-credential: test-cred
   owner: alice@canonical.com
-  life: alive
-  status:
-    status: available
-    info: "OK!"
-    since: 2020-02-20T20:02:20Z
   users:
   - user: alice@canonical.com
     access: admin
@@ -1463,19 +1456,13 @@ models:
     access: write
   - user: charlie@canonical.com
     access: read
-  sla:
-    level: unsupported
-  agent-version: 3.3
 - name: model-2
-  type: iaas
   uuid: 00000002-0000-0000-0000-000000000004
   controller: controller-2
-  default-series: mantic
   cloud: test-cloud
   region: test-region-1
   cloud-credential: test-cred
   owner: alice@canonical.com
-  life: alive
   status:
     status: available
     info: "OK!"
@@ -1487,9 +1474,6 @@ models:
     access: write
   - user: charlie@canonical.com
     access: read
-  sla:
-    level: unsupported
-  agent-version: 3.3
 `
 
 func TestInitiateMigration(t *testing.T) {
