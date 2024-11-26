@@ -15,6 +15,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
 	"github.com/juju/juju/core/life"
+	"github.com/juju/juju/rpc/params"
 	jujuparams "github.com/juju/juju/rpc/params"
 	"github.com/juju/juju/state"
 	"github.com/juju/names/v5"
@@ -1805,40 +1806,284 @@ func TestForEachModel(t *testing.T) {
 		"00000002-0000-0000-0000-000000000004",
 	})
 }
+
+const modelSummariesTestEnv = `clouds:
+- name: test-cloud
+  type: test-provider
+  regions:
+  - name: test-cloud-region
+cloud-credentials:
+- owner: alice@canonical.com
+  name: cred-1
+  cloud: test-cloud
+controllers:
+- name: controller-1
+  uuid: 00000001-0000-0000-0000-000000000001
+  cloud: test-cloud
+  region: test-cloud-region
+models:
+- name: model-1
+  uuid: 00000002-0000-0000-0000-000000000001
+  controller: controller-1
+  cloud: test-cloud
+  region: test-cloud-region
+  cloud-credential: cred-1
+  owner: alice@canonical.com
+  life: alive
+  users:
+  - user: alice@canonical.com
+    access: admin
+  - user: bob@canonical.com
+    access: admin
+- name: model-2
+  uuid: 00000002-0000-0000-0000-000000000002
+  controller: controller-1
+  cloud: test-cloud
+  region: test-cloud-region
+  cloud-credential: cred-1
+  owner: alice@canonical.com
+  life: alive
+  users:
+  - user: alice@canonical.com
+    access: admin
+  - user: bob@canonical.com
+    access: write
+users:
+- username: alice@canonical.com
+  controller-access: superuser
+`
+
 func TestModelSummaries(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
 	client, _, _, err := jimmtest.SetupTestOFGAClient(c.Name())
 	c.Assert(err, qt.IsNil)
-
 	j := &jimm.JIMM{
 		UUID:          uuid.NewString(),
 		OpenFGAClient: client,
 		Database: db.Database{
 			DB: jimmtest.PostgresDB(c, nil),
 		},
-		Dialer: &jimmtest.Dialer{
-			API: &jimmtest.API{
-				// we use the usertag to simulate a multi-controller scenario in the unit-test
-				ListModelSummaries_: func(ctx context.Context, msr jujuparams.ModelSummariesRequest) (jujuparams.ModelSummaryResults, error) {
-					return jujuparams.ModelSummaryResults{}, nil
-				},
-			},
-		},
 	}
 	err = j.Database.Migrate(ctx, false)
 	c.Assert(err, qt.IsNil)
 
-	env := jimmtest.ParseEnvironment(c, forEachModelTestEnv)
+	env := jimmtest.ParseEnvironment(c, modelSummariesTestEnv)
 	env.PopulateDBAndPermissions(c, j.ResourceTag(), j.Database, client)
 
 	dbUser := env.User("alice@canonical.com").DBObject(c, j.Database)
 	alice := openfga.NewUser(&dbUser, client)
 
-	summaries, err := j.ModelSummaries(ctx, alice, "")
-	c.Check(err, qt.IsNil)
-	c.Check(summaries.Results, qt.HasLen, 4)
+	tests := []struct {
+		description            string
+		controllerAPISummaries []params.ModelSummaryResult
+		expectedSummaries      []params.ModelSummaryResult
+		expectedSummariesSize  int
+	}{
+		{
+			description: "info from controller, so all models available",
+			controllerAPISummaries: []params.ModelSummaryResult{
+				{
+					Result: &params.ModelSummary{
+						Name:           "model-1",
+						UUID:           "00000002-0000-0000-0000-000000000001",
+						Type:           "iaas",
+						ControllerUUID: "00000002-0000-0000-0000-000000000001",
+						IsController:   false,
+						DefaultSeries:  "series-1",
+						Life:           "alive",
+						Status: params.EntityStatus{
+							Status: "available",
+						},
+						UserAccess: "testtest",
+					},
+				},
+				{
+					Result: &params.ModelSummary{
+						Name:           "model-2",
+						UUID:           "00000002-0000-0000-0000-000000000002",
+						Type:           "iaas",
+						ControllerUUID: "00000001-0000-0000-0000-000000000001",
+						IsController:   false,
+						DefaultSeries:  "series-2",
+						Life:           "alive",
+						Status: params.EntityStatus{
+							Status: "available",
+						},
+						UserAccess: "admin",
+					},
+				},
+			},
+			expectedSummaries: []params.ModelSummaryResult{
+				{
+					Result: &params.ModelSummary{
+						Name:               "model-1",
+						UUID:               "00000002-0000-0000-0000-000000000001",
+						Type:               "iaas",
+						ControllerUUID:     "00000001-0000-0000-0000-000000000001",
+						IsController:       false,
+						ProviderType:       "test-provider",
+						DefaultSeries:      "series-1",
+						CloudTag:           "cloud-test-cloud",
+						CloudRegion:        "test-cloud-region",
+						CloudCredentialTag: "cloudcred-test-cloud_alice@canonical.com_cred-1",
+						OwnerTag:           "user-alice@canonical.com",
+						Life:               "alive",
+						Status: params.EntityStatus{
+							Status: "available",
+						},
+						UserAccess: "admin",
+					},
+					Error: (*params.Error)(nil),
+				},
+				{
+					Result: &params.ModelSummary{
+						Name:               "model-2",
+						UUID:               "00000002-0000-0000-0000-000000000002",
+						Type:               "iaas",
+						ControllerUUID:     "00000001-0000-0000-0000-000000000001",
+						IsController:       false,
+						ProviderType:       "test-provider",
+						DefaultSeries:      "series-2",
+						CloudTag:           "cloud-test-cloud",
+						CloudRegion:        "test-cloud-region",
+						CloudCredentialTag: "cloudcred-test-cloud_alice@canonical.com_cred-1",
+						OwnerTag:           "user-alice@canonical.com",
+						Life:               "alive",
+						Status: params.EntityStatus{
+							Status: "available",
+						},
+						UserAccess: "admin",
+					},
+				},
+			},
+			expectedSummariesSize: 2,
+		},
+		{
+			description: "partial info from controller, so one model is not available and info are not filled in.",
+			controllerAPISummaries: []params.ModelSummaryResult{
+				{
+					Result: &params.ModelSummary{
+						Name:           "model-1",
+						UUID:           "00000002-0000-0000-0000-000000000001",
+						Type:           "iaas",
+						ControllerUUID: "00000002-0000-0000-0000-000000000001",
+						IsController:   false,
+						DefaultSeries:  "",
+						Life:           "alive",
+						Status: params.EntityStatus{
+							Status: "available",
+						},
+						UserAccess: "testtest",
+					},
+				},
+			},
+			expectedSummaries: []params.ModelSummaryResult{
+				{
+					Result: &params.ModelSummary{
+						Name:               "model-1",
+						UUID:               "00000002-0000-0000-0000-000000000001",
+						Type:               "iaas",
+						ControllerUUID:     "00000001-0000-0000-0000-000000000001",
+						IsController:       false,
+						ProviderType:       "test-provider",
+						DefaultSeries:      "",
+						CloudTag:           "cloud-test-cloud",
+						CloudRegion:        "test-cloud-region",
+						CloudCredentialTag: "cloudcred-test-cloud_alice@canonical.com_cred-1",
+						OwnerTag:           "user-alice@canonical.com",
+						Life:               "alive",
+						Status: params.EntityStatus{
+							Status: "available",
+						},
+						UserAccess: "admin",
+					},
+					Error: (*params.Error)(nil),
+				},
+				{
+					Result: &params.ModelSummary{
+						Name:               "model-2",
+						UUID:               "00000002-0000-0000-0000-000000000002",
+						ControllerUUID:     "00000001-0000-0000-0000-000000000001",
+						IsController:       false,
+						ProviderType:       "test-provider",
+						CloudTag:           "cloud-test-cloud",
+						CloudRegion:        "test-cloud-region",
+						CloudCredentialTag: "cloudcred-test-cloud_alice@canonical.com_cred-1",
+						OwnerTag:           "user-alice@canonical.com",
+						Life:               "alive",
+						Status: params.EntityStatus{
+							Status: "unavailable",
+						},
+						UserAccess: "admin",
+					},
+				},
+			},
+			expectedSummariesSize: 2,
+		},
+		{
+			description: "no info from controller, so all models unavailable",
+			expectedSummaries: []params.ModelSummaryResult{
+				{
+					Result: &params.ModelSummary{
+						Name:               "model-1",
+						UUID:               "00000002-0000-0000-0000-000000000001",
+						Type:               "",
+						ControllerUUID:     "00000001-0000-0000-0000-000000000001",
+						IsController:       false,
+						ProviderType:       "test-provider",
+						DefaultSeries:      "",
+						CloudTag:           "cloud-test-cloud",
+						CloudRegion:        "test-cloud-region",
+						CloudCredentialTag: "cloudcred-test-cloud_alice@canonical.com_cred-1",
+						OwnerTag:           "user-alice@canonical.com",
+						Life:               "alive",
+						Status: params.EntityStatus{
+							Status: "unavailable",
+						},
+						UserAccess: "admin",
+					},
+				},
+				{
+					Result: &params.ModelSummary{
+						Name:               "model-2",
+						UUID:               "00000002-0000-0000-0000-000000000002",
+						Type:               "",
+						ControllerUUID:     "00000001-0000-0000-0000-000000000001",
+						IsController:       false,
+						ProviderType:       "test-provider",
+						DefaultSeries:      "",
+						CloudTag:           "cloud-test-cloud",
+						CloudRegion:        "test-cloud-region",
+						CloudCredentialTag: "cloudcred-test-cloud_alice@canonical.com_cred-1",
+						OwnerTag:           "user-alice@canonical.com",
+						Life:               "alive",
+						Status: params.EntityStatus{
+							Status: "unavailable",
+						},
+						UserAccess: "admin",
+					},
+				},
+			},
+			expectedSummariesSize: 2,
+		},
+	}
+	for _, t := range tests {
+		c.Run(t.description, func(c *qt.C) {
+			j.Dialer = &jimmtest.Dialer{
+				API: &jimmtest.API{
+					ListModelSummaries_: func(ctx context.Context, msr jujuparams.ModelSummariesRequest) (jujuparams.ModelSummaryResults, error) {
+						return jujuparams.ModelSummaryResults{Results: t.controllerAPISummaries}, nil
+					},
+				},
+			}
+			summaries, err := j.ModelSummaries(ctx, alice, "")
+			c.Check(err, qt.IsNil)
+			c.Check(summaries.Results, qt.HasLen, t.expectedSummariesSize)
+			c.Check(summaries.Results, qt.DeepEquals, t.expectedSummaries)
+		})
+	}
 }
 
 const grantModelAccessTestEnv = `clouds:
