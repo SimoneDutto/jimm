@@ -697,6 +697,7 @@ func TestImportModel(t *testing.T) {
 			CloudCredential: dbmodel.CloudCredential{
 				Name: "test-credential",
 			},
+			Life: state.Alive.String(),
 		},
 	}, {
 		about:          "new model owner is local user",
