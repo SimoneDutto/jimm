@@ -1178,22 +1178,13 @@ controllers:
   region: test-cloud-region
 models:
 - name: model-1
-  type: iaas
   uuid: 00000002-0000-0000-0000-000000000001
   controller: controller-1
-  default-series: warty
   cloud: test-cloud
   region: test-cloud-region
   cloud-credential: cred-1
   owner: alice@canonical.com
   life: alive
-  status:
-    status: available
-    info: "OK!"
-    since: 2020-02-20T20:02:20Z
-  sla:
-    level: unsupported
-  agent-version: 1.2.3
 `
 
 func TestGetModel(t *testing.T) {
@@ -1245,22 +1236,13 @@ controllers:
   region: test-cloud-region
 models:
 - name: model-1
-  type: iaas
   uuid: 00000002-0000-0000-0000-000000000001
   controller: controller-1
-  default-series: warty
   cloud: test-cloud
   region: test-cloud-region
   cloud-credential: cred-1
   owner: alice@canonical.com
   life: alive
-  status:
-    status: available
-    info: "OK!"
-    since: 2020-02-20T20:02:20Z
-  sla:
-    level: unsupported
-  agent-version: 1.2.3
   users:
   - user: alice@canonical.com
     access: admin
@@ -1505,10 +1487,8 @@ controllers:
   region: test-cloud-region
 models:
 - name: model-1
-  type: iaas
   uuid: 00000002-0000-0000-0000-000000000001
   controller: controller-1
-  default-series: warty
   cloud: test-cloud
   region: test-cloud-region
   cloud-credential: cred-1
@@ -1643,44 +1623,26 @@ controllers:
   region: test-cloud-region
 models:
 - name: model-1
-  type: iaas
   uuid: 00000002-0000-0000-0000-000000000001
   controller: controller-1
-  default-series: warty
   cloud: test-cloud
   region: test-cloud-region
   cloud-credential: cred-1
   owner: alice@canonical.com
   life: alive
-  status:
-    status: available
-    info: "OK!"
-    since: 2020-02-20T20:02:20Z
   users:
   - user: alice@canonical.com
     access: admin
   - user: bob@canonical.com
     access: admin
-  sla:
-    level: unsupported
-  agent-version: 1.2.3
-  cores: 3
-  machines: 2
-  units: 4
 - name: model-2
-  type: iaas
   uuid: 00000002-0000-0000-0000-000000000002
   controller: controller-1
-  default-series: warty
   cloud: test-cloud
   region: test-cloud-region
   cloud-credential: cred-1
   owner: alice@canonical.com
   life: alive
-  status:
-    status: available
-    info: "OK!"
-    since: 2020-02-20T20:02:20Z
   users:
   - user: alice@canonical.com
     access: admin
@@ -1688,53 +1650,30 @@ models:
     access: write
   sla:
     level: unsupported
-  agent-version: 1.2.3
-  cores: 3
-  machines: 2
 - name: model-3
-  type: iaas
   uuid: 00000002-0000-0000-0000-000000000003
   controller: controller-1
-  default-series: warty
   cloud: test-cloud
   region: test-cloud-region
   cloud-credential: cred-1
   owner: alice@canonical.com
   life: alive
-  status:
-    status: available
-    info: "OK!"
-    since: 2020-02-20T20:02:20Z
   users:
   - user: alice@canonical.com
     access: admin
-  sla:
-    level: unsupported
-  agent-version: 1.2.3
-  cores: 3
-  machines: 2
 - name: model-4
-  type: iaas
   uuid: 00000002-0000-0000-0000-000000000004
   controller: controller-1
-  default-series: warty
   cloud: test-cloud
   region: test-cloud-region
   cloud-credential: cred-1
   owner: alice@canonical.com
   life: alive
-  status:
-    status: available
-    info: "OK!"
-    since: 2020-02-20T20:02:20Z
   users:
   - user: alice@canonical.com
     access: admin
   - user: bob@canonical.com
     access: read
-  sla:
-    level: unsupported
-  agent-version: 1.2.3
 users:
 - username: alice@canonical.com
   controller-access: superuser
@@ -1865,6 +1804,41 @@ func TestForEachModel(t *testing.T) {
 		"00000002-0000-0000-0000-000000000003",
 		"00000002-0000-0000-0000-000000000004",
 	})
+}
+func TestModelSummaries(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	client, _, _, err := jimmtest.SetupTestOFGAClient(c.Name())
+	c.Assert(err, qt.IsNil)
+
+	j := &jimm.JIMM{
+		UUID:          uuid.NewString(),
+		OpenFGAClient: client,
+		Database: db.Database{
+			DB: jimmtest.PostgresDB(c, nil),
+		},
+		Dialer: &jimmtest.Dialer{
+			API: &jimmtest.API{
+				// we use the usertag to simulate a multi-controller scenario in the unit-test
+				ListModelSummaries_: func(ctx context.Context, msr jujuparams.ModelSummariesRequest) (jujuparams.ModelSummaryResults, error) {
+					return jujuparams.ModelSummaryResults{}, nil
+				},
+			},
+		},
+	}
+	err = j.Database.Migrate(ctx, false)
+	c.Assert(err, qt.IsNil)
+
+	env := jimmtest.ParseEnvironment(c, forEachModelTestEnv)
+	env.PopulateDBAndPermissions(c, j.ResourceTag(), j.Database, client)
+
+	dbUser := env.User("alice@canonical.com").DBObject(c, j.Database)
+	alice := openfga.NewUser(&dbUser, client)
+
+	summaries, err := j.ModelSummaries(ctx, alice, "")
+	c.Check(err, qt.IsNil)
+	c.Check(summaries.Results, qt.HasLen, 4)
 }
 
 const grantModelAccessTestEnv = `clouds:

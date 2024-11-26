@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	jujupermission "github.com/juju/juju/core/permission"
@@ -748,49 +749,88 @@ func (j *JIMM) ModelInfo(ctx context.Context, user *openfga.User, mt names.Model
 	return j.mergeModelInfo(ctx, user, mi, m)
 }
 
+type modelSummariesSafeMap struct {
+	mu             sync.Mutex
+	modelSummaries map[string]jujuparams.ModelSummaryResult
+}
+
+func (m *modelSummariesSafeMap) addModelSummary(summary jujuparams.ModelSummaryResult) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.modelSummaries == nil {
+		m.modelSummaries = make(map[string]jujuparams.ModelSummaryResult)
+	}
+	m.modelSummaries[summary.Result.UUID] = summary
+}
+
+// ModelSummaries returns the list of modelsummary the user has access to.
+// It queries the controllers and then merge the info from the JIMM db.
 func (j *JIMM) ModelSummaries(ctx context.Context, user *openfga.User, maskingControllerUUID string) (jujuparams.ModelSummaryResults, error) {
 	const op = errors.Op("jimm.ModelSummaries")
 
-	controllerSummaryMap := make(map[uint]bool, 0)
-	modelSummariesMap := make(map[string]jujuparams.ModelSummaryResult, 0)
+	modelSummariesSafeMap := modelSummariesSafeMap{}
 	modelSummaryResults := []jujuparams.ModelSummaryResult{}
 
+	var models []struct {
+		model      *dbmodel.Model
+		userAccess jujuparams.UserAccessPermission
+	}
+	// we collect models belonging to the user.
 	err := j.ForEachUserModel(ctx, user, func(m *dbmodel.Model, uap jujuparams.UserAccessPermission) error {
-		// if controllers has not been queried yet, do it for model summaries.
-		if !controllerSummaryMap[m.ControllerID] {
-			api, err := j.dial(ctx, &m.Controller, names.ModelTag{})
-			if err != nil {
-				return errors.E(op, err)
-			}
-			defer api.Close()
-			results, err := api.ListModelSummaries(ctx, jujuparams.ModelSummariesRequest{All: true})
-			if err != nil {
-				return errors.E(op, err)
-			}
-			for _, res := range results.Results {
-				modelSummariesMap[res.Result.UUID] = res
-			}
-		}
-		modelSummaryFromController, ok := modelSummariesMap[m.UUID.String]
-		modelSummaryResult := m.ToJujuModelSummary(modelSummaryFromController.Result, maskingControllerUUID, uap)
-		if modelSummaryFromController.Error == nil {
-			modelSummaryResults = append(modelSummaryResults, jujuparams.ModelSummaryResult{
-				Result: &modelSummaryResult,
-				Error:  modelSummaryFromController.Error,
-			})
-			return nil
-		}
-		if !ok {
-			// handle this case (how a model can be in JIMM but missing in controllers?)
-			return nil
-		}
-		modelSummaryResults = append(modelSummaryResults, jujuparams.ModelSummaryResult{
-			Result: &modelSummaryResult,
-		})
+		models = append(models, struct {
+			model      *dbmodel.Model
+			userAccess jujuparams.UserAccessPermission
+		}{model: m, userAccess: uap})
 		return nil
 	})
 	if err != nil {
 		return jujuparams.ModelSummaryResults{}, errors.E(op, err)
+	}
+
+	// we extract the unique controllers for which the model is
+	var uniqueControllers []dbmodel.Controller
+	uniqueControllerMap := make(map[string]struct{}, 0)
+	for _, m := range models {
+		if _, ok := uniqueControllerMap[m.model.Controller.UUID]; !ok {
+			uniqueControllers = append(uniqueControllers, m.model.Controller)
+			uniqueControllerMap[m.model.Controller.UUID] = struct{}{}
+		}
+	}
+
+	// we query the model summaries for each controller
+	err = j.forEachController(ctx, uniqueControllers, func(c *dbmodel.Controller, a API) error {
+		results, err := a.ListModelSummaries(ctx, jujuparams.ModelSummariesRequest{All: true})
+		if err != nil {
+			return err
+		}
+		for _, res := range results.Results {
+			modelSummariesSafeMap.addModelSummary(res)
+		}
+		return nil
+	})
+	if err != nil {
+		// we log the error and continue, because even if one controller is not reachable we are still able to fill the response.
+		zapctx.Error(ctx, "Error querying the controllers for model summaries", zap.Error(err))
+	}
+
+	// we map models to modelsummaries
+	for _, m := range models {
+		modelSummaryFromController, ok := modelSummariesSafeMap.modelSummaries[m.model.UUID.String]
+		modelSummaryResult := m.model.MergeModelSummaryFromController(modelSummaryFromController.Result, maskingControllerUUID, m.userAccess)
+		if modelSummaryFromController.Error != nil {
+			modelSummaryResults = append(modelSummaryResults, jujuparams.ModelSummaryResult{
+				Result: &modelSummaryResult,
+				Error:  modelSummaryFromController.Error,
+			})
+			continue
+		}
+		if !ok {
+			// if model was not found in any controller we mark it as anavailable
+			modelSummaryResult.Status.Status = "unavailable"
+		}
+		modelSummaryResults = append(modelSummaryResults, jujuparams.ModelSummaryResult{
+			Result: &modelSummaryResult,
+		})
 	}
 	return jujuparams.ModelSummaryResults{
 		Results: modelSummaryResults,
