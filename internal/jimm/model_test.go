@@ -1769,7 +1769,7 @@ func TestForEachUserModel(t *testing.T) {
 
 	var res []jujuparams.ModelSummaryResult
 	err = j.ForEachUserModel(ctx, user, func(m *dbmodel.Model, access jujuparams.UserAccessPermission) error {
-		s := m.ToJujuModelSummary(nil, "00000001-0000-0000-0000-000000000001", access)
+		s := m.MergeModelSummaryFromController(nil, "", access)
 		res = append(res, jujuparams.ModelSummaryResult{Result: &s})
 		return nil
 	})

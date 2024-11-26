@@ -236,7 +236,7 @@ func TestToJujuModelSummary(t *testing.T) {
 			Level: "unsupported",
 		},
 	}
-	ms := m.ToJujuModelSummary(&modelSummaryFromController, "00000000-0000-0000-0000-0000-0000000000001", "writer")
+	ms := m.MergeModelSummaryFromController(&modelSummaryFromController, "", "writer")
 	c.Check(ms, qt.DeepEquals, jujuparams.ModelSummary{
 		Name:               "test-model",
 		Type:               "iaas",

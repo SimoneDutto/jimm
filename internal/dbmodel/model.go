@@ -130,12 +130,11 @@ func (m Model) ToJujuModel() jujuparams.Model {
 	return jm
 }
 
-// ToJujuModelSummary converts a model to a jujuparams.ModelSummary. The
-// model must have its CloudRegion, CloudCredential, Controller, Machines,
-// and Owner, associations fetched. The ModelSummary will not include the
-// UserAccess or UserLastConnection fields, it is the caller's
-// responsibility to complete these fields appropriately.
-func (m Model) ToJujuModelSummary(modelSummaryFromController *jujuparams.ModelSummary, maskingControllerUUID string, access jujuparams.UserAccessPermission) jujuparams.ModelSummary {
+// MergeModelSummaryFromController converts a model to a jujuparams.ModelSummary.
+// It uses the info from the controller and JIMM's db to fill the jujuparams.ModelSummary.
+// maskingControllerUUID is used to mask the controllerUUID with the JIMM's one.
+// access is the user access level got from JIMM.
+func (m Model) MergeModelSummaryFromController(modelSummaryFromController *jujuparams.ModelSummary, maskingControllerUUID string, access jujuparams.UserAccessPermission) jujuparams.ModelSummary {
 	if modelSummaryFromController == nil {
 		modelSummaryFromController = &jujuparams.ModelSummary{}
 	}
@@ -143,6 +142,8 @@ func (m Model) ToJujuModelSummary(modelSummaryFromController *jujuparams.ModelSu
 	modelSummaryFromController.UUID = m.UUID.String
 	if maskingControllerUUID != "" {
 		modelSummaryFromController.ControllerUUID = maskingControllerUUID
+	} else {
+		modelSummaryFromController.ControllerUUID = m.Controller.UUID
 	}
 	modelSummaryFromController.ProviderType = m.CloudRegion.Cloud.Type
 	modelSummaryFromController.CloudTag = m.CloudRegion.Cloud.Tag().String()
