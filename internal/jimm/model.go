@@ -775,26 +775,22 @@ func (j *JIMM) ModelSummaries(ctx context.Context, user *openfga.User, maskingCo
 		model      *dbmodel.Model
 		userAccess jujuparams.UserAccessPermission
 	}
-	// we collect models belonging to the user.
+	// we collect models belonging to the user and we extract the unique controllers.
+	var uniqueControllers []dbmodel.Controller
+	uniqueControllerMap := make(map[string]struct{}, 0)
 	err := j.ForEachUserModel(ctx, user, func(m *dbmodel.Model, uap jujuparams.UserAccessPermission) error {
 		models = append(models, struct {
 			model      *dbmodel.Model
 			userAccess jujuparams.UserAccessPermission
 		}{model: m, userAccess: uap})
+		if _, ok := uniqueControllerMap[m.Controller.UUID]; !ok {
+			uniqueControllers = append(uniqueControllers, m.Controller)
+			uniqueControllerMap[m.Controller.UUID] = struct{}{}
+		}
 		return nil
 	})
 	if err != nil {
 		return jujuparams.ModelSummaryResults{}, errors.E(op, err)
-	}
-
-	// we extract the unique controllers for which the model is
-	var uniqueControllers []dbmodel.Controller
-	uniqueControllerMap := make(map[string]struct{}, 0)
-	for _, m := range models {
-		if _, ok := uniqueControllerMap[m.model.Controller.UUID]; !ok {
-			uniqueControllers = append(uniqueControllers, m.model.Controller)
-			uniqueControllerMap[m.model.Controller.UUID] = struct{}{}
-		}
 	}
 
 	// we query the model summaries for each controller
