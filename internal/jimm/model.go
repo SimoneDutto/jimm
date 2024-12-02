@@ -749,6 +749,8 @@ func (j *JIMM) ModelInfo(ctx context.Context, user *openfga.User, mt names.Model
 	return j.mergeModelInfo(ctx, user, mi, m)
 }
 
+// modelSummariesMap is a safe map to add records concurrently because the access is guarded by a Mutex.
+// The read operations are not guarded because only inserts are done concurrently.
 type modelSummariesMap struct {
 	mu             sync.Mutex
 	modelSummaries map[string]jujuparams.ModelSummaryResult
