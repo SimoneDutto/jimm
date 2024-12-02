@@ -749,12 +749,12 @@ func (j *JIMM) ModelInfo(ctx context.Context, user *openfga.User, mt names.Model
 	return j.mergeModelInfo(ctx, user, mi, m)
 }
 
-type modelSummariesSafeMap struct {
+type modelSummariesMap struct {
 	mu             sync.Mutex
 	modelSummaries map[string]jujuparams.ModelSummaryResult
 }
 
-func (m *modelSummariesSafeMap) addModelSummary(summary jujuparams.ModelSummaryResult) {
+func (m *modelSummariesMap) addModelSummary(summary jujuparams.ModelSummaryResult) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.modelSummaries == nil {
@@ -768,7 +768,7 @@ func (m *modelSummariesSafeMap) addModelSummary(summary jujuparams.ModelSummaryR
 func (j *JIMM) ModelSummaries(ctx context.Context, user *openfga.User, maskingControllerUUID string) (jujuparams.ModelSummaryResults, error) {
 	const op = errors.Op("jimm.ModelSummaries")
 
-	modelSummariesSafeMap := modelSummariesSafeMap{}
+	modelSummariesSafeMap := modelSummariesMap{}
 	modelSummaryResults := []jujuparams.ModelSummaryResult{}
 
 	var models []struct {
