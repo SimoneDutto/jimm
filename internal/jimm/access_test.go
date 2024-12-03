@@ -842,13 +842,6 @@ func createTestControllerEnvironment(ctx context.Context, c *qt.C, db db.Databas
 		CloudRegionID:     cloud.Regions[0].ID,
 		CloudCredentialID: cred.ID,
 		Life:              state.Alive.String(),
-		Status: dbmodel.Status{
-			Status: "available",
-			Since: sql.NullTime{
-				Time:  time.Now().UTC().Truncate(time.Millisecond),
-				Valid: true,
-			},
-		},
 	}
 
 	err = db.AddModel(ctx, &model)
