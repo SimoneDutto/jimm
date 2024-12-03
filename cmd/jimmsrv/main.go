@@ -189,9 +189,6 @@ func start(ctx context.Context, s *service.Service) error {
 	}
 
 	isLeader := os.Getenv("JIMM_IS_LEADER") != ""
-	if isLeader {
-		s.Go(func() error { return jimmsvc.WatchControllers(ctx) }) // Deletes dead/dying models, updates model config.
-	}
 	s.Go(func() error { return jimmsvc.WatchModelSummaries(ctx) })
 
 	if isLeader {
@@ -205,6 +202,9 @@ func start(ctx context.Context, s *service.Service) error {
 		})
 		s.Go(func() error {
 			return jimmsvc.OpenFGACleanup(ctx, time.NewTicker(6*time.Hour).C)
+		})
+		s.Go(func() error {
+			return jimmsvc.WatchModelsDying(ctx, time.NewTicker(time.Minute).C)
 		})
 	}
 
