@@ -28,7 +28,7 @@ func (j *JIMM) WatchModelsDying(ctx context.Context) error {
 			mt := m.ResourceTag()
 			// if the model is dying and not found by querying the controller we can assume it is dead.
 			// And safely delete the reference from our db.
-			j.doModelAdmin(ctx, adminUser, mt, func(m *dbmodel.Model, api API) error {
+			err := j.doModelAdmin(ctx, adminUser, mt, func(m *dbmodel.Model, api API) error {
 				if err := api.ModelInfo(ctx, &jujuparams.ModelInfo{}); err != nil {
 					// Some versions of juju return unauthorized for models that cannot be found.
 					if errors.ErrorCode(err) == errors.CodeNotFound || errors.ErrorCode(err) == errors.CodeUnauthorized {
@@ -43,8 +43,10 @@ func (j *JIMM) WatchModelsDying(ctx context.Context) error {
 				}
 				return nil
 			})
+			if err != nil {
+				return err
+			}
 		}
-
 		return nil
 	})
 	if err != nil {

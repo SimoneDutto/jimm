@@ -119,20 +119,6 @@ func (w *Watcher) dialController(ctx context.Context, ctl *dbmodel.Controller) (
 	return api, nil
 }
 
-// A modelState holds the in-memory state of a model for the watcher.
-type modelState struct {
-	// id is the database id of the model.
-	id      uint
-	changed bool
-
-	// machines maps the Id of all the machines that have been seen to
-	// the number of cores reported.
-	machines map[string]int64
-
-	// units stores the ids of all units that have been seen.
-	units map[string]bool
-}
-
 // watchAllModelSummaries connects to the given controller and watches the
 // summary updates.
 func (w *Watcher) watchAllModelSummaries(ctx context.Context, ctl *dbmodel.Controller) error {
