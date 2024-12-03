@@ -266,7 +266,7 @@ func (s *Service) WatchModelsDying(ctx context.Context, trigger <-chan time.Time
 	for {
 		select {
 		case <-trigger:
-			err := s.jimm.WatchModelsDying(ctx)
+			err := s.jimm.PollModelsDying(ctx)
 			if err != nil {
 				zapctx.Error(ctx, "openfga cleanup", zap.Error(err))
 				continue

@@ -13,7 +13,7 @@ import (
 	"github.com/canonical/jimm/v3/internal/errors"
 )
 
-func (j *JIMM) WatchModelsDying(ctx context.Context) error {
+func (j *JIMM) PollModelsDying(ctx context.Context) error {
 	const op = errors.Op("jimm.WatchModelsDying")
 
 	// Ensure that if the watcher stops because of a database error all
@@ -29,7 +29,7 @@ func (j *JIMM) WatchModelsDying(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			if err := api.ModelInfo(ctx, &jujuparams.ModelInfo{}); err != nil {
+			if err := api.ModelInfo(ctx, &jujuparams.ModelInfo{UUID: m.UUID.String}); err != nil {
 				// Some versions of juju return unauthorized for models that cannot be found.
 				if errors.ErrorCode(err) == errors.CodeNotFound || errors.ErrorCode(err) == errors.CodeUnauthorized {
 					if err := j.DB().DeleteModel(ctx, m); err != nil {
