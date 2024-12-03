@@ -21,30 +21,25 @@ func (j *JIMM) WatchModelsDying(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	adminUser := j.everyoneUser()
-	adminUser.JimmAdmin = true
-	err := j.ForEachModel(ctx, adminUser, func(m *dbmodel.Model, _ jujuparams.UserAccessPermission) error {
+	err := j.DB().ForEachModel(ctx, func(m *dbmodel.Model) error {
 		if m.Life == state.Dying.String() {
-			mt := m.ResourceTag()
 			// if the model is dying and not found by querying the controller we can assume it is dead.
 			// And safely delete the reference from our db.
-			err := j.doModelAdmin(ctx, adminUser, mt, func(m *dbmodel.Model, api API) error {
-				if err := api.ModelInfo(ctx, &jujuparams.ModelInfo{}); err != nil {
-					// Some versions of juju return unauthorized for models that cannot be found.
-					if errors.ErrorCode(err) == errors.CodeNotFound || errors.ErrorCode(err) == errors.CodeUnauthorized {
-						if err := j.DB().DeleteModel(ctx, m); err != nil {
-							return errors.E(op, err)
-						} else {
-							return nil
-						}
-					} else {
-						return errors.E(op, err)
-					}
-				}
-				return nil
-			})
+			api, err := j.dialModel(ctx, &m.Controller, m.ResourceTag())
 			if err != nil {
 				return err
+			}
+			if err := api.ModelInfo(ctx, &jujuparams.ModelInfo{}); err != nil {
+				// Some versions of juju return unauthorized for models that cannot be found.
+				if errors.ErrorCode(err) == errors.CodeNotFound || errors.ErrorCode(err) == errors.CodeUnauthorized {
+					if err := j.DB().DeleteModel(ctx, m); err != nil {
+						return errors.E(op, err)
+					} else {
+						return nil
+					}
+				} else {
+					return errors.E(op, err)
+				}
 			}
 		}
 		return nil
