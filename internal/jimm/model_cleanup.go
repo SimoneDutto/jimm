@@ -18,7 +18,7 @@ import (
 // CleanupModelsDying loops over dying models, contacting the respective controller.
 // And deleting the model from our database if the error is `NotFound` which means the model was successfully deleted.
 func (j *JIMM) CleanupModelsDying(ctx context.Context) error {
-	const op = errors.Op("jimm.WatchModelsDying")
+	const op = errors.Op("jimm.CleanupModelsDying")
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
