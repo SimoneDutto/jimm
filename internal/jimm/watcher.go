@@ -159,6 +159,18 @@ func (w *Watcher) watchAllModelSummaries(ctx context.Context, ctl *dbmodel.Contr
 		}
 		// Sanitize the model abstracts.
 		for _, summary := range modelSummaries {
+			m := dbmodel.Model{
+				UUID: sql.NullString{
+					String: summary.UUID,
+					Valid:  true,
+				},
+				ControllerID: ctl.ID,
+			}
+			err := w.Database.GetModel(ctx, &m)
+			if err != nil {
+				// skip summaries for model not present in JIMM's db
+				continue
+			}
 			admins := make([]string, 0, len(summary.Admins))
 			for _, admin := range summary.Admins {
 				if names.NewUserTag(admin).IsLocal() {

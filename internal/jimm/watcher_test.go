@@ -215,7 +215,6 @@ func TestModelSummaryWatcher(t *testing.T) {
 }
 
 func TestWatcherSetsControllerUnavailable(t *testing.T) {
-	t.Skip()
 	c := qt.New(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -263,7 +262,6 @@ func TestWatcherSetsControllerUnavailable(t *testing.T) {
 }
 
 func TestWatcherClearsControllerUnavailable(t *testing.T) {
-	t.Skip()
 	c := qt.New(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -292,6 +290,7 @@ func TestWatcherClearsControllerUnavailable(t *testing.T) {
 				WatchAllModelSummaries_: func(ctx context.Context) (string, error) {
 					return "1234", nil
 				},
+				SupportsModelSummaryWatcher_: true,
 			},
 		},
 		Pubsub: &testPublisher{},
