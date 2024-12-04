@@ -1,4 +1,5 @@
 // Copyright 2024 Canonical.
+
 package jimm
 
 import (
@@ -14,6 +15,8 @@ import (
 	"github.com/canonical/jimm/v3/internal/errors"
 )
 
+// CleanupModelsDying loops over dying models, contacting the respective controller.
+// And deleting the model from our database if the error is `NotFound` which means the model was successfully deleted.
 func (j *JIMM) CleanupModelsDying(ctx context.Context) error {
 	const op = errors.Op("jimm.WatchModelsDying")
 
