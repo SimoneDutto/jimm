@@ -262,11 +262,11 @@ func (s *Service) OpenFGACleanup(ctx context.Context, trigger <-chan time.Time) 
 }
 
 // OpenFGACleanup starts a goroutine that cleans up any orphaned tuples from OpenFGA.
-func (s *Service) WatchModelsDying(ctx context.Context, trigger <-chan time.Time) error {
+func (s *Service) CleanupModelsDying(ctx context.Context, trigger <-chan time.Time) error {
 	for {
 		select {
 		case <-trigger:
-			err := s.jimm.PollModelsDying(ctx)
+			err := s.jimm.CleanupModelsDying(ctx)
 			if err != nil {
 				zapctx.Error(ctx, "openfga cleanup", zap.Error(err))
 				continue

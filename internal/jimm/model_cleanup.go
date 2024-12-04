@@ -3,6 +3,7 @@ package jimm
 
 import (
 	"context"
+	"fmt"
 
 	jujuparams "github.com/juju/juju/rpc/params"
 	"github.com/juju/juju/state"
@@ -13,7 +14,7 @@ import (
 	"github.com/canonical/jimm/v3/internal/errors"
 )
 
-func (j *JIMM) PollModelsDying(ctx context.Context) error {
+func (j *JIMM) CleanupModelsDying(ctx context.Context) error {
 	const op = errors.Op("jimm.WatchModelsDying")
 
 	// Ensure that if the watcher stops because of a database error all
@@ -27,18 +28,20 @@ func (j *JIMM) PollModelsDying(ctx context.Context) error {
 			// And safely delete the reference from our db.
 			api, err := j.dialModel(ctx, &m.Controller, m.ResourceTag())
 			if err != nil {
-				return err
+				zapctx.Error(ctx, fmt.Sprintf("Cannot dial model %s: %s\n", m.UUID.String, err))
+				return nil
 			}
 			if err := api.ModelInfo(ctx, &jujuparams.ModelInfo{UUID: m.UUID.String}); err != nil {
 				// Some versions of juju return unauthorized for models that cannot be found.
 				if errors.ErrorCode(err) == errors.CodeNotFound || errors.ErrorCode(err) == errors.CodeUnauthorized {
 					if err := j.DB().DeleteModel(ctx, m); err != nil {
-						return errors.E(op, err)
+						zapctx.Error(ctx, fmt.Sprintf("Cannot delete model %s: %s\n", m.UUID.String, err))
 					} else {
 						return nil
 					}
 				} else {
-					return errors.E(op, err)
+					zapctx.Error(ctx, fmt.Sprintf("Cannot get ModelInfo for model %s: %s\n", m.UUID.String, err))
+					return nil
 				}
 			}
 		}
