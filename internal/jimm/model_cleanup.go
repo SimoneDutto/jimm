@@ -17,8 +17,6 @@ import (
 func (j *JIMM) CleanupModelsDying(ctx context.Context) error {
 	const op = errors.Op("jimm.WatchModelsDying")
 
-	// Ensure that if the watcher stops because of a database error all
-	// the controller connections get closed.
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
