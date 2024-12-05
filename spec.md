@@ -162,7 +162,6 @@ not implemented.
 - input: 
 - jimm's representation: none
 - output: `jujuparams.ModelStatusResults`
-- need for jimm db: no, but we are not overriding the owner identity.
 
 # `MongoVersion`
 not supported
