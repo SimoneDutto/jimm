@@ -127,6 +127,54 @@ To analyse that we need to understand for each `dbmodel` where the field is writ
 > Notes
 > Group is the core dbmodel for JIMM's permission model.
 
+# Controller
+Analyse model manager facade methods to determine:
+- juju input
+- jimm's representation
+- juju output
+- potential juju api to get info instead of storing.
+- need for jimm db
+
+## `ConfigSet, ConfigSet`
+we manipulate the Controller Config for JIMM. 
+We don't use the config anywhere else, we don't use this field in JIMM. But maybe the client needs it for its thing.
+
+# `AllModels`
+- input: 
+- jimm's representation: no
+- output: `jujuparams.UserModelList`
+- need for jimm db: no, we are not overriding the owner identity.
+
+# `ControllerVersion`
+we get the minimun value for all controllers.
+We potentially can get this from the controllers api, instead of using jimm's db.
+
+# `GetControllerAccess`
+JIMM is needed because we are the one answering the access query.
+
+# `IdentityProviderURL`
+return always an empty string.
+
+# `ModelConfig`
+not implemented.
+
+# `ModelStatus`
+- input: 
+- jimm's representation: none
+- output: `jujuparams.ModelStatusResults`
+- need for jimm db: no, but we are not overriding the owner identity.
+
+# `MongoVersion`
+not supported
+
+# `WatchModelSummaries`
+create a watcher for all models an user has access to.
+
+# `WatchAllModelSummaries`
+same as before but you need to be a jimm admin.
+
+# `InitiateMigration`
+used.
 
 
 # Model manager
