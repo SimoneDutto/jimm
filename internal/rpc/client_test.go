@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -507,6 +508,27 @@ func newServer(f func(*websocket.Conn) error) *server {
 	return &srv
 }
 
+func newIPv6Server(f func(*websocket.Conn) error) *server {
+	var srv server
+	l, _ := net.Listen("tcp", "[::1]:0")
+	server := httptest.Server{
+		Listener: l,
+		Config:   &http.Server{Handler: handleWS(f)}, //nolint:gosec
+	}
+	server.StartTLS()
+	srv.Server = &server
+	srv.URL = "ws" + strings.TrimPrefix(srv.Server.URL, "http")
+	cp := x509.NewCertPool()
+	cp.AddCert(srv.Certificate())
+	srv.dialer = &rpc.Dialer{
+		TLSConfig: &tls.Config{
+			RootCAs:    cp,
+			MinVersion: tls.VersionTLS12,
+		},
+	}
+	return &srv
+}
+
 func handleWS(f func(*websocket.Conn) error) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		var u websocket.Upgrader
@@ -518,12 +540,12 @@ func handleWS(f func(*websocket.Conn) error) http.Handler {
 		defer c.Close()
 		err = f(c)
 		var cm []byte
+		closeError, isCloseError := err.(*websocket.CloseError)
 		switch {
 		case err == nil:
 			cm = websocket.FormatCloseMessage(websocket.CloseNormalClosure, "")
-		case websocket.IsCloseError(err):
-			ce := err.(*websocket.CloseError)
-			cm = websocket.FormatCloseMessage(ce.Code, ce.Text)
+		case isCloseError:
+			cm = websocket.FormatCloseMessage(closeError.Code, closeError.Text)
 		default:
 			cm = websocket.FormatCloseMessage(websocket.CloseInternalServerErr, err.Error())
 		}

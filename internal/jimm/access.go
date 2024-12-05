@@ -450,6 +450,15 @@ func (j *JIMM) ToJAASTag(ctx context.Context, tag *ofganames.Tag, resolveUUIDs b
 			return "", errors.E(err, fmt.Sprintf("failed to fetch group information: %s", group.UUID))
 		}
 		return tagToString(jimmnames.GroupTagKind, group.Name), nil
+	case jimmnames.RoleTagKind:
+		role := dbmodel.RoleEntry{
+			UUID: tag.ID,
+		}
+		err := j.Database.GetRole(ctx, &role)
+		if err != nil {
+			return "", errors.E(err, fmt.Sprintf("failed to fetch role information: %s", role.UUID))
+		}
+		return tagToString(jimmnames.RoleTagKind, role.Name), nil
 	case names.CloudTagKind:
 		cloud := dbmodel.Cloud{
 			Name: tag.ID,
@@ -527,6 +536,25 @@ func (t *tagResolver) groupTag(ctx context.Context, db *db.Database) (*ofga.Enti
 	err := db.GetGroup(ctx, &entry)
 	if err != nil {
 		return nil, errors.E(fmt.Sprintf("group %s not found", t.trailer))
+	}
+
+	return ofganames.ConvertTagWithRelation(entry.ResourceTag(), t.relation), nil
+}
+
+func (t *tagResolver) roleTag(ctx context.Context, db *db.Database) (*ofga.Entity, error) {
+	zapctx.Debug(
+		ctx,
+		"Resolving JIMM tags to Juju tags for tag kind: role",
+		zap.String("role-name", t.trailer),
+	)
+	if t.resourceUUID != "" {
+		return ofganames.ConvertTagWithRelation(jimmnames.NewRoleTag(t.resourceUUID), t.relation), nil
+	}
+	entry := dbmodel.RoleEntry{Name: t.trailer}
+
+	err := db.GetRole(ctx, &entry)
+	if err != nil {
+		return nil, errors.E(fmt.Sprintf("role %s not found", t.trailer))
 	}
 
 	return ofganames.ConvertTagWithRelation(entry.ResourceTag(), t.relation), nil
@@ -611,7 +639,7 @@ func (t *tagResolver) cloudTag(ctx context.Context, db *db.Database) (*ofga.Enti
 
 	err := db.GetCloud(ctx, &cloud)
 	if err != nil {
-		return nil, errors.E("application offer not found")
+		return nil, errors.E("cloud not found")
 	}
 
 	return ofganames.ConvertTagWithRelation(cloud.ResourceTag(), t.relation), nil
@@ -649,6 +677,8 @@ func resolveTag(jimmUUID string, db *db.Database, tag string) (*ofganames.Tag, e
 		return resolver.userTag(ctx)
 	case jimmnames.GroupTagKind:
 		return resolver.groupTag(ctx, db)
+	case jimmnames.RoleTagKind:
+		return resolver.roleTag(ctx, db)
 	case names.ControllerTagKind:
 		return resolver.controllerTag(ctx, jimmUUID, db)
 	case names.ModelTagKind:
@@ -755,9 +785,8 @@ func (j *JIMM) RenameGroup(ctx context.Context, user *openfga.User, oldName, new
 	if err != nil {
 		return errors.E(op, err)
 	}
-	group.Name = newName
 
-	if err := j.Database.UpdateGroup(ctx, group); err != nil {
+	if err := j.Database.UpdateGroupName(ctx, group.UUID, newName); err != nil {
 		return errors.E(op, err)
 	}
 	return nil
@@ -790,20 +819,76 @@ func (j *JIMM) RemoveGroup(ctx context.Context, user *openfga.User, name string)
 }
 
 // ListGroups returns a list of groups known to JIMM.
-func (j *JIMM) ListGroups(ctx context.Context, user *openfga.User, filter pagination.LimitOffsetPagination) ([]dbmodel.GroupEntry, error) {
+// `match` will filter the list fuzzy matching group's name or uuid.
+func (j *JIMM) ListGroups(ctx context.Context, user *openfga.User, pagination pagination.LimitOffsetPagination, match string) ([]dbmodel.GroupEntry, error) {
 	const op = errors.Op("jimm.ListGroups")
 
 	if !user.JimmAdmin {
 		return nil, errors.E(op, errors.CodeUnauthorized, "unauthorized")
 	}
 
-	var groups []dbmodel.GroupEntry
-	err := j.Database.ForEachGroup(ctx, filter.Limit(), filter.Offset(), func(ge *dbmodel.GroupEntry) error {
-		groups = append(groups, *ge)
-		return nil
-	})
+	groups, err := j.Database.ListGroups(ctx, pagination.Limit(), pagination.Offset(), match)
 	if err != nil {
 		return nil, errors.E(op, err)
 	}
 	return groups, nil
+}
+
+// OpenFGACleanup queries OpenFGA for all existing tuples, tries to resolve each tuple and removes those
+// that JIMM cannot resolved - orphaned tuples. JIMM not being able to resolve a tuple means that the
+// corresponding entity has been removed from JIMM's database.
+//
+// This approach to cleaning up tuples is intended to be temporary while we implement
+// a better approach to eventual consistency of JIMM's database objects and OpenFGA tuples.
+func (j *JIMM) OpenFGACleanup(ctx context.Context) error {
+	var (
+		continuationToken string
+		err               error
+		tuples            []ofga.Tuple
+	)
+	for {
+		tuples, continuationToken, err = j.OpenFGAClient.ReadRelatedObjects(ctx, openfga.Tuple{}, 20, continuationToken)
+		if err != nil {
+			zapctx.Error(ctx, "reading all tuples", zap.Error(err))
+			return err
+		}
+
+		orphanedTuples := j.orphanedTuples(ctx, tuples...)
+		if len(orphanedTuples) > 0 {
+			zapctx.Debug(ctx, "removing orphaned tuples", zap.Any("tuples", orphanedTuples))
+			err = j.OpenFGAClient.RemoveRelation(ctx, orphanedTuples...)
+			if err != nil {
+				zapctx.Warn(ctx, "failed to clean up orphaned tuples", zap.Error(err))
+			}
+		}
+		if continuationToken == "" {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+	}
+}
+
+func (j *JIMM) orphanedTuples(ctx context.Context, tuples ...openfga.Tuple) []openfga.Tuple {
+	orphanedTuples := []openfga.Tuple{}
+	for _, tuple := range tuples {
+		_, err := j.ToJAASTag(ctx, tuple.Object, true)
+		if err != nil {
+			if errors.ErrorCode(err) == errors.CodeNotFound {
+				orphanedTuples = append(orphanedTuples, tuple)
+				continue
+			}
+		}
+		_, err = j.ToJAASTag(ctx, tuple.Target, true)
+		if err != nil {
+			if errors.ErrorCode(err) == errors.CodeNotFound {
+				orphanedTuples = append(orphanedTuples, tuple)
+				continue
+			}
+		}
+	}
+	return orphanedTuples
 }

@@ -23,13 +23,13 @@ import (
 	"github.com/canonical/jimm/v3/internal/dbmodel"
 	"github.com/canonical/jimm/v3/internal/discharger"
 	"github.com/canonical/jimm/v3/internal/jimm"
+	"github.com/canonical/jimm/v3/internal/jimm/role"
 	"github.com/canonical/jimm/v3/internal/jimmhttp"
 	"github.com/canonical/jimm/v3/internal/jimmjwx"
 	"github.com/canonical/jimm/v3/internal/jujuclient"
 	"github.com/canonical/jimm/v3/internal/openfga"
 	ofganames "github.com/canonical/jimm/v3/internal/openfga/names"
 	"github.com/canonical/jimm/v3/internal/pubsub"
-	jimmnames "github.com/canonical/jimm/v3/pkg/names"
 )
 
 // ControllerUUID is the UUID of the JIMM controller used in tests.
@@ -74,7 +74,6 @@ func (s *JIMMSuite) SetUpTest(c *gc.C) {
 
 	pgdb, databaseName := PostgresDBWithDbName(GocheckTester{c}, nil)
 	s.databaseName = databaseName
-
 	// Setup OpenFGA.
 	s.JIMM = &jimm.JIMM{
 		Database: db.Database{
@@ -85,7 +84,9 @@ func (s *JIMMSuite) SetUpTest(c *gc.C) {
 		UUID:            ControllerUUID,
 		OpenFGAClient:   s.OFGAClient,
 	}
-
+	roleManager, err := role.NewRoleManager(&s.JIMM.Database, s.OFGAClient)
+	c.Assert(err, gc.IsNil)
+	s.JIMM.RoleManager = roleManager
 	ctx, cancel := context.WithCancel(context.Background())
 	s.cancel = cancel
 
@@ -267,11 +268,18 @@ func (s *JIMMSuite) AddModel(c *gc.C, owner names.UserTag, name string, cloud na
 	return names.NewModelTag(mi.UUID)
 }
 
-func (s *JIMMSuite) AddGroup(c *gc.C, groupName string) jimmnames.GroupTag {
+func (s *JIMMSuite) AddGroup(c *gc.C, groupName string) dbmodel.GroupEntry {
 	ctx := context.Background()
 	group, err := s.JIMM.AddGroup(ctx, s.AdminUser, groupName)
 	c.Assert(err, gc.Equals, nil)
-	return group.ResourceTag()
+	return *group
+}
+
+func (s *JIMMSuite) AddRole(c *gc.C, roleName string) dbmodel.RoleEntry {
+	ctx := context.Background()
+	role, err := s.JIMM.RoleManager.AddRole(ctx, s.AdminUser, roleName)
+	c.Assert(err, gc.Equals, nil)
+	return *role
 }
 
 // EnableDeviceFlow allows a test to use the device flow.

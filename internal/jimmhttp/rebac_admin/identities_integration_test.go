@@ -10,6 +10,7 @@ import (
 	"github.com/juju/names/v5"
 	gc "gopkg.in/check.v1"
 
+	"github.com/canonical/jimm/v3/internal/dbmodel"
 	"github.com/canonical/jimm/v3/internal/jimmhttp/rebac_admin"
 	"github.com/canonical/jimm/v3/internal/openfga"
 	ofganames "github.com/canonical/jimm/v3/internal/openfga/names"
@@ -24,6 +25,37 @@ type identitiesSuite struct {
 
 var _ = gc.Suite(&identitiesSuite{})
 
+func (s *identitiesSuite) TestIdentitiesList(c *gc.C) {
+	ctx := context.Background()
+	ctx = rebac_handlers.ContextWithIdentity(ctx, s.AdminUser)
+	identitySvc := rebac_admin.NewidentitiesService(s.JIMM)
+	for i := range 5 {
+		user := names.NewUserTag(fmt.Sprintf("test-user-match-%d@canonical.com", i))
+		s.AddUser(c, user.Id())
+	}
+	pageSize := 5
+	page := 0
+	params := &resources.GetIdentitiesParams{Size: &pageSize, Page: &page}
+	res, err := identitySvc.ListIdentities(ctx, params)
+	c.Assert(err, gc.IsNil)
+	c.Assert(res, gc.Not(gc.IsNil))
+	c.Assert(res.Meta.Size, gc.Equals, 5)
+
+	match := "test-user-match-1"
+	params.Filter = &match
+	res, err = identitySvc.ListIdentities(ctx, params)
+	c.Assert(err, gc.IsNil)
+	c.Assert(res, gc.Not(gc.IsNil))
+	c.Assert(len(res.Data), gc.Equals, 1)
+
+	match = "test-user"
+	params.Filter = &match
+	res, err = identitySvc.ListIdentities(ctx, params)
+	c.Assert(err, gc.IsNil)
+	c.Assert(res, gc.Not(gc.IsNil))
+	c.Assert(len(res.Data), gc.Equals, pageSize)
+}
+
 func (s *identitiesSuite) TestIdentityPatchGroups(c *gc.C) {
 	// initialization
 	ctx := context.Background()
@@ -31,11 +63,11 @@ func (s *identitiesSuite) TestIdentityPatchGroups(c *gc.C) {
 	identitySvc := rebac_admin.NewidentitiesService(s.JIMM)
 	groupName := "group-test1"
 	username := s.AdminUser.Name
-	groupTag := s.AddGroup(c, groupName)
+	group := s.AddGroup(c, groupName)
 
 	// test add identity group
 	changed, err := identitySvc.PatchIdentityGroups(ctx, username, []resources.IdentityGroupsPatchItem{{
-		Group: groupTag.String(),
+		Group: group.UUID,
 		Op:    resources.IdentityGroupsPatchItemOpAdd,
 	}})
 	c.Assert(err, gc.IsNil)
@@ -47,15 +79,15 @@ func (s *identitiesSuite) TestIdentityPatchGroups(c *gc.C) {
 	tuples, _, err := s.JIMM.ListRelationshipTuples(ctx, s.AdminUser, params.RelationshipTuple{
 		Object:       objUser.ResourceTag().String(),
 		Relation:     ofganames.MemberRelation.String(),
-		TargetObject: groupTag.String(),
+		TargetObject: group.ResourceTag().String(),
 	}, 10, "")
 	c.Assert(err, gc.IsNil)
 	c.Assert(len(tuples), gc.Equals, 1)
-	c.Assert(groupTag.Id(), gc.Equals, tuples[0].Target.ID)
+	c.Assert(group.UUID, gc.Equals, tuples[0].Target.ID)
 
 	// test user remove from group
 	changed, err = identitySvc.PatchIdentityGroups(ctx, username, []resources.IdentityGroupsPatchItem{{
-		Group: groupTag.String(),
+		Group: group.UUID,
 		Op:    resources.IdentityGroupsPatchItemOpRemove,
 	}})
 	c.Assert(err, gc.IsNil)
@@ -63,7 +95,7 @@ func (s *identitiesSuite) TestIdentityPatchGroups(c *gc.C) {
 	tuples, _, err = s.JIMM.ListRelationshipTuples(ctx, s.AdminUser, params.RelationshipTuple{
 		Object:       objUser.ResourceTag().String(),
 		Relation:     ofganames.MemberRelation.String(),
-		TargetObject: groupTag.String(),
+		TargetObject: group.ResourceTag().String(),
 	}, 10, "")
 	c.Assert(err, gc.IsNil)
 	c.Assert(len(tuples), gc.Equals, 0)
@@ -80,10 +112,10 @@ func (s *identitiesSuite) TestIdentityGetGroups(c *gc.C) {
 	groupTags := make([]jimmnames.GroupTag, groupsSize)
 	for i := range groupsSize {
 		groupName := fmt.Sprintf("group-test%d", i)
-		groupTag := s.AddGroup(c, groupName)
-		groupTags[i] = groupTag
+		group := s.AddGroup(c, groupName)
+		groupTags[i] = group.ResourceTag()
 		groupsToAdd[i] = resources.IdentityGroupsPatchItem{
-			Group: groupTag.String(),
+			Group: group.UUID,
 			Op:    resources.IdentityGroupsPatchItemOpAdd,
 		}
 
@@ -95,20 +127,154 @@ func (s *identitiesSuite) TestIdentityGetGroups(c *gc.C) {
 	// test list identity's groups with token pagination
 	size := 3
 	token := ""
+	totalGroups := 0
 	for i := 0; ; i += size {
 		groups, err := identitySvc.GetIdentityGroups(ctx, username, &resources.GetIdentitiesItemGroupsParams{
 			Size:      &size,
 			NextToken: &token,
 		})
 		c.Assert(err, gc.IsNil)
-		token = *groups.Next.PageToken
 		for j := 0; j < len(groups.Data); j++ {
-			c.Assert(groups.Data[j].Name, gc.Equals, groupTags[i+j].Id())
+			totalGroups++
+			c.Assert(groups.Data[j].Name, gc.Matches, `group-test\d+`)
+			c.Assert(groupTags[j].Id(), gc.Matches, `\w*-\w*-\w*-\w*-\w*`)
 		}
-		if *groups.Next.PageToken == "" {
+		if groups.Next.PageToken == nil || *groups.Next.PageToken == "" {
 			break
 		}
+		token = *groups.Next.PageToken
 	}
+	c.Assert(totalGroups, gc.Equals, groupsSize)
+}
+
+// TestGetIdentityGroupsWithDeletedDbGroup tests the behaviour
+// of GetIdentityGroups when a tuple lingers in OpenFGA but the group
+// has been removed from the database.
+func (s *identitiesSuite) TestGetIdentityGroupsWithDeletedDbGroup(c *gc.C) {
+	ctx := context.Background()
+	ctx = rebac_handlers.ContextWithIdentity(ctx, s.AdminUser)
+	identitySvc := rebac_admin.NewidentitiesService(s.JIMM)
+	username := s.AdminUser.Name
+
+	group1 := s.AddGroup(c, "group1")
+	group2 := s.AddGroup(c, "group2")
+
+	baseTuple := openfga.Tuple{
+		Object:   ofganames.ConvertTag(s.AdminUser.ResourceTag()),
+		Relation: ofganames.MemberRelation,
+	}
+	group1Access := baseTuple
+	group1Access.Target = ofganames.ConvertTag(group1.ResourceTag())
+	group2Access := baseTuple
+	group2Access.Target = ofganames.ConvertTag(group2.ResourceTag())
+
+	err := s.JIMM.OpenFGAClient.AddRelation(ctx, group1Access, group2Access)
+	c.Assert(err, gc.IsNil)
+
+	groups, err := identitySvc.GetIdentityGroups(ctx, username, &resources.GetIdentitiesItemGroupsParams{})
+	c.Assert(err, gc.IsNil)
+	c.Assert(groups.Data, gc.HasLen, 2)
+
+	groupToDelete := dbmodel.GroupEntry{Name: "group2"}
+	err = s.JIMM.Database.GetGroup(ctx, &groupToDelete)
+	c.Assert(err, gc.IsNil)
+	err = s.JIMM.Database.RemoveGroup(ctx, &groupToDelete)
+	c.Assert(err, gc.IsNil)
+
+	groups, err = identitySvc.GetIdentityGroups(ctx, username, &resources.GetIdentitiesItemGroupsParams{})
+	c.Assert(err, gc.IsNil)
+	c.Assert(groups.Data, gc.HasLen, 1)
+}
+
+func (s *identitiesSuite) TestIdentityPatchRoles(c *gc.C) {
+	// initialization
+	ctx := context.Background()
+	ctx = rebac_handlers.ContextWithIdentity(ctx, s.AdminUser)
+	identitySvc := rebac_admin.NewidentitiesService(s.JIMM)
+	roleName := "role-test1"
+	username := s.AdminUser.Name
+	role := s.AddRole(c, roleName)
+
+	// test add identity role
+	changed, err := identitySvc.PatchIdentityRoles(ctx, username, []resources.IdentityRolesPatchItem{{
+		Role: role.UUID,
+		Op:   resources.IdentityRolesPatchItemOpAdd,
+	}})
+	c.Assert(err, gc.IsNil)
+	c.Assert(changed, gc.Equals, true)
+
+	// test user added to roles
+	objUser, err := s.JIMM.FetchIdentity(ctx, username)
+	c.Assert(err, gc.IsNil)
+	tuples, _, err := s.JIMM.ListRelationshipTuples(ctx, s.AdminUser, params.RelationshipTuple{
+		Object:       objUser.ResourceTag().String(),
+		Relation:     ofganames.AssigneeRelation.String(),
+		TargetObject: role.ResourceTag().String(),
+	}, 10, "")
+	c.Assert(err, gc.IsNil)
+	c.Assert(len(tuples), gc.Equals, 1)
+	c.Assert(role.UUID, gc.Equals, tuples[0].Target.ID)
+
+	// test user remove from role
+	changed, err = identitySvc.PatchIdentityRoles(ctx, username, []resources.IdentityRolesPatchItem{{
+		Role: role.UUID,
+		Op:   resources.IdentityRolesPatchItemOpRemove,
+	}})
+	c.Assert(err, gc.IsNil)
+	c.Assert(changed, gc.Equals, true)
+	tuples, _, err = s.JIMM.ListRelationshipTuples(ctx, s.AdminUser, params.RelationshipTuple{
+		Object:       objUser.ResourceTag().String(),
+		Relation:     ofganames.AssigneeRelation.String(),
+		TargetObject: role.ResourceTag().String(),
+	}, 10, "")
+	c.Assert(err, gc.IsNil)
+	c.Assert(len(tuples), gc.Equals, 0)
+}
+
+func (s *identitiesSuite) TestIdentityGetRoles(c *gc.C) {
+	// initialization
+	ctx := context.Background()
+	ctx = rebac_handlers.ContextWithIdentity(ctx, s.AdminUser)
+	identitySvc := rebac_admin.NewidentitiesService(s.JIMM)
+	username := s.AdminUser.Name
+	rolesSize := 10
+	rolesToAdd := make([]resources.IdentityRolesPatchItem, rolesSize)
+	roleTags := make([]jimmnames.RoleTag, rolesSize)
+	for i := range rolesSize {
+		roleName := fmt.Sprintf("role-test%d", i)
+		role := s.AddRole(c, roleName)
+		roleTags[i] = role.ResourceTag()
+		rolesToAdd[i] = resources.IdentityRolesPatchItem{
+			Role: role.UUID,
+			Op:   resources.IdentityRolesPatchItemOpAdd,
+		}
+
+	}
+	changed, err := identitySvc.PatchIdentityRoles(ctx, username, rolesToAdd)
+	c.Assert(err, gc.IsNil)
+	c.Assert(changed, gc.Equals, true)
+
+	// test list identity's roles with token pagination
+	size := 3
+	token := ""
+	totalRoles := 0
+	for i := 0; ; i += size {
+		roles, err := identitySvc.GetIdentityRoles(ctx, username, &resources.GetIdentitiesItemRolesParams{
+			Size:      &size,
+			NextToken: &token,
+		})
+		c.Assert(err, gc.IsNil)
+		for j := 0; j < len(roles.Data); j++ {
+			totalRoles++
+			c.Assert(roles.Data[j].Name, gc.Matches, `role-test\d+`)
+			c.Assert(roleTags[j].Id(), gc.Matches, `\w*-\w*-\w*-\w*-\w*`)
+		}
+		if roles.Next.PageToken == nil || *roles.Next.PageToken == "" {
+			break
+		}
+		token = *roles.Next.PageToken
+	}
+	c.Assert(totalRoles, gc.Equals, rolesSize)
 }
 
 // TestIdentityEntitlements tests the listing of entitlements for a specific identityId.
@@ -117,13 +283,13 @@ func (s *identitiesSuite) TestIdentityEntitlements(c *gc.C) {
 	// initialization
 	ctx := context.Background()
 	identitySvc := rebac_admin.NewidentitiesService(s.JIMM)
-	groupTag := s.AddGroup(c, "test-group")
+	group := s.AddGroup(c, "test-group")
 	user := names.NewUserTag("test-user@canonical.com")
 	s.AddUser(c, user.Id())
 	err := s.JIMM.OpenFGAClient.AddRelation(ctx, openfga.Tuple{
 		Object:   ofganames.ConvertTag(user),
 		Relation: ofganames.MemberRelation,
-		Target:   ofganames.ConvertTag(groupTag),
+		Target:   ofganames.ConvertTag(group.ResourceTag()),
 	})
 	c.Assert(err, gc.IsNil)
 	tuple := openfga.Tuple{
@@ -149,18 +315,10 @@ func (s *identitiesSuite) TestIdentityEntitlements(c *gc.C) {
 	emptyPageToken := ""
 	req := resources.GetIdentitiesItemEntitlementsParams{NextPageToken: &emptyPageToken}
 	var entitlements []resources.EntityEntitlement
-	for {
-		res, err := identitySvc.GetIdentityEntitlements(ctx, user.Id(), &req)
-		c.Assert(err, gc.IsNil)
-		c.Assert(res, gc.Not(gc.IsNil))
-		entitlements = append(entitlements, res.Data...)
-		if res.Next.PageToken == nil || *res.Next.PageToken == "" {
-			break
-		}
-		c.Assert(*res.Meta.PageToken, gc.Equals, *req.NextPageToken)
-		c.Assert(*res.Next.PageToken, gc.Not(gc.Equals), "")
-		req.NextPageToken = res.Next.PageToken
-	}
+	res, err := identitySvc.GetIdentityEntitlements(ctx, user.Id(), &req)
+	c.Assert(err, gc.IsNil)
+	c.Assert(res, gc.Not(gc.IsNil))
+	entitlements = append(entitlements, res.Data...)
 	c.Assert(entitlements, gc.HasLen, 7)
 	modelEntitlementCount := 0
 	controllerEntitlementCount := 0
@@ -309,4 +467,37 @@ func (s *identitiesSuite) TestPatchIdentityEntitlements(c *gc.C) {
 		c.Assert(err, gc.IsNil)
 		c.Assert(allowed, gc.Equals, true)
 	}
+}
+
+// TestPatchIdentityEntitlementsForCloudAccess tests granting access to a cloud.
+func (s *identitiesSuite) TestPatchIdentityEntitlementsForCloudAccess(c *gc.C) {
+	// initialization
+	ctx := context.Background()
+	identitySvc := rebac_admin.NewidentitiesService(s.JIMM)
+	tester := jimmtest.GocheckTester{C: c}
+	env := jimmtest.ParseEnvironment(tester, patchIdentitiesEntitlementTestEnv)
+	env.PopulateDB(tester, s.JIMM.Database)
+	user := names.NewUserTag("test-user@canonical.com")
+	s.AddUser(c, user.Id())
+
+	cloudEntitlement := []resources.IdentityEntitlementsPatchItem{
+		{Entitlement: resources.EntityEntitlement{
+			Entitlement: ofganames.AdministratorRelation.String(),
+			EntityId:    "test-cloud",
+			EntityType:  openfga.CloudType.String(),
+		}, Op: resources.IdentityEntitlementsPatchItemOpAdd},
+	}
+	ctx = rebac_handlers.ContextWithIdentity(ctx, s.AdminUser)
+	res, err := identitySvc.PatchIdentityEntitlements(ctx, user.Id(), cloudEntitlement)
+	c.Assert(err, gc.IsNil)
+	c.Assert(res, gc.Equals, true)
+
+	tuple := openfga.Tuple{
+		Object:   ofganames.ConvertTag(user),
+		Relation: ofganames.AdministratorRelation,
+		Target:   ofganames.ConvertTag(names.NewCloudTag("test-cloud")),
+	}
+	exists, err := s.JIMM.OpenFGAClient.CheckRelation(ctx, tuple, false)
+	c.Assert(err, gc.IsNil)
+	c.Assert(exists, gc.Equals, true)
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/canonical/jimm/v3/internal/openfga"
 	ofganames "github.com/canonical/jimm/v3/internal/openfga/names"
 	apiparams "github.com/canonical/jimm/v3/pkg/api/params"
+	jimmnames "github.com/canonical/jimm/v3/pkg/names"
 )
 
 type identitiesService struct {
@@ -43,8 +44,11 @@ func (s *identitiesService) ListIdentities(ctx context.Context, params *resource
 		return nil, err
 	}
 	page, nextPage, pagination := pagination.CreatePagination(params.Size, params.Page, count)
-
-	users, err := s.jimm.ListIdentities(ctx, user, pagination)
+	match := ""
+	if params.Filter != nil && *params.Filter != "" {
+		match = *params.Filter
+	}
+	users, err := s.jimm.ListIdentities(ctx, user, pagination, match)
 	if err != nil {
 		return nil, err
 	}
@@ -89,19 +93,105 @@ func (s *identitiesService) UpdateIdentity(ctx context.Context, identity *resour
 	return nil, v1.NewNotImplementedError("update identity not implemented")
 }
 
-// // DeleteIdentity deletes an Identity.
+// DeleteIdentity deletes an Identity.
 func (s *identitiesService) DeleteIdentity(ctx context.Context, identityId string) (bool, error) {
 	return false, v1.NewNotImplementedError("delete identity not implemented")
 }
 
-// // GetIdentityRoles returns a page of Roles for identity `identityId`.
+// GetIdentityRoles returns a page of identities in a Role identified by `roleId`.
 func (s *identitiesService) GetIdentityRoles(ctx context.Context, identityId string, params *resources.GetIdentitiesItemRolesParams) (*resources.PaginatedResponse[resources.Role], error) {
-	return nil, v1.NewNotImplementedError("get identity roles not implemented")
+	user, err := utils.GetUserFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	objUser, err := s.jimm.FetchIdentity(ctx, identityId)
+	if err != nil {
+		return nil, v1.NewNotFoundError(fmt.Sprintf("User with id %s not found", identityId))
+	}
+	filter := utils.CreateTokenPaginationFilter(params.Size, params.NextToken, params.NextPageToken)
+	tuples, cNextToken, err := s.jimm.ListRelationshipTuples(ctx, user, apiparams.RelationshipTuple{
+		Object:       objUser.ResourceTag().String(),
+		Relation:     ofganames.AssigneeRelation.String(),
+		TargetObject: openfga.RoleType.String(),
+	}, int32(filter.Limit()), filter.Token()) // #nosec G115 accept integer conversion
+	if err != nil {
+		return nil, err
+	}
+
+	roles := make([]resources.Role, 0, len(tuples))
+	for _, t := range tuples {
+		dbRole, err := s.jimm.GetRoleManager().GetRoleByUUID(ctx, user, t.Target.ID)
+		if err != nil {
+			// Handle the case where the role was removed from the DB but a lingering OpenFGA tuple still exists.
+			// Don't return an error as that would prevent a user from viewing their groups, instead drop the role from the result.
+			if errors.ErrorCode(err) == errors.CodeNotFound {
+				continue
+			}
+			return nil, err
+		}
+		roles = append(roles, resources.Role{
+			Id:   &t.Target.ID,
+			Name: dbRole.Name,
+		})
+	}
+
+	originalToken := filter.Token()
+	res := resources.PaginatedResponse[resources.Role]{
+		Data: roles,
+		Meta: resources.ResponseMeta{
+			Size:      len(roles),
+			PageToken: &originalToken,
+		},
+	}
+	if cNextToken != "" {
+		res.Next.PageToken = &cNextToken
+	}
+	return &res, nil
 }
 
-// // PatchIdentityRoles performs addition or removal of a Role to/from an Identity.
+// PatchRoleIdentities performs addition or removal of identities to/from a Role identified by `roleId`.
 func (s *identitiesService) PatchIdentityRoles(ctx context.Context, identityId string, rolePatches []resources.IdentityRolesPatchItem) (bool, error) {
-	return false, v1.NewNotImplementedError("get identity roles not implemented")
+	user, err := utils.GetUserFromContext(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	objUser, err := s.jimm.FetchIdentity(ctx, identityId)
+	if err != nil {
+		return false, v1.NewNotFoundError(fmt.Sprintf("User with id %s not found", identityId))
+	}
+	additions := make([]apiparams.RelationshipTuple, 0)
+	deletions := make([]apiparams.RelationshipTuple, 0)
+	for _, p := range rolePatches {
+		if !jimmnames.IsValidRoleId(p.Role) {
+			return false, v1.NewValidationError(fmt.Sprintf("ID %s is not a valid role ID", p.Role))
+		}
+		t := apiparams.RelationshipTuple{
+			Object:       objUser.ResourceTag().String(),
+			Relation:     ofganames.AssigneeRelation.String(),
+			TargetObject: jimmnames.NewRoleTag(p.Role).String(),
+		}
+		if p.Op == resources.IdentityRolesPatchItemOpAdd {
+			additions = append(additions, t)
+		} else if p.Op == "remove" {
+			deletions = append(deletions, t)
+		}
+	}
+	if len(additions) > 0 {
+		err = s.jimm.AddRelation(ctx, user, additions)
+		if err != nil {
+			zapctx.Error(context.Background(), "cannot add relations", zap.Error(err))
+			return false, v1.NewUnknownError(err.Error())
+		}
+	}
+	if len(deletions) > 0 {
+		err = s.jimm.RemoveRelation(ctx, user, deletions)
+		if err != nil {
+			zapctx.Error(context.Background(), "cannot remove relations", zap.Error(err))
+			return false, v1.NewUnknownError(err.Error())
+		}
+	}
+	return true, nil
 }
 
 // GetIdentityGroups returns a page of Groups for identity `identityId`.
@@ -120,28 +210,39 @@ func (s *identitiesService) GetIdentityGroups(ctx context.Context, identityId st
 		Relation:     ofganames.MemberRelation.String(),
 		TargetObject: openfga.GroupType.String(),
 	}, int32(filter.Limit()), filter.Token()) // #nosec G115 accept integer conversion
-
 	if err != nil {
 		return nil, err
 	}
-	groups := make([]resources.Group, len(tuples))
-	for i, t := range tuples {
-		groups[i] = resources.Group{
-			Id:   &t.Target.ID,
-			Name: t.Target.ID,
+
+	groups := make([]resources.Group, 0, len(tuples))
+	for _, t := range tuples {
+		dbGroup, err := s.jimm.GetGroupByUUID(ctx, user, t.Target.ID)
+		if err != nil {
+			// Handle the case where the group was removed from the DB but a lingering OpenFGA tuple still exists.
+			// Don't return an error as that would prevent a user from viewing their groups, instead drop the group from the result.
+			if errors.ErrorCode(err) == errors.CodeNotFound {
+				continue
+			}
+			return nil, err
 		}
+		groups = append(groups, resources.Group{
+			Id:   &t.Target.ID,
+			Name: dbGroup.Name,
+		})
 	}
+
 	originalToken := filter.Token()
-	return &resources.PaginatedResponse[resources.Group]{
+	res := resources.PaginatedResponse[resources.Group]{
 		Data: groups,
 		Meta: resources.ResponseMeta{
 			Size:      len(groups),
 			PageToken: &originalToken,
 		},
-		Next: resources.Next{
-			PageToken: &cNextToken,
-		},
-	}, nil
+	}
+	if cNextToken != "" {
+		res.Next.PageToken = &cNextToken
+	}
+	return &res, nil
 }
 
 // PatchIdentityGroups performs addition or removal of a Group to/from an Identity.
@@ -158,10 +259,13 @@ func (s *identitiesService) PatchIdentityGroups(ctx context.Context, identityId 
 	additions := make([]apiparams.RelationshipTuple, 0)
 	deletions := make([]apiparams.RelationshipTuple, 0)
 	for _, p := range groupPatches {
+		if !jimmnames.IsValidGroupId(p.Group) {
+			return false, v1.NewValidationError(fmt.Sprintf("ID %s is not a valid group ID", p.Group))
+		}
 		t := apiparams.RelationshipTuple{
 			Object:       objUser.ResourceTag().String(),
 			Relation:     ofganames.MemberRelation.String(),
-			TargetObject: p.Group,
+			TargetObject: jimmnames.NewGroupTag(p.Group).String(),
 		}
 		if p.Op == "add" {
 			additions = append(additions, t)
