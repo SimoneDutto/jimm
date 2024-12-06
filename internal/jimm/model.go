@@ -1165,15 +1165,21 @@ func (j *JIMM) DestroyModel(ctx context.Context, user *openfga.User, mt names.Mo
 	zapctx.Info(ctx, string(op))
 
 	err := j.doModelAdmin(ctx, user, mt, func(m *dbmodel.Model, api API) error {
-		if err := api.DestroyModel(ctx, mt, destroyStorage, force, maxWait, timeout); err != nil {
-			return err
-		}
 		m.Life = state.Dying.String()
 		if err := j.Database.UpdateModel(ctx, m); err != nil {
-			// If the database fails to update don't worry too much the
-			// monitor should catch it.
 			zapctx.Error(ctx, "failed to store model change", zaputil.Error(err))
+			return err
 		}
+		if err := api.DestroyModel(ctx, mt, destroyStorage, force, maxWait, timeout); err != nil {
+			zapctx.Error(ctx, "failed to call destroy juju api", zaputil.Error(err))
+			// this is a manual way of restoring the life state to alive if the JUJU api fails.
+			m.Life = state.Alive.String()
+			if err := j.Database.UpdateModel(ctx, m); err != nil {
+				zapctx.Error(ctx, "failed to store model change", zaputil.Error(err))
+			}
+			return err
+		}
+
 		return nil
 	})
 	if err != nil {
