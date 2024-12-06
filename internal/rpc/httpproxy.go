@@ -18,7 +18,7 @@ import (
 	"github.com/canonical/jimm/v3/internal/dbmodel"
 )
 
-type httpOptions struct {
+type HttpOptions struct {
 	TLSConfig *tls.Config
 	URL       url.URL
 }
@@ -41,7 +41,7 @@ func ProxyHTTP(ctx context.Context, ctl *dbmodel.Controller, w http.ResponseWrit
 	}
 
 	if ctl.PublicAddress != "" {
-		err := doRequest(ctx, w, req, httpOptions{
+		err := DoRequest(ctx, w, req, HttpOptions{
 			TLSConfig: tlsConfig,
 			URL:       createURLWithNewHost(*req.URL, ctl.PublicAddress),
 		})
@@ -51,7 +51,7 @@ func ProxyHTTP(ctx context.Context, ctl *dbmodel.Controller, w http.ResponseWrit
 	}
 	for _, hps := range ctl.Addresses {
 		for _, hp := range hps {
-			err := doRequest(ctx, w, req, httpOptions{
+			err := DoRequest(ctx, w, req, HttpOptions{
 				TLSConfig: tlsConfig,
 				URL:       createURLWithNewHost(*req.URL, fmt.Sprintf("%s:%d", hp.Value, hp.Port)),
 			})
@@ -66,7 +66,7 @@ func ProxyHTTP(ctx context.Context, ctl *dbmodel.Controller, w http.ResponseWrit
 	return errgo.New("couldn't reach a valid address for controller")
 }
 
-func doRequest(ctx context.Context, w http.ResponseWriter, req *http.Request, opt httpOptions) error {
+func DoRequest(ctx context.Context, w http.ResponseWriter, req *http.Request, opt HttpOptions) error {
 	client := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: opt.TLSConfig,

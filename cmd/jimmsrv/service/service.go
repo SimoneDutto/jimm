@@ -481,6 +481,8 @@ func NewService(ctx context.Context, p Params) (*Service, error) {
 		PublicDNSName:  p.PublicDNSName,
 	}
 
+	// s.mux.Handle("/iap", jimmhttp.IAPProxyHandler())
+
 	// Websockets require extra care when cookies are used for authentication
 	// to avoid CSRF attacks. https://portswigger.net/web-security/websockets/cross-site-websocket-hijacking
 	websocketCors := middleware.NewWebsocketCors(p.CorsAllowedOrigins)
@@ -489,6 +491,11 @@ func NewService(ctx context.Context, p Params) (*Service, error) {
 	mountHandler(
 		"/model/{uuid}/{type:charms|applications}",
 		jimmhttp.NewHTTPProxyHandler(&s.jimm),
+	)
+
+	mountHandler(
+		"/iap",
+		jimmhttp.NewIAPProxyHandler(&s.jimm),
 	)
 
 	return s, nil

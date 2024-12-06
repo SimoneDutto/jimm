@@ -1366,3 +1366,21 @@ func (j *JIMM) ChangeModelCredential(ctx context.Context, user *openfga.User, mo
 
 	return nil
 }
+
+func (j *JIMM) GetUnitEndpoint(ctx context.Context, model, unit string) string {
+	m, err := j.GetModel(ctx, model)
+	api, err := j.dial(ctx, &m.Controller, m.ResourceTag())
+	if err != nil {
+		return ""
+	}
+	defer api.Close()
+
+	res, err := api.UnitsInfo(ctx, []names.UnitTag{names.NewUnitTag(unit)})
+	if err != nil {
+		return ""
+	}
+	for _, r := range res.Results {
+		return r.Result.PublicAddress
+	}
+	return ""
+}
