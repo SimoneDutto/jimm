@@ -20,9 +20,6 @@ func (j *JIMM) CleanupDyingModels(ctx context.Context) error {
 	const op = errors.Op("jimm.CleanupDyingModels")
 	zapctx.Info(ctx, string(op))
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
 	err := j.DB().ForEachModel(ctx, func(m *dbmodel.Model) error {
 		if m.Life != state.Dying.String() {
 			return nil
