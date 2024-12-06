@@ -28,7 +28,6 @@ import (
 )
 
 type JIMM interface {
-	GroupService
 	RelationService
 	ControllerService
 	LoginService
@@ -51,7 +50,8 @@ type JIMM interface {
 	GetCloudCredential(ctx context.Context, user *openfga.User, tag names.CloudCredentialTag) (*dbmodel.CloudCredential, error)
 	GetCloudCredentialAttributes(ctx context.Context, u *openfga.User, cred *dbmodel.CloudCredential, hidden bool) (attrs map[string]string, redacted []string, err error)
 	GetCredentialStore() credentials.CredentialStore
-	GetRoleManager() jimm.RoleManager
+	RoleManager() jimm.RoleManager
+	GroupManager() jimm.GroupManager
 	GetJimmControllerAccess(ctx context.Context, user *openfga.User, tag names.UserTag) (string, error)
 	// FetchIdentity finds the user in jimm or returns a not-found error
 	FetchIdentity(ctx context.Context, username string) (*openfga.User, error)
