@@ -204,7 +204,7 @@ func start(ctx context.Context, s *service.Service) error {
 			return jimmsvc.OpenFGACleanup(ctx, time.NewTicker(6*time.Hour).C)
 		})
 		s.Go(func() error {
-			return jimmsvc.CleanupModelsDying(ctx, time.NewTicker(time.Minute).C)
+			return jimmsvc.CleanupDyingModels(ctx, time.NewTicker(time.Minute).C)
 		})
 	}
 

@@ -123,7 +123,7 @@ func TestPollModelsDying(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// test
-	err = j.CleanupModelsDying(ctx)
+	err = j.CleanupDyingModels(ctx)
 	c.Assert(err, qt.IsNil)
 
 	model := dbmodel.Model{
@@ -180,7 +180,7 @@ func TestPollModelsDyingControllerErrors(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// test
-	err = j.CleanupModelsDying(ctx)
+	err = j.CleanupDyingModels(ctx)
 	c.Assert(err, qt.IsNil)
 
 	model := dbmodel.Model{

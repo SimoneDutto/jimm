@@ -261,12 +261,12 @@ func (s *Service) OpenFGACleanup(ctx context.Context, trigger <-chan time.Time) 
 	}
 }
 
-// CleanupModelsDying triggers every `trigger` time and calls the jimm methods to cleanup dying models.
-func (s *Service) CleanupModelsDying(ctx context.Context, trigger <-chan time.Time) error {
+// CleanupDyingModels triggers every `trigger` time and calls the jimm methods to cleanup dying models.
+func (s *Service) CleanupDyingModels(ctx context.Context, trigger <-chan time.Time) error {
 	for {
 		select {
 		case <-trigger:
-			err := s.jimm.CleanupModelsDying(ctx)
+			err := s.jimm.CleanupDyingModels(ctx)
 			if err != nil {
 				zapctx.Error(ctx, "dying models cleanup", zap.Error(err))
 				continue
