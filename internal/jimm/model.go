@@ -1174,8 +1174,8 @@ func (j *JIMM) DestroyModel(ctx context.Context, user *openfga.User, mt names.Mo
 			zapctx.Error(ctx, "failed to call destroy juju api", zaputil.Error(err))
 			// this is a manual way of restoring the life state to alive if the JUJU api fails.
 			m.Life = state.Alive.String()
-			if err := j.Database.UpdateModel(ctx, m); err != nil {
-				zapctx.Error(ctx, "failed to store model change", zaputil.Error(err))
+			if uerr := j.Database.UpdateModel(ctx, m); uerr != nil {
+				zapctx.Error(ctx, "failed to store model change", zaputil.Error(uerr))
 			}
 			return err
 		}
