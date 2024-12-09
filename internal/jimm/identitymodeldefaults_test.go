@@ -211,3 +211,83 @@ func TestIdentityModelDefaults(t *testing.T) {
 		})
 	}
 }
+
+func TestUnsetIdentityModelDefaults(t *testing.T) {
+	c := qt.New(t)
+
+	ctx := context.Background()
+
+	type testConfig struct {
+		identity         *dbmodel.Identity
+		toDelete         []string
+		expectedError    string
+		expectedDefaults map[string]interface{}
+	}
+
+	tests := []struct {
+		about     string
+		setup     func(c *qt.C, j *jimm.JIMM) testConfig
+		assertion func(c *qt.C, db *db.Database)
+	}{
+		{
+			about: "get defaults after unset",
+			setup: func(c *qt.C, j *jimm.JIMM) testConfig {
+				identity, err := dbmodel.NewIdentity("bob@canonical.com")
+				c.Assert(err, qt.IsNil)
+
+				c.Assert(j.Database.DB.Create(identity).Error, qt.IsNil)
+
+				err = j.Database.SetIdentityModelDefaults(ctx, &dbmodel.IdentityModelDefaults{
+					IdentityName: identity.Name,
+					Identity:     *identity,
+					Defaults: map[string]interface{}{
+						"key1": float64(42),
+						"key2": "a changed string",
+						"key3": "a new value",
+					},
+				})
+				c.Assert(err, qt.IsNil)
+
+				return testConfig{
+					identity: identity,
+					expectedDefaults: map[string]interface{}{
+						"key3": "a new value",
+					},
+					toDelete: []string{"key1", "key2"},
+				}
+			},
+		},
+		{
+			about: "unset not-found identit-defaults",
+			setup: func(c *qt.C, j *jimm.JIMM) testConfig {
+				identity, err := dbmodel.NewIdentity("not-found@canonical.com")
+				c.Assert(err, qt.IsNil)
+
+				c.Assert(j.Database.DB.Create(identity).Error, qt.IsNil)
+
+				return testConfig{
+					identity:      identity,
+					expectedError: "identitymodeldefaults not found",
+					toDelete:      []string{"key1", "key2"},
+				}
+			},
+		}}
+
+	for _, test := range tests {
+		c.Run(test.about, func(c *qt.C) {
+			j := jimmtest.NewJIMM(c, nil)
+
+			testConfig := test.setup(c, j)
+
+			err := j.UnsetIdentityModelDefaults(ctx, testConfig.identity, testConfig.toDelete)
+			if testConfig.expectedError == "" {
+				c.Assert(err, qt.IsNil)
+				defaults, err := j.IdentityModelDefaults(ctx, testConfig.identity)
+				c.Assert(err, qt.IsNil)
+				c.Assert(defaults, qt.CmpEquals(cmpopts.IgnoreTypes(gorm.Model{})), testConfig.expectedDefaults)
+			} else {
+				c.Assert(err, qt.ErrorMatches, testConfig.expectedError)
+			}
+		})
+	}
+}

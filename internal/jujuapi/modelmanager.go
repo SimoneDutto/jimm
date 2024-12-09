@@ -78,6 +78,8 @@ type ModelManager interface {
 	UnsetModelDefaults(ctx context.Context, user *dbmodel.Identity, cloudTag names.CloudTag, region string, keys []string) error
 	UpdateMigratedModel(ctx context.Context, user *openfga.User, modelTag names.ModelTag, targetControllerName string) error
 	ValidateModelUpgrade(ctx context.Context, u *openfga.User, mt names.ModelTag, force bool) error
+	SetIdentityModelDefaults(ctx context.Context, identity *dbmodel.Identity, configs map[string]interface{}) error
+	UnsetIdentityModelDefaults(ctx context.Context, identity *dbmodel.Identity, keys []string) error
 }
 
 // DumpModels implements the DumpModels method of the modelmanager (version
@@ -348,13 +350,18 @@ func (r *controllerRoot) SetModelDefaults(ctx context.Context, args jujuparams.S
 
 	results := make([]jujuparams.ErrorResult, len(args.Config))
 	for i, config := range args.Config {
-		cloudTag, err := names.ParseCloudTag(config.CloudTag)
-		ctx = zapctx.WithFields(ctx, zap.String("entity", cloudTag.String()))
-		if err != nil {
-			results[i].Error = mapError(errors.E(op, err))
-			continue
+		if config.CloudTag == "" {
+			ctx = zapctx.WithFields(ctx, zap.String("entity", r.user.Identity.Name))
+			results[i].Error = mapError(r.jimm.SetIdentityModelDefaults(ctx, r.user.Identity, config.Config))
+		} else {
+			cloudTag, err := names.ParseCloudTag(config.CloudTag)
+			ctx = zapctx.WithFields(ctx, zap.String("entity", cloudTag.String()))
+			if err != nil {
+				results[i].Error = mapError(errors.E(op, err))
+				continue
+			}
+			results[i].Error = mapError(r.jimm.SetModelDefaults(ctx, r.user.Identity, cloudTag, config.CloudRegion, config.Config))
 		}
-		results[i].Error = mapError(r.jimm.SetModelDefaults(ctx, r.user.Identity, cloudTag, config.CloudRegion, config.Config))
 	}
 
 	return jujuparams.ErrorResults{
@@ -366,13 +373,19 @@ func (r *controllerRoot) SetModelDefaults(ctx context.Context, args jujuparams.S
 func (r *controllerRoot) UnsetModelDefaults(ctx context.Context, args jujuparams.UnsetModelDefaults) (jujuparams.ErrorResults, error) {
 	results := make([]jujuparams.ErrorResult, len(args.Keys))
 	for i, key := range args.Keys {
-		cloudTag, err := names.ParseCloudTag(key.CloudTag)
-		ctx = zapctx.WithFields(ctx, zap.String("entity", cloudTag.String()))
-		if err != nil {
-			results[i].Error = mapError(err)
-			continue
+		// when cloudtag is empty, we set the default at identitymodel level
+		if key.CloudTag == "" {
+			ctx = zapctx.WithFields(ctx, zap.String("entity", r.user.Identity.Name))
+			results[i].Error = mapError(r.jimm.UnsetIdentityModelDefaults(ctx, r.user.Identity, key.Keys))
+		} else {
+			cloudTag, err := names.ParseCloudTag(key.CloudTag)
+			ctx = zapctx.WithFields(ctx, zap.String("entity", cloudTag.String()))
+			if err != nil {
+				results[i].Error = mapError(err)
+				continue
+			}
+			results[i].Error = mapError(r.jimm.UnsetModelDefaults(ctx, r.user.Identity, cloudTag, key.CloudRegion, key.Keys))
 		}
-		results[i].Error = mapError(r.jimm.UnsetModelDefaults(ctx, r.user.Identity, cloudTag, key.CloudRegion, key.Keys))
 	}
 
 	return jujuparams.ErrorResults{

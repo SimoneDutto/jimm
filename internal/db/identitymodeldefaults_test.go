@@ -93,6 +93,44 @@ func TestSetIdentityModelDefaults(t *testing.T) {
 			}
 		},
 	}, {
+		about: "unset model identity defaults",
+		setup: func(c *qt.C, j *jimm.JIMM) testConfig {
+			i, err := dbmodel.NewIdentity("bob@canonical.com")
+			c.Assert(err, qt.IsNil)
+			c.Assert(j.Database.DB.Create(i).Error, qt.IsNil)
+
+			err = j.Database.SetIdentityModelDefaults(ctx, &dbmodel.IdentityModelDefaults{
+				IdentityName: i.Name,
+				Identity:     *i,
+				Defaults: map[string]interface{}{
+					"key1": float64(17),
+					"key2": "a test string",
+				},
+			})
+			c.Assert(err, qt.IsNil)
+			err = j.Database.UnsetIdentityModelDefaults(ctx, &dbmodel.IdentityModelDefaults{
+				IdentityName: i.Name,
+				Identity:     *i,
+			}, []string{"key1", "key2", "key4"},
+			)
+			c.Assert(err, qt.IsNil)
+			defaults := map[string]interface{}{
+				"key3": "a new value",
+			}
+
+			expectedDefaults := dbmodel.IdentityModelDefaults{
+				IdentityName: i.Name,
+				Identity:     *i,
+				Defaults:     defaults,
+			}
+
+			return testConfig{
+				identity:         i,
+				defaults:         defaults,
+				expectedDefaults: &expectedDefaults,
+			}
+		},
+	}, {
 		about: "identity does not exist",
 		setup: func(c *qt.C, j *jimm.JIMM) testConfig {
 			i, err := dbmodel.NewIdentity("bob@canonical.com")

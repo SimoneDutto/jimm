@@ -848,6 +848,7 @@ func (j *JIMM) ForEachUserModel(ctx context.Context, user *openfga.User, f func(
 
 	errStop := errors.E("stop")
 	var iterErr error
+
 	err := j.Database.ForEachModel(ctx, func(m *dbmodel.Model) error {
 		model := *m
 

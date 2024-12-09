@@ -29,6 +29,21 @@ func (j *JIMM) SetIdentityModelDefaults(ctx context.Context, identity *dbmodel.I
 	return nil
 }
 
+// UnsetIdentityModelDefaults unset default values for the user.
+func (j *JIMM) UnsetIdentityModelDefaults(ctx context.Context, identity *dbmodel.Identity, keys []string) error {
+	const op = errors.Op("jimm.SetIdentityModelDefaults")
+
+	err := j.Database.UnsetIdentityModelDefaults(ctx,
+		&dbmodel.IdentityModelDefaults{
+			IdentityName: identity.Name,
+		},
+		keys)
+	if err != nil {
+		return errors.E(op, err)
+	}
+	return nil
+}
+
 // IdnetityModelDefaults returns the default config values for the identity.
 func (j *JIMM) IdentityModelDefaults(ctx context.Context, identity *dbmodel.Identity) (map[string]interface{}, error) {
 	const op = errors.Op("jimm.UserModelDefaults")

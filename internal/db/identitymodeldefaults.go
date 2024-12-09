@@ -12,7 +12,7 @@ import (
 	"github.com/canonical/jimm/v3/internal/servermon"
 )
 
-// SetIdentityModelDefaults sets default model setting values for the controller.
+// SetIdentityModelDefaults sets default model setting values for the identity.
 func (d *Database) SetIdentityModelDefaults(ctx context.Context, defaults *dbmodel.IdentityModelDefaults) (err error) {
 	const op = errors.Op("db.SetIdentityModelDefaults")
 
@@ -30,7 +30,7 @@ func (d *Database) SetIdentityModelDefaults(ctx context.Context, defaults *dbmod
 		dbDefaults := dbmodel.IdentityModelDefaults{
 			IdentityName: defaults.IdentityName,
 		}
-		// try to fetch cloud defaults from the db
+		// we try to get identity defaults, if not found we create them.
 		err := d.IdentityModelDefaults(ctx, &dbDefaults)
 		if err != nil {
 			if errors.ErrorCode(err) == errors.CodeNotFound {
@@ -43,9 +43,52 @@ func (d *Database) SetIdentityModelDefaults(ctx context.Context, defaults *dbmod
 			return errors.E(op, err)
 		}
 
-		// update defaults
+		// if they are found, we merge old ones with the new ones.
 		for k, v := range defaults.Defaults {
 			dbDefaults.Defaults[k] = v
+		}
+		if err := db.Clauses(clause.OnConflict{
+			Columns: []clause.Column{
+				{Name: "identity_name"},
+			},
+			DoUpdates: clause.AssignmentColumns([]string{"defaults"}),
+		}).Create(&dbDefaults).Error; err != nil {
+			return errors.E(op, dbError(err))
+		}
+		return nil
+	})
+	if err != nil {
+		return errors.E(op, err)
+	}
+	return nil
+}
+
+// UnsetIdentityModelDefaults unset defaults from identity.
+func (d *Database) UnsetIdentityModelDefaults(ctx context.Context, defaults *dbmodel.IdentityModelDefaults, keys []string) (err error) {
+	const op = errors.Op("db.SetIdentityModelDefaults")
+
+	if err := d.ready(); err != nil {
+		return errors.E(op, err)
+	}
+
+	durationObserver := servermon.DurationObserver(servermon.DBQueryDurationHistogram, string(op))
+	defer durationObserver()
+	defer servermon.ErrorCounter(servermon.DBQueryErrorCount, &err, string(op))
+
+	err = d.Transaction(func(d *Database) error {
+		db := d.DB.WithContext(ctx)
+
+		dbDefaults := dbmodel.IdentityModelDefaults{
+			IdentityName: defaults.IdentityName,
+		}
+		// we try to get identity defaults, if not found we return an error.
+		err := d.IdentityModelDefaults(ctx, &dbDefaults)
+		if err != nil {
+			return errors.E(op, err)
+		}
+		// if they are found, we merge old ones with the new deleted ones.
+		for _, key := range keys {
+			delete(dbDefaults.Defaults, key)
 		}
 		if err := db.Clauses(clause.OnConflict{
 			Columns: []clause.Column{
