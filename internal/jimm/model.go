@@ -578,6 +578,7 @@ func (j *JIMM) AddModel(ctx context.Context, user *openfga.User, args *ModelCrea
 	}
 
 	// fetch cloud defaults
+	// TODO(SimoneDutto): we should get the implicit cloud and then get the defaults.
 	if args.Cloud != (names.CloudTag{}) {
 		cloudDefaults := dbmodel.CloudDefaults{
 			IdentityName: user.Name,
