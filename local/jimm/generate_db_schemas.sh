@@ -3,7 +3,7 @@
 # Configuration
 DB_CONTAINER="postgres"   
 SCHEMA="public"           
-OUTPUT_DIR="./doc/db_schemas"
+OUTPUT_DIR="./db_schemas"
 
 # Create output directory
 mkdir -p $OUTPUT_DIR
