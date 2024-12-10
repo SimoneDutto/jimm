@@ -88,7 +88,7 @@ func (c Connection) GrantJIMMModelAdmin(ctx context.Context, tag names.ModelTag)
 // DumpModel dumps debugging details for the given model. If the simplied
 // dump is requested then a simplified dump is returned. DumpModel uses the
 // DumpModels method on the ModelManager facade.
-func (c Connection) DumpModel(ctx context.Context, tag names.ModelTag, simplified bool) (string, error) {
+func (c *Connection) DumpModel(ctx context.Context, tag names.ModelTag, simplified bool) (string, error) {
 	const op = errors.Op("jujuclient.DumpModel")
 	args := jujuparams.DumpModelRequest{
 		Entities: []jujuparams.Entity{{

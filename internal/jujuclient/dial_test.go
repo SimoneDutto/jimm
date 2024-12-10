@@ -119,3 +119,37 @@ func (s *dialSuite) TestDialWithJWT(c *gc.C) {
 	}
 	c.Check(addrs, gc.DeepEquals, info.Addrs)
 }
+
+func (s *dialSuite) TestDialWithJWT2(c *gc.C) {
+	ctx := context.Background()
+
+	info := s.APIInfo(c)
+	ctl := dbmodel.Controller{
+		UUID:          info.ControllerUUID,
+		Name:          s.ControllerConfig.ControllerName(),
+		CACertificate: info.CACert,
+		PublicAddress: info.Addrs[0],
+	}
+
+	dialer := &jujuclient.Dialer{
+		JWTService: s.JIMM.JWTService,
+	}
+
+	// Check dial is OK
+	api, err := dialer.Dial(ctx, &ctl, names.ModelTag{}, nil)
+	c.Assert(err, gc.Equals, nil)
+	defer api.Close()
+	// Check UUID matches expected
+	c.Check(ctl.UUID, gc.Equals, "deadbeef-1bad-500d-9000-4b1d0d06f00d")
+	// Check agent version matches expected
+	c.Check(ctl.AgentVersion, gc.Equals, jujuversion.Current.String())
+	addrs := make([]string, len(ctl.Addresses))
+	for i, addr := range ctl.Addresses {
+		addrs[i] = fmt.Sprintf("%s:%d", addr[0].Value, addr[0].Port)
+	}
+	c.Check(addrs, gc.DeepEquals, info.Addrs)
+	s.Model.Tag()
+	conf, err := api.DumpModel(ctx, s.Model.Tag().(names.ModelTag), true)
+	c.Assert(err, gc.Equals, nil)
+	fmt.Println(conf)
+}

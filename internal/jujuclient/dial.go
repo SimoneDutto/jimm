@@ -60,7 +60,7 @@ func (d *Dialer) createLoginRequest(ctx context.Context, ctl *dbmodel.Controller
 	if permissions == nil {
 		permissions = make(map[string]string)
 	}
-	permissions[ctl.ResourceTag().String()] = "superuser"
+	permissions[ctl.ResourceTag().String()] = "login"
 	if modelTag.Id() != "" {
 		permissions[modelTag.String()] = "admin"
 	}
