@@ -9,6 +9,7 @@ import (
 	"time"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/frankban/quicktest/qtsuite"
 	"github.com/google/uuid"
 	jujuparams "github.com/juju/juju/rpc/params"
 	"github.com/juju/juju/state"
@@ -18,6 +19,7 @@ import (
 	"github.com/canonical/jimm/v3/internal/dbmodel"
 	"github.com/canonical/jimm/v3/internal/errors"
 	"github.com/canonical/jimm/v3/internal/jimm"
+	"github.com/canonical/jimm/v3/internal/openfga"
 	"github.com/canonical/jimm/v3/internal/testutils/jimmtest"
 )
 
@@ -80,35 +82,45 @@ users:
   controller-access: superuser
 `
 
-func TestPollModelsDying(t *testing.T) {
-	// init
-	c := qt.New(t)
-	ctx := context.Background()
+type modelCleanupSuite struct {
+	jimm       *jimm.JIMM
+	jimmAdmin  *openfga.User
+	ofgaClient *openfga.OFGAClient
+	env        *jimmtest.Environment
+}
 
-	client, _, _, err := jimmtest.SetupTestOFGAClient(c.Name())
+func (s *modelCleanupSuite) Init(c *qt.C) {
+	ctx := context.Background()
+	// Setup DB
+	var err error
+	s.ofgaClient, _, _, err = jimmtest.SetupTestOFGAClient(c.Name())
 	c.Assert(err, qt.IsNil)
-	j := &jimm.JIMM{
+	s.jimm = &jimm.JIMM{
 		UUID:          uuid.NewString(),
-		OpenFGAClient: client,
+		OpenFGAClient: s.ofgaClient,
 		Database: db.Database{
-			DB: jimmtest.PostgresDB(c, nil),
+			DB: jimmtest.PostgresDB(c, time.Now),
 		},
 	}
-	err = j.Database.Migrate(ctx, false)
+	err = s.jimm.Database.Migrate(ctx, false)
 	c.Assert(err, qt.IsNil)
-	jimmAdmin, err := j.GetUser(ctx, "alice@canonical.com")
+	s.jimmAdmin, err = s.jimm.GetUser(ctx, "alice@canonical.com")
 	c.Assert(err, qt.IsNil)
 
-	env := jimmtest.ParseEnvironment(c, modelPollerTestEnv)
-	env.PopulateDBAndPermissions(c, j.ResourceTag(), j.Database, client)
+	s.env = jimmtest.ParseEnvironment(c, modelPollerTestEnv)
+	s.env.PopulateDBAndPermissions(c, s.jimm.ResourceTag(), s.jimm.Database, s.ofgaClient)
+}
 
-	j.Dialer = &jimmtest.Dialer{
+func (s *modelCleanupSuite) TestPollModelsDying(c *qt.C) {
+	ctx := context.Background()
+
+	s.jimm.Dialer = &jimmtest.Dialer{
 		API: &jimmtest.API{
 			ModelInfo_: func(ctx context.Context, mi *jujuparams.ModelInfo) error {
 				switch mi.UUID {
-				case env.Models[0].UUID:
+				case s.env.Models[0].UUID:
 					return errors.E(errors.CodeNotFound)
-				case env.Models[1].UUID:
+				case s.env.Models[1].UUID:
 					return nil
 				default:
 					return errors.E("new error")
@@ -119,54 +131,36 @@ func TestPollModelsDying(t *testing.T) {
 			},
 		},
 	}
-	err = j.DestroyModel(ctx, jimmAdmin, names.NewModelTag(env.Models[0].UUID), nil, nil, nil, nil)
+	err := s.jimm.DestroyModel(ctx, s.jimmAdmin, names.NewModelTag(s.env.Models[0].UUID), nil, nil, nil, nil)
 	c.Assert(err, qt.IsNil)
 
 	// test
-	err = j.CleanupDyingModels(ctx)
+	err = s.jimm.CleanupDyingModels(ctx)
 	c.Assert(err, qt.IsNil)
 
 	model := dbmodel.Model{
 		UUID: sql.NullString{
-			String: env.Models[0].UUID,
+			String: s.env.Models[0].UUID,
 			Valid:  true,
 		},
 	}
-	err = j.DB().GetModel(ctx, &model)
+	err = s.jimm.DB().GetModel(ctx, &model)
 	c.Assert(err, qt.ErrorMatches, "model not found")
 
 	model = dbmodel.Model{
 		UUID: sql.NullString{
-			String: env.Models[1].UUID,
+			String: s.env.Models[1].UUID,
 			Valid:  true,
 		},
 	}
-	err = j.DB().GetModel(ctx, &model)
+	err = s.jimm.DB().GetModel(ctx, &model)
 	c.Assert(err, qt.IsNil)
 }
 
-func TestPollModelsDyingControllerErrors(t *testing.T) {
-	// init
-	c := qt.New(t)
+func (s *modelCleanupSuite) TestPollModelsDyingControllerErrors(c *qt.C) {
 	ctx := context.Background()
 
-	client, _, _, err := jimmtest.SetupTestOFGAClient(c.Name())
-	c.Assert(err, qt.IsNil)
-	j := &jimm.JIMM{
-		UUID:          uuid.NewString(),
-		OpenFGAClient: client,
-		Database: db.Database{
-			DB: jimmtest.PostgresDB(c, nil),
-		},
-	}
-	err = j.Database.Migrate(ctx, false)
-	c.Assert(err, qt.IsNil)
-
-	env := jimmtest.ParseEnvironment(c, modelPollerTestEnv)
-	env.PopulateDBAndPermissions(c, j.ResourceTag(), j.Database, client)
-	jimmAdmin, err := j.GetUser(ctx, "alice@canonical.com")
-	c.Assert(err, qt.IsNil)
-	j.Dialer = &jimmtest.Dialer{
+	s.jimm.Dialer = &jimmtest.Dialer{
 		API: &jimmtest.API{
 			ModelInfo_: func(ctx context.Context, mi *jujuparams.ModelInfo) error {
 				return errors.E("controller not available")
@@ -176,20 +170,24 @@ func TestPollModelsDyingControllerErrors(t *testing.T) {
 			},
 		},
 	}
-	err = j.DestroyModel(ctx, jimmAdmin, names.NewModelTag(env.Models[0].UUID), nil, nil, nil, nil)
+	err := s.jimm.DestroyModel(ctx, s.jimmAdmin, names.NewModelTag(s.env.Models[0].UUID), nil, nil, nil, nil)
 	c.Assert(err, qt.IsNil)
 
 	// test
-	err = j.CleanupDyingModels(ctx)
+	err = s.jimm.CleanupDyingModels(ctx)
 	c.Assert(err, qt.IsNil)
 
 	model := dbmodel.Model{
 		UUID: sql.NullString{
-			String: env.Models[0].UUID,
+			String: s.env.Models[0].UUID,
 			Valid:  true,
 		},
 	}
-	err = j.DB().GetModel(ctx, &model)
+	err = s.jimm.DB().GetModel(ctx, &model)
 	c.Assert(err, qt.IsNil)
 	c.Assert(model.Life, qt.Equals, state.Dying.String())
+}
+
+func TestDyingModelsCleanup(t *testing.T) {
+	qtsuite.Run(qt.New(t), &modelCleanupSuite{})
 }
