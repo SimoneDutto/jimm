@@ -373,6 +373,17 @@ cloud-credentials:
   owner: alice@canonical.com
   cloud: test-cloud
   auth-type: empty
+cloud-defaults:
+- user: alice@canonical.com
+  cloud: test-cloud
+  region: test-region-1
+  defaults:
+    key1: value1
+    key2: value2
+- user: alice@canonical.com
+  cloud: test-cloud
+  defaults:
+    key3: value3
 controllers:
 - name: controller-1
   uuid: 00000000-0000-0000-0000-0000-0000000000001
@@ -397,7 +408,11 @@ controllers:
 	grantJIMMModelAdmin: func(_ context.Context, _ names.ModelTag) error {
 		return nil
 	},
-	createModel: createModel(`
+	createModel: assertConfig(map[string]interface{}{
+		"key1": "value1",
+		"key2": "value2",
+		"key3": "value3",
+	}, createModel(`
 uuid: 00000001-0000-0000-0000-0000-000000000001
 status:
   status: started
@@ -408,7 +423,7 @@ users:
   access: admin
 - user: bob
   access: read
-`[1:]),
+`[1:])),
 	username:  "alice@canonical.com",
 	jimmAdmin: true,
 	args: jujuparams.ModelCreateArgs{
@@ -884,10 +899,12 @@ cloud-defaults:
   defaults:
     key1: value1
     key2: value2
+    key4: value4
 - user: alice@canonical.com
   cloud: test-cloud
   defaults:
     key3: value3
+    key4: val5
 cloud-credentials:
 - name: test-credential-1
   owner: alice@canonical.com
@@ -917,7 +934,12 @@ controllers:
 	grantJIMMModelAdmin: func(_ context.Context, _ names.ModelTag) error {
 		return nil
 	},
-	createModel: createModel(`
+	createModel: assertConfig(map[string]interface{}{
+		"key1": "value1",
+		"key2": "value2",
+		"key3": "value3",
+		"key4": "value4",
+	}, createModel(`
 uuid: 00000001-0000-0000-0000-0000-000000000001
 status:
   status: started
@@ -928,7 +950,7 @@ users:
   access: admin
 - user: bob
   access: read
-`[1:]),
+`[1:])),
 	username:  "alice@canonical.com",
 	jimmAdmin: true,
 	args: jujuparams.ModelCreateArgs{
