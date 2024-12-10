@@ -28,19 +28,19 @@ func (j *JIMM) CleanupDyingModels(ctx context.Context) error {
 		// And safely delete the reference from our db.
 		api, err := j.dialController(ctx, &m.Controller)
 		if err != nil {
-			zapctx.Error(ctx, fmt.Sprintf("Cannot dial controller %s: %s\n", m.Controller.UUID, err))
+			zapctx.Error(ctx, fmt.Sprintf("cannot dial controller %s: %s\n", m.Controller.UUID, err))
 			return nil
 		}
 		if err := api.ModelInfo(ctx, &jujuparams.ModelInfo{UUID: m.UUID.String}); err != nil {
 			// Some versions of juju return unauthorized for models that cannot be found.
 			if errors.ErrorCode(err) == errors.CodeNotFound || errors.ErrorCode(err) == errors.CodeUnauthorized {
 				if err := j.DB().DeleteModel(ctx, m); err != nil {
-					zapctx.Error(ctx, fmt.Sprintf("Cannot delete model %s: %s\n", m.UUID.String, err))
+					zapctx.Error(ctx, fmt.Sprintf("cannot delete model %s: %s\n", m.UUID.String, err))
 				} else {
 					return nil
 				}
 			} else {
-				zapctx.Error(ctx, fmt.Sprintf("Cannot get ModelInfo for model %s: %s\n", m.UUID.String, err))
+				zapctx.Error(ctx, fmt.Sprintf("cannot get ModelInfo for model %s: %s\n", m.UUID.String, err))
 				return nil
 			}
 		}
