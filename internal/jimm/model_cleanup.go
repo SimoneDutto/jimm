@@ -22,7 +22,6 @@ func (j *JIMM) CleanupDyingModels(ctx context.Context) (err error) {
 	zapctx.Info(ctx, string(op))
 	durationObserver := servermon.DurationObserver(servermon.JimmMethodsDurationHistogram, string(op))
 	defer durationObserver()
-	defer servermon.ErrorCounter(servermon.DBQueryErrorCount, &err, string(op))
 
 	err = j.DB().ForEachModel(ctx, func(m *dbmodel.Model) error {
 		if m.Life != state.Dying.String() {

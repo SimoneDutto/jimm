@@ -729,7 +729,6 @@ func (j *JIMM) OpenFGACleanup(ctx context.Context) (err error) {
 	zapctx.Info(ctx, string(op))
 	durationObserver := servermon.DurationObserver(servermon.JimmMethodsDurationHistogram, string(op))
 	defer durationObserver()
-	defer servermon.ErrorCounter(servermon.DBQueryErrorCount, &err, string(op))
 	var (
 		continuationToken string
 		tuples            []ofga.Tuple
