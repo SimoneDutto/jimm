@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# This script generates database schemas from our running postgres deployment docker compose.
+# Its purpose is to better inspect raw SQL generating our db models.
+
 # Configuration
 DB_CONTAINER="postgres"   
 SCHEMA="public"           

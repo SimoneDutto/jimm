@@ -25,6 +25,7 @@ lint:
 check: version/commit.txt version/version.txt lint
 	go test -timeout 30m $(PROJECT)/... -cover
 
+# generates database schemas locally to inspect them.
 generate-schemas:
 	@./local/jimm/generate_db_schemas.sh
 
