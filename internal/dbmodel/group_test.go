@@ -37,7 +37,8 @@ func TestGroupEntry(t *testing.T) {
 	c.Assert(ge3, qt.DeepEquals, ge)
 }
 
-func TestDeleteGroupEntry(t *testing.T) {
+// test we hard delete groups
+func TestHardDeleteGroupEntry(t *testing.T) {
 	c := qt.New(t)
 	db := gormDB(t)
 
