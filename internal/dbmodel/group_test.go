@@ -36,3 +36,19 @@ func TestGroupEntry(t *testing.T) {
 	c.Assert(result.Error, qt.IsNil)
 	c.Assert(ge3, qt.DeepEquals, ge)
 }
+
+func TestDeleteGroupEntry(t *testing.T) {
+	c := qt.New(t)
+	db := gormDB(t)
+
+	ge := dbmodel.GroupEntry{
+		Name: "test-group-1",
+	}
+	c.Assert(db.Create(&ge).Error, qt.IsNil)
+	c.Assert(ge.ID, qt.Equals, uint(1))
+
+	c.Assert(db.Delete(ge).Error, qt.IsNil)
+
+	result := db.First(&ge)
+	c.Assert(result.Error, qt.ErrorMatches, "record not found")
+}
