@@ -37,7 +37,7 @@ func TestGroupEntry(t *testing.T) {
 	c.Assert(ge3, qt.DeepEquals, ge)
 }
 
-// test we hard delete groups, so when we can recreate the group with the same name after deleting it.
+// TestHardDeleteGroupEntry tests hard delete of groups, to make sure we can create a group with the same name after deleting it.
 func TestHardDeleteGroupEntry(t *testing.T) {
 	c := qt.New(t)
 	db := gormDB(t)
