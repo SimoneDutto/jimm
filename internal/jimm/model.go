@@ -9,8 +9,10 @@ import (
 	"math/rand"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/juju/juju/api/base"
 	jujupermission "github.com/juju/juju/core/permission"
 	jujuparams "github.com/juju/juju/rpc/params"
 	"github.com/juju/juju/state"
@@ -733,16 +735,103 @@ func (j *JIMM) ModelInfo(ctx context.Context, user *openfga.User, mt names.Model
 	return j.mergeModelInfo(ctx, user, mi, m)
 }
 
+// modelSummariesMap is a safe map to add records concurrently because the access is guarded by a Mutex.
+// The read operations are not guarded because only inserts are done concurrently.
+type modelSummariesMap struct {
+	mu             sync.Mutex
+	modelSummaries map[string]jujuparams.ModelSummaryResult
+}
+
+func (m *modelSummariesMap) addModelSummary(summary jujuparams.ModelSummaryResult) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.modelSummaries == nil {
+		m.modelSummaries = make(map[string]jujuparams.ModelSummaryResult)
+	}
+	m.modelSummaries[summary.Result.UUID] = summary
+}
+
+// ListModelSummaries returns the list of modelsummary the user has access to.
+// It queries the controllers and then merge the info from the JIMM db.
+func (j *JIMM) ListModelSummaries(ctx context.Context, user *openfga.User, maskingControllerUUID string) (jujuparams.ModelSummaryResults, error) {
+	const op = errors.Op("jimm.ListModelSummaries")
+
+	modelSummariesSafeMap := modelSummariesMap{}
+	modelSummaryResults := []jujuparams.ModelSummaryResult{}
+
+	var models []struct {
+		model      *dbmodel.Model
+		userAccess jujuparams.UserAccessPermission
+	}
+	// we collect models belonging to the user and we extract the unique controllers.
+	var uniqueControllers []dbmodel.Controller
+	uniqueControllerMap := make(map[string]struct{}, 0)
+	err := j.ForEachUserModel(ctx, user, func(m *dbmodel.Model, uap jujuparams.UserAccessPermission) error {
+		models = append(models, struct {
+			model      *dbmodel.Model
+			userAccess jujuparams.UserAccessPermission
+		}{model: m, userAccess: uap})
+
+		if _, ok := uniqueControllerMap[m.Controller.UUID]; !ok {
+			uniqueControllers = append(uniqueControllers, m.Controller)
+			uniqueControllerMap[m.Controller.UUID] = struct{}{}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return jujuparams.ModelSummaryResults{}, errors.E(op, err)
+	}
+
+	// we query the model summaries for each controller
+	err = j.forEachController(ctx, uniqueControllers, func(c *dbmodel.Controller, a API) error {
+		results, err := a.ListModelSummaries(ctx, jujuparams.ModelSummariesRequest{All: true})
+		if err != nil {
+			return err
+		}
+		for _, res := range results.Results {
+			modelSummariesSafeMap.addModelSummary(res)
+		}
+		return nil
+	})
+	if err != nil {
+		// we log the error and continue, because even if one controller is not reachable we are still able to fill the response.
+		zapctx.Error(ctx, "Error querying the controllers for model summaries", zap.Error(err))
+	}
+
+	// we map models to modelsummaries
+	for _, m := range models {
+		modelSummaryFromController, ok := modelSummariesSafeMap.modelSummaries[m.model.UUID.String]
+		modelSummaryResult := m.model.MergeModelSummaryFromController(modelSummaryFromController.Result, maskingControllerUUID, m.userAccess)
+		if modelSummaryFromController.Error != nil {
+			modelSummaryResults = append(modelSummaryResults, jujuparams.ModelSummaryResult{
+				Result: &modelSummaryResult,
+				Error:  modelSummaryFromController.Error,
+			})
+			continue
+		}
+		if !ok {
+			// if model was not found in any controller we mark it as anavailable
+			modelSummaryResult.Status.Status = "unavailable"
+		}
+		modelSummaryResults = append(modelSummaryResults, jujuparams.ModelSummaryResult{
+			Result: &modelSummaryResult,
+		})
+	}
+	return jujuparams.ModelSummaryResults{
+		Results: modelSummaryResults,
+	}, nil
+}
+
 // mergeModelInfo replaces fields on the juju model info object with
 // information from JIMM where JIMM specific information should be used.
 func (j *JIMM) mergeModelInfo(ctx context.Context, user *openfga.User, modelInfo *jujuparams.ModelInfo, jimmModel dbmodel.Model) (*jujuparams.ModelInfo, error) {
 	const op = errors.Op("jimm.mergeModelInfo")
 	zapctx.Info(ctx, string(op))
 
-	jimmSummary := jimmModel.ToJujuModelSummary()
-	modelInfo.CloudCredentialTag = jimmSummary.CloudCredentialTag
-	modelInfo.ControllerUUID = jimmSummary.ControllerUUID
-	modelInfo.OwnerTag = jimmSummary.OwnerTag
+	modelInfo.CloudCredentialTag = jimmModel.CloudCredential.Tag().String()
+	modelInfo.ControllerUUID = jimmModel.Controller.UUID
+	modelInfo.OwnerTag = jimmModel.Owner.Tag().String()
 
 	userAccess := make(map[string]string)
 
@@ -986,10 +1075,10 @@ func (j *JIMM) RevokeModelAccess(ctx context.Context, user *openfga.User, mt nam
 		return errors.E(op, errors.CodeBadRequest, fmt.Sprintf("failed to recognize given access: %q", access), err)
 	}
 
-	requiredAccess := "admin"
+	requiredAccess := ofganames.AdministratorRelation
 	if user.Tag() == ut {
 		// If the user is attempting to revoke their own access.
-		requiredAccess = "read"
+		requiredAccess = ofganames.ReaderRelation
 	}
 
 	err = j.doModel(ctx, user, mt, requiredAccess, func(_ *dbmodel.Model, _ API) error {
@@ -1065,15 +1154,21 @@ func (j *JIMM) DestroyModel(ctx context.Context, user *openfga.User, mt names.Mo
 	zapctx.Info(ctx, string(op))
 
 	err := j.doModelAdmin(ctx, user, mt, func(m *dbmodel.Model, api API) error {
-		if err := api.DestroyModel(ctx, mt, destroyStorage, force, maxWait, timeout); err != nil {
-			return err
-		}
 		m.Life = state.Dying.String()
 		if err := j.Database.UpdateModel(ctx, m); err != nil {
-			// If the database fails to update don't worry too much the
-			// monitor should catch it.
 			zapctx.Error(ctx, "failed to store model change", zaputil.Error(err))
+			return err
 		}
+		if err := api.DestroyModel(ctx, mt, destroyStorage, force, maxWait, timeout); err != nil {
+			zapctx.Error(ctx, "failed to call DestroyModel juju api", zaputil.Error(err))
+			// this is a manual way of restoring the life state to alive if the JUJU api fails.
+			m.Life = state.Alive.String()
+			if uerr := j.Database.UpdateModel(ctx, m); uerr != nil {
+				zapctx.Error(ctx, "failed to store model change", zaputil.Error(uerr))
+			}
+			return err
+		}
+
 		return nil
 	})
 	if err != nil {
@@ -1159,7 +1254,7 @@ func (j *JIMM) ValidateModelUpgrade(ctx context.Context, user *openfga.User, mt 
 // returned from the dial operation. If the given function returns an error
 // that error will be returned with the code unmasked.
 func (j *JIMM) doModelAdmin(ctx context.Context, user *openfga.User, mt names.ModelTag, f func(*dbmodel.Model, API) error) error {
-	return j.doModel(ctx, user, mt, "admin", f)
+	return j.doModel(ctx, user, mt, ofganames.AdministratorRelation, f)
 }
 
 // GetUserModelAccess returns the access level a user has against a specific model.
@@ -1168,7 +1263,7 @@ func (j *JIMM) GetUserModelAccess(ctx context.Context, user *openfga.User, model
 	return ToModelAccessString(accessLevel), nil
 }
 
-func (j *JIMM) doModel(ctx context.Context, user *openfga.User, mt names.ModelTag, access string, f func(*dbmodel.Model, API) error) error {
+func (j *JIMM) doModel(ctx context.Context, user *openfga.User, mt names.ModelTag, requireRelation openfga.Relation, f func(*dbmodel.Model, API) error) error {
 	const op = errors.Op("jimm.doModel")
 	zapctx.Info(ctx, string(op))
 
@@ -1179,11 +1274,12 @@ func (j *JIMM) doModel(ctx context.Context, user *openfga.User, mt names.ModelTa
 		return errors.E(op, err)
 	}
 
-	accessLevel, err := j.GetUserModelAccess(ctx, user, mt)
+	hasAccess, err := user.HasModelRelation(ctx, mt, requireRelation)
 	if err != nil {
 		return errors.E(op, err)
 	}
-	if !allowedModelAccess[access][accessLevel] {
+
+	if !hasAccess {
 		// If the user doesn't have correct access on the model return
 		// an unauthorized error.
 		return errors.E(op, errors.CodeUnauthorized, "unauthorized")
@@ -1198,21 +1294,6 @@ func (j *JIMM) doModel(ctx context.Context, user *openfga.User, mt names.ModelTa
 		return errors.E(op, err)
 	}
 	return nil
-}
-
-var allowedModelAccess = map[string]map[string]bool{
-	"admin": {
-		"admin": true,
-	},
-	"write": {
-		"admin": true,
-		"write": true,
-	},
-	"read": {
-		"admin": true,
-		"write": true,
-		"read":  true,
-	},
 }
 
 // ChangeModelCredential changes the credential used with a model on both
@@ -1259,4 +1340,74 @@ func (j *JIMM) ChangeModelCredential(ctx context.Context, user *openfga.User, mo
 	}
 
 	return nil
+}
+
+// ListModels list the models that the user has access to. It intentionally excludes the
+// controller model as this call is used within the context of login and register commands.
+func (j *JIMM) ListModels(ctx context.Context, user *openfga.User) ([]base.UserModel, error) {
+	const op = errors.Op("jimm.ListModels")
+	zapctx.Info(ctx, string(op))
+
+	// Get uuids of models the user has access to
+	uuids, err := user.ListModels(ctx, ofganames.ReaderRelation)
+	if err != nil {
+		return nil, errors.E(op, err, "failed to list user models")
+	}
+
+	// Get the models from the database
+	models, err := j.DB().GetModelsByUUID(ctx, uuids)
+	if err != nil {
+		return nil, errors.E(op, err, "failed to get models by uuid")
+	}
+
+	// Create map for lookup later
+	modelsMap := make(map[string]dbmodel.Model)
+	// Find the controllers these models reside on and remove duplicates
+	var controllers []dbmodel.Controller
+	seen := make(map[uint]bool)
+	for _, model := range models {
+		modelsMap[model.UUID.String] = model // Set map for lookup
+		if seen[model.ControllerID] {
+			continue
+		}
+		seen[model.ControllerID] = true
+		controllers = append(controllers, model.Controller)
+	}
+
+	// Call controllers for their models. We always call as admin, and we're
+	// filtering ourselves. We do this rather than send the user to be 100%
+	// certain that the models do belong to user according to OpenFGA. We could
+	// in theory rely on Juju correctly returning the models (by owner), but this
+	// is more reliable.
+	var userModels []base.UserModel
+	var mutex sync.Mutex
+	err = j.forEachController(ctx, controllers, func(_ *dbmodel.Controller, api API) error {
+		ums, err := api.ListModels(ctx)
+		if err != nil {
+			return err
+		}
+		mutex.Lock()
+		defer mutex.Unlock()
+
+		// Filter the models returned according to the uuids
+		// returned from OpenFGA for read access.
+		//
+		// NOTE: Controller models are not included because we never relate
+		// controller models to users, and as such, they will not appear in the
+		// authorised uuid map.
+		for _, um := range ums {
+			mapModel, ok := modelsMap[um.UUID]
+			if !ok {
+				continue
+			}
+			um.Owner = mapModel.OwnerIdentityName
+			userModels = append(userModels, um)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, errors.E(op, err, "failed to list models")
+	}
+
+	return userModels, nil
 }

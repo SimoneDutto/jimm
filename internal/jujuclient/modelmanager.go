@@ -7,6 +7,8 @@ import (
 	"time"
 
 	jujuerrors "github.com/juju/errors"
+	"github.com/juju/juju/api/base"
+	"github.com/juju/juju/api/client/modelmanager"
 	jujuparams "github.com/juju/juju/rpc/params"
 	"github.com/juju/names/v5"
 
@@ -208,6 +210,22 @@ func (c Connection) ControllerModelSummary(ctx context.Context, ms *jujuparams.M
 	return errors.E(op, "controller model not found", errors.CodeNotFound)
 }
 
+// ListModelSummaries retrieves the list of model summaries from the controler
+func (c Connection) ListModelSummaries(ctx context.Context, ms jujuparams.ModelSummariesRequest) (jujuparams.ModelSummaryResults, error) {
+	const op = errors.Op("jujuclient.ControllerModelSummary")
+	args := jujuparams.ModelSummariesRequest{
+		UserTag: c.userTag,
+		All:     ms.All,
+	}
+	var resp jujuparams.ModelSummaryResults
+	err := c.Call(ctx, "ModelManager", 9, "", "ListModelSummaries", &args, &resp)
+	if err != nil {
+		return jujuparams.ModelSummaryResults{}, errors.E(op, jujuerrors.Cause(err))
+	}
+
+	return resp, nil
+}
+
 // ValidateModelUpgrade validates if a model is allowed to perform an upgrade. It
 // uses ValidateModelUpgrades on the ModelManager facade.
 func (c Connection) ValidateModelUpgrade(ctx context.Context, model names.ModelTag, force bool) error {
@@ -308,4 +326,13 @@ func (c Connection) ChangeModelCredential(ctx context.Context, model names.Model
 		return errors.E(op, err)
 	}
 	return out.OneError()
+}
+
+// ListModels returns UserModel's for the user that is logged in. If the user logged
+// in is "admin" they may specify another user's models.
+//
+// In our wrapper, we ask as the controller admin. So expect ALL models from
+// the controller.
+func (c Connection) ListModels(ctx context.Context) ([]base.UserModel, error) {
+	return modelmanager.NewClient(&c).ListModels("admin")
 }
