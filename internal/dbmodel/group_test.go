@@ -37,7 +37,7 @@ func TestGroupEntry(t *testing.T) {
 	c.Assert(ge3, qt.DeepEquals, ge)
 }
 
-// test we hard delete groups
+// test we hard delete groups, so when we can recreate the group with the same name after deleting it.
 func TestHardDeleteGroupEntry(t *testing.T) {
 	c := qt.New(t)
 	db := gormDB(t)
@@ -52,4 +52,9 @@ func TestHardDeleteGroupEntry(t *testing.T) {
 
 	result := db.First(&ge)
 	c.Assert(result.Error, qt.ErrorMatches, "record not found")
+
+	ge1 := dbmodel.GroupEntry{
+		Name: "test-group-1",
+	}
+	c.Assert(db.Create(&ge1).Error, qt.IsNil)
 }
