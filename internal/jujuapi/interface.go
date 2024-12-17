@@ -1,8 +1,15 @@
+// Copyright 2024 Canonical.
+
 package jujuapi
 
 import (
 	"context"
 	"time"
+
+	"github.com/go-macaroon-bakery/macaroon-bakery/v3/bakery"
+	"github.com/juju/juju/api/base"
+	jujuparams "github.com/juju/juju/rpc/params"
+	"github.com/juju/names/v5"
 
 	"github.com/canonical/jimm/v3/internal/common/pagination"
 	"github.com/canonical/jimm/v3/internal/db"
@@ -13,12 +20,9 @@ import (
 	ofganames "github.com/canonical/jimm/v3/internal/openfga/names"
 	"github.com/canonical/jimm/v3/internal/pubsub"
 	jimmnames "github.com/canonical/jimm/v3/pkg/names"
-	"github.com/go-macaroon-bakery/macaroon-bakery/v3/bakery"
-	"github.com/juju/juju/api/base"
-	jujuparams "github.com/juju/juju/rpc/params"
-	"github.com/juju/names/v5"
 )
 
+// JIMM defines a comprehensive interface for all sort of operations with our application logic.
 type JIMM interface {
 	RelationService
 	ControllerService
@@ -59,6 +63,7 @@ type JIMM interface {
 	InitiateMigration(ctx context.Context, user *openfga.User, spec jujuparams.MigrationSpec) (jujuparams.InitiateMigrationResult, error)
 	ListApplicationOffers(ctx context.Context, user *openfga.User, filters ...jujuparams.OfferFilter) ([]jujuparams.ApplicationOfferAdminDetailsV5, error)
 	ListIdentities(ctx context.Context, user *openfga.User, pagination pagination.LimitOffsetPagination, match string) ([]openfga.User, error)
+	ListModels(ctx context.Context, user *openfga.User) ([]base.UserModel, error)
 	ListResources(ctx context.Context, user *openfga.User, filter pagination.LimitOffsetPagination, namePrefixFilter, typeFilter string) ([]db.Resource, error)
 	Offer(ctx context.Context, user *openfga.User, offer jimm.AddApplicationOfferParams) error
 	PubSubHub() *pubsub.Hub
@@ -76,5 +81,4 @@ type JIMM interface {
 	UpdateCloud(ctx context.Context, u *openfga.User, ct names.CloudTag, cloud jujuparams.Cloud) error
 	UpdateCloudCredential(ctx context.Context, u *openfga.User, args jimm.UpdateCloudCredentialArgs) ([]jujuparams.UpdateCredentialModelResult, error)
 	UserLogin(ctx context.Context, identityName string) (*openfga.User, error)
-	ListModels(ctx context.Context, user *openfga.User) ([]base.UserModel, error)
 }
