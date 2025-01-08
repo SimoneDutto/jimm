@@ -1,4 +1,4 @@
-// Copyright 2024 Canonical.
+// Copyright 2025 Canonical.
 
 package jimmtest
 
@@ -143,6 +143,7 @@ type API struct {
 	GrantModelAccess_                  func(context.Context, names.ModelTag, names.UserTag, jujuparams.UserAccessPermission) error
 	IsBroken_                          bool
 	ListApplicationOffers_             func(context.Context, []jujuparams.OfferFilter) ([]jujuparams.ApplicationOfferAdminDetailsV5, error)
+	ListCloudInfo_                     func(context.Context, jujuparams.ListCloudsRequest) (jujuparams.ListCloudInfoResults, error)
 	ModelInfo_                         func(context.Context, *jujuparams.ModelInfo) error
 	ModelStatus_                       func(context.Context, *jujuparams.ModelStatus) error
 	ModelSummaryWatcherNext_           func(context.Context, string) ([]jujuparams.ModelAbstract, error)
@@ -310,6 +311,13 @@ func (a *API) ListApplicationOffers(ctx context.Context, f []jujuparams.OfferFil
 		return nil, errors.E(errors.CodeNotImplemented)
 	}
 	return a.ListApplicationOffers_(ctx, f)
+}
+
+func (a *API) ListCloudInfo(ctx context.Context, args jujuparams.ListCloudsRequest) (jujuparams.ListCloudInfoResults, error) {
+	if a.ListCloudInfo_ == nil {
+		return jujuparams.ListCloudInfoResults{}, errors.E(errors.CodeNotImplemented)
+	}
+	return a.ListCloudInfo_(ctx, args)
 }
 
 func (a *API) ModelInfo(ctx context.Context, mi *jujuparams.ModelInfo) error {

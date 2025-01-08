@@ -479,6 +479,9 @@ type API interface {
 	// Clouds returns the set of clouds supported by the controller.
 	Clouds(context.Context) (map[names.CloudTag]jujuparams.Cloud, error)
 
+	// ListCloudInfo returns the list of cloud information supported by the controller.
+	ListCloudInfo(context.Context, jujuparams.ListCloudsRequest) (jujuparams.ListCloudInfoResults, error)
+
 	// ControllerModelSummary fetches the model summary of the model on the
 	// controller that hosts the controller machines.
 	ControllerModelSummary(context.Context, *jujuparams.ModelSummary) error
@@ -631,6 +634,27 @@ func (j *JIMM) forEachController(ctx context.Context, controllers []dbmodel.Cont
 		})
 	}
 	return eg.Wait()
+}
+
+func (j *JIMM) firstSuccessfulController(ctx context.Context, controllers []dbmodel.Controller, f func(API) error) error {
+	const op = errors.Op("jimm.firstSuccessfulController")
+
+	for i, _ := range controllers {
+		api, err := j.dial(ctx, &controllers[i], names.ModelTag{})
+		if err != nil {
+			zapctx.Error(ctx, "error dialing controller", zap.Error(err))
+			continue
+		}
+		defer api.Close()
+		err = f(api)
+		if err != nil {
+			zapctx.Error(ctx, "error dialing controller", zap.Error(err))
+			continue
+		}
+		return nil
+	}
+	zapctx.Error(ctx, "error dialing all controllers")
+	return errors.E(op, "error dialing all controllers")
 }
 
 // addAuditLogEntry causes an entry to be added the the audit log.

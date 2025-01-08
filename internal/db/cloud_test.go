@@ -1,4 +1,4 @@
-// Copyright 2024 Canonical.
+// Copyright 2025 Canonical.
 
 package db_test
 
@@ -29,15 +29,11 @@ func (s *dbSuite) TestAddCloud(c *qt.C) {
 	ctx := context.Background()
 
 	cl := dbmodel.Cloud{
-		Name:             "test-cloud",
-		Type:             "test-provider",
-		Endpoint:         "https://example.com",
-		IdentityEndpoint: "https://identity.example.com",
-		StorageEndpoint:  "https://storage.example.com",
+		Name: "test-cloud",
+		Type: "test-provider",
 		Regions: []dbmodel.CloudRegion{{
 			Name: "test-cloud-region",
 		}},
-		CACertificates: dbmodel.Strings{"CACERT 1", "CACERT 2"},
 	}
 
 	err := s.Database.AddCloud(ctx, &cl)
@@ -90,15 +86,11 @@ func (s *dbSuite) TestGetCloud(c *qt.C) {
 	c.Check(errors.ErrorCode(err), qt.Equals, errors.CodeNotFound)
 
 	cl2 := dbmodel.Cloud{
-		Name:             "test-cloud",
-		Type:             "test-provider",
-		Endpoint:         "https://example.com",
-		IdentityEndpoint: "https://identity.example.com",
-		StorageEndpoint:  "https://storage.example.com",
+		Name: "test-cloud",
+		Type: "test-provider",
 		Regions: []dbmodel.CloudRegion{{
 			Name: "test-cloud-region",
 		}},
-		CACertificates: dbmodel.Strings{"CACERT 1", "CACERT 2"},
 	}
 
 	err = s.Database.AddCloud(ctx, &cl2)
@@ -131,15 +123,11 @@ func (s *dbSuite) TestGetClouds(c *qt.C) {
 	c.Check(clouds, qt.HasLen, 0)
 
 	cl := dbmodel.Cloud{
-		Name:             "test-cloud",
-		Type:             "test-provider",
-		Endpoint:         "https://example.com",
-		IdentityEndpoint: "https://identity.example.com",
-		StorageEndpoint:  "https://storage.example.com",
+		Name: "test-cloud",
+		Type: "test-provider",
 		Regions: []dbmodel.CloudRegion{{
 			Name: "test-cloud-region",
 		}},
-		CACertificates: dbmodel.Strings{"CACERT 1", "CACERT 2"},
 	}
 
 	err = s.Database.AddCloud(ctx, &cl)
@@ -163,15 +151,11 @@ func (s *dbSuite) TestUpdateCloud(c *qt.C) {
 	ctx := context.Background()
 
 	cl := dbmodel.Cloud{
-		Name:             "test-cloud",
-		Type:             "test-provider",
-		Endpoint:         "https://example.com",
-		IdentityEndpoint: "https://identity.example.com",
-		StorageEndpoint:  "https://storage.example.com",
+		Name: "test-cloud",
+		Type: "test-provider",
 		Regions: []dbmodel.CloudRegion{{
 			Name: "test-cloud-region",
 		}},
-		CACertificates: dbmodel.Strings{"CACERT 1", "CACERT 2"},
 	}
 
 	err := s.Database.UpdateCloud(ctx, &cl)
@@ -191,9 +175,6 @@ func (s *dbSuite) TestUpdateCloud(c *qt.C) {
 	c.Assert(err, qt.IsNil)
 	c.Check(cl2, jimmtest.DBObjectEquals, cl)
 
-	cl2.Endpoint = "https://new.example.com"
-	cl2.IdentityEndpoint = "https://new.identity.example.com"
-	cl2.StorageEndpoint = "https://new.storage.example.com"
 	cl2.Regions = append(cl2.Regions, dbmodel.CloudRegion{
 		Name:             "test-cloud-region-2",
 		Endpoint:         "https://new.region.example.com",
@@ -327,15 +308,11 @@ func (s *dbSuite) TestDeleteCloud(c *qt.C) {
 	ctx := context.Background()
 
 	cl := dbmodel.Cloud{
-		Name:             "test-cloud",
-		Type:             "test-provider",
-		Endpoint:         "https://example.com",
-		IdentityEndpoint: "https://identity.example.com",
-		StorageEndpoint:  "https://storage.example.com",
+		Name: "test-cloud",
+		Type: "test-provider",
 		Regions: []dbmodel.CloudRegion{{
 			Name: "test-cloud-region",
 		}},
-		CACertificates: dbmodel.Strings{"CACERT 1", "CACERT 2"},
 	}
 
 	err := s.Database.DeleteCloud(ctx, &cl)

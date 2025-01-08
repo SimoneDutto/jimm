@@ -1,4 +1,4 @@
-// Copyright 2024 Canonical.
+// Copyright 2025 Canonical.
 
 package dbmodel_test
 
@@ -37,18 +37,9 @@ func TestCloud(t *testing.T) {
 	c.Check(result.Error, qt.Equals, gorm.ErrRecordNotFound)
 
 	cl1 := dbmodel.Cloud{
-		Name:             "test-cloud",
-		Type:             "test-provider",
-		HostCloudRegion:  "test-cloud/test-region",
-		Endpoint:         "https://cloud.example.com",
-		IdentityEndpoint: "https://identity.cloud.example.com",
-		StorageEndpoint:  "https://storage.cloud.example.com",
-		CACertificates:   dbmodel.Strings{"cert1", "cert2"},
-		Config: dbmodel.Map{
-			"k1": float64(1),
-			"k2": "A",
-			"k3": map[string]interface{}{"k": []interface{}{"v"}},
-		},
+		Name:            "test-cloud",
+		Type:            "test-provider",
+		HostCloudRegion: "test-cloud/test-region",
 	}
 	result = db.Create(&cl1)
 	c.Assert(result.Error, qt.IsNil)
@@ -58,11 +49,6 @@ func TestCloud(t *testing.T) {
 	result = db.Where("name = ?", "test-cloud").First(&cl2)
 	c.Assert(result.Error, qt.IsNil)
 	c.Check(cl2, qt.DeepEquals, cl1)
-
-	cl2.CACertificates = dbmodel.Strings{"cert2", "cert3"}
-	result = db.Save(&cl2)
-	c.Assert(result.Error, qt.IsNil)
-	c.Check(result.RowsAffected, qt.Equals, int64(1))
 
 	var cl3 dbmodel.Cloud
 	result = db.Where("name = ?", "test-cloud").First(&cl3)
@@ -74,63 +60,6 @@ func TestCloud(t *testing.T) {
 	}
 	result = db.Create(&cl4)
 	c.Check(result.Error, qt.ErrorMatches, `.*violates unique constraint "clouds_name_key".*`)
-}
-
-func TestToJujuCloud(t *testing.T) {
-	c := qt.New(t)
-
-	cl := dbmodel.Cloud{
-		Name:             "test-cloud",
-		Type:             "test-provider",
-		HostCloudRegion:  "test-cloud/test-region",
-		Endpoint:         "https://cloud.example.com",
-		IdentityEndpoint: "https://identity.cloud.example.com",
-		StorageEndpoint:  "https://storage.cloud.example.com",
-		CACertificates:   dbmodel.Strings{"cert1", "cert2"},
-		Regions: []dbmodel.CloudRegion{{
-			Name:             "test-region",
-			Endpoint:         "https://region.example.com",
-			IdentityEndpoint: "https://identity.region.example.com",
-			StorageEndpoint:  "https://storage.region.example.com",
-			Config: dbmodel.Map{
-				"k1": float64(2),
-				"k2": "B",
-				"k3": map[string]interface{}{"k": []interface{}{"V"}},
-			},
-		}},
-		Config: dbmodel.Map{
-			"k1": float64(1),
-			"k2": "A",
-			"k3": map[string]interface{}{"k": []interface{}{"v"}},
-		},
-	}
-	pc := cl.ToJujuCloud()
-	c.Check(pc, qt.DeepEquals, jujuparams.Cloud{
-		Type:             "test-provider",
-		HostCloudRegion:  "test-cloud/test-region",
-		Endpoint:         "https://cloud.example.com",
-		IdentityEndpoint: "https://identity.cloud.example.com",
-		StorageEndpoint:  "https://storage.cloud.example.com",
-		Regions: []jujuparams.CloudRegion{{
-			Name:             "test-region",
-			Endpoint:         "https://region.example.com",
-			IdentityEndpoint: "https://identity.region.example.com",
-			StorageEndpoint:  "https://storage.region.example.com",
-		}},
-		CACertificates: []string{"cert1", "cert2"},
-		Config: map[string]interface{}{
-			"k1": float64(1),
-			"k2": "A",
-			"k3": map[string]interface{}{"k": []interface{}{string("v")}},
-		},
-		RegionConfig: map[string]map[string]interface{}{
-			"test-region": {
-				"k1": float64(2),
-				"k2": "B",
-				"k3": map[string]interface{}{"k": []interface{}{string("V")}},
-			},
-		},
-	})
 }
 
 func TestFromJujuCloud(t *testing.T) {
@@ -170,13 +99,9 @@ func TestFromJujuCloud(t *testing.T) {
 
 	cl.FromJujuCloud(jcld)
 	c.Check(cl, qt.DeepEquals, dbmodel.Cloud{
-		Name:             "test-cloud",
-		Type:             "test-provider",
-		HostCloudRegion:  "test-cloud/test-region",
-		AuthTypes:        dbmodel.Strings{"empty"},
-		Endpoint:         "https://cloud.example.com",
-		IdentityEndpoint: "https://identity.cloud.example.com",
-		StorageEndpoint:  "https://storage.cloud.example.com",
+		Name:            "test-cloud",
+		Type:            "test-provider",
+		HostCloudRegion: "test-cloud/test-region",
 		Regions: []dbmodel.CloudRegion{{
 			Name:             "test-region",
 			Endpoint:         "https://region.example.com",
@@ -188,75 +113,7 @@ func TestFromJujuCloud(t *testing.T) {
 				"k3": map[string]interface{}{"k": []interface{}{string("V")}},
 			},
 		}},
-		CACertificates: dbmodel.Strings{"cert1", "cert2"},
-		Config: dbmodel.Map{
-			"k1": float64(1),
-			"k2": "A",
-			"k3": map[string]interface{}{"k": []interface{}{string("v")}},
-		},
 	})
-}
-
-func TestToJujuCloudInfo(t *testing.T) {
-	c := qt.New(t)
-
-	cl := dbmodel.Cloud{
-		Name:             "test-cloud",
-		Type:             "test-provider",
-		HostCloudRegion:  "test-cloud/test-region",
-		Endpoint:         "https://cloud.example.com",
-		IdentityEndpoint: "https://identity.cloud.example.com",
-		StorageEndpoint:  "https://storage.cloud.example.com",
-		CACertificates:   dbmodel.Strings{"cert1", "cert2"},
-		Regions: []dbmodel.CloudRegion{{
-			Name:             "test-region",
-			Endpoint:         "https://region.example.com",
-			IdentityEndpoint: "https://identity.region.example.com",
-			StorageEndpoint:  "https://storage.region.example.com",
-			Config: dbmodel.Map{
-				"k1": float64(2),
-				"k2": "B",
-				"k3": map[string]interface{}{"k": []interface{}{"V"}},
-			},
-		}},
-		Config: dbmodel.Map{
-			"k1": float64(1),
-			"k2": "A",
-			"k3": map[string]interface{}{"k": []interface{}{"v"}},
-		},
-	}
-	pci := cl.ToJujuCloudInfo()
-	c.Check(pci, qt.DeepEquals, jujuparams.CloudInfo{
-		CloudDetails: jujuparams.CloudDetails{
-			Type:             "test-provider",
-			Endpoint:         "https://cloud.example.com",
-			IdentityEndpoint: "https://identity.cloud.example.com",
-			StorageEndpoint:  "https://storage.cloud.example.com",
-			Regions: []jujuparams.CloudRegion{{
-				Name:             "test-region",
-				Endpoint:         "https://region.example.com",
-				IdentityEndpoint: "https://identity.region.example.com",
-				StorageEndpoint:  "https://storage.region.example.com",
-			}},
-		},
-	})
-}
-
-func TestCloudAuthTypes(t *testing.T) {
-	c := qt.New(t)
-	db := gormDB(c)
-
-	cl1 := dbmodel.Cloud{
-		Name:      "test-cloud",
-		AuthTypes: dbmodel.Strings{"empty", "userpass"},
-	}
-	result := db.Create(&cl1)
-	c.Assert(result.Error, qt.IsNil)
-
-	var cl2 dbmodel.Cloud
-	result = db.Where("name = ?", "test-cloud").First(&cl2)
-	c.Assert(result.Error, qt.IsNil)
-	c.Check(cl2, qt.DeepEquals, cl1)
 }
 
 func TestCloudRegions(t *testing.T) {
@@ -264,11 +121,8 @@ func TestCloudRegions(t *testing.T) {
 	db := gormDB(c)
 
 	cl1 := dbmodel.Cloud{
-		Name:             "test-cloud",
-		Type:             "test-provider",
-		Endpoint:         "https://cloud.example.com",
-		IdentityEndpoint: "https://identity.cloud.example.com",
-		StorageEndpoint:  "https://storage.cloud.example.com",
+		Name: "test-cloud",
+		Type: "test-provider",
 	}
 	cr1 := dbmodel.CloudRegion{
 		Name:             "region1",

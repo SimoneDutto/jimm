@@ -1,4 +1,4 @@
-// Copyright 2024 Canonical.
+// Copyright 2025 Canonical.
 
 package dbmodel
 
@@ -26,29 +26,8 @@ type Cloud struct {
 	// cloud is hosted.
 	HostCloudRegion string
 
-	// AuthTypes is the authentication types supported by this cloud.
-	AuthTypes Strings
-
-	// Endpoint is the API endpoint URL for the cloud.
-	Endpoint string
-
-	// IdentityEndpoint is the API endpoint URL of the cloud identity
-	// service.
-	IdentityEndpoint string
-
-	// StorageEndpoint is the API endpoint URL of the cloud storage
-	// service.
-	StorageEndpoint string
-
 	// Regions contains the regions associated with this cloud.
 	Regions []CloudRegion `gorm:"foreignKey:CloudName;references:Name"`
-
-	// CACertificates contains the CA Certificates associated with this
-	// cloud.
-	CACertificates Strings
-
-	// Config contains the configuration associated with this cloud.
-	Config Map
 }
 
 // Tag returns a names.Tag for this cloud.
@@ -80,40 +59,11 @@ func (c Cloud) Region(name string) CloudRegion {
 	return CloudRegion{}
 }
 
-// ToJujuCloud converts the  Cloud object into a jujuparams.Cloud. The
-// cloud must have its regions association filled out.
-func (c Cloud) ToJujuCloud() jujuparams.Cloud {
-	var cl jujuparams.Cloud
-	cl.Type = c.Type
-	cl.HostCloudRegion = c.HostCloudRegion
-	cl.AuthTypes = []string(c.AuthTypes)
-	cl.Endpoint = c.Endpoint
-	cl.IdentityEndpoint = c.IdentityEndpoint
-	cl.StorageEndpoint = c.StorageEndpoint
-	cl.Regions = make([]jujuparams.CloudRegion, len(c.Regions))
-	cl.RegionConfig = make(map[string]map[string]interface{}, len(c.Regions))
-	for i, r := range c.Regions {
-		cl.Regions[i] = r.ToJujuCloudRegion()
-		if r.Config != nil {
-			cl.RegionConfig[r.Name] = map[string]interface{}(r.Config)
-		}
-	}
-	cl.CACertificates = []string(c.CACertificates)
-	cl.Config = map[string]interface{}(c.Config)
-	return cl
-}
-
 // FromJujuCloud updates a Cloud object with the details from the given
 // jujuparams.Cloud.
 func (c *Cloud) FromJujuCloud(cld jujuparams.Cloud) {
 	c.Type = cld.Type
 	c.HostCloudRegion = cld.HostCloudRegion
-	c.AuthTypes = Strings(cld.AuthTypes)
-	c.Endpoint = cld.Endpoint
-	c.IdentityEndpoint = cld.IdentityEndpoint
-	c.StorageEndpoint = cld.StorageEndpoint
-	c.CACertificates = Strings(cld.CACertificates)
-	c.Config = Map(cld.Config)
 	regions := make([]CloudRegion, 0, len(c.Regions))
 	for _, r := range cld.Regions {
 		reg := c.Region(r.Name)
@@ -122,35 +72,6 @@ func (c *Cloud) FromJujuCloud(cld jujuparams.Cloud) {
 		regions = append(regions, reg)
 	}
 	c.Regions = regions
-}
-
-// ToJujuCloudDetails converts the Cloud object into a
-// jujuparams.CloudDetails. The cloud must have its regions association
-// filled out.
-func (c Cloud) ToJujuCloudDetails() jujuparams.CloudDetails {
-	var cd jujuparams.CloudDetails
-	cd.Type = c.Type
-	cd.AuthTypes = []string(c.AuthTypes)
-	cd.Endpoint = c.Endpoint
-	cd.IdentityEndpoint = c.IdentityEndpoint
-	cd.StorageEndpoint = c.StorageEndpoint
-	cd.Regions = make([]jujuparams.CloudRegion, len(c.Regions))
-	for i, r := range c.Regions {
-		cd.Regions[i] = r.ToJujuCloudRegion()
-	}
-	return cd
-}
-
-// ToJujuCloudInfo converts the Cloud object into a
-// jujuparams.CloudInfo. The cloud must have its regions and users
-// associations filled out.
-func (c Cloud) ToJujuCloudInfo() jujuparams.CloudInfo {
-	var ci jujuparams.CloudInfo
-	ci.CloudDetails = c.ToJujuCloudDetails()
-	// TODO(Kian) CSS-6040 Determine whether to combine OpenFGA Tuples
-	// with Postgres data objects for a consolidated view.
-	ci.Users = nil
-	return ci
 }
 
 // A CloudRegion is a region of a cloud.

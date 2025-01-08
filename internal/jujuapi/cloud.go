@@ -1,4 +1,4 @@
-// Copyright 2024 Canonical.
+// Copyright 2025 Canonical.
 
 package jujuapi
 
@@ -15,7 +15,6 @@ import (
 	"github.com/canonical/jimm/v3/internal/dbmodel"
 	"github.com/canonical/jimm/v3/internal/errors"
 	"github.com/canonical/jimm/v3/internal/jimm"
-	"github.com/canonical/jimm/v3/internal/jimm/permissions"
 	"github.com/canonical/jimm/v3/internal/jujuapi/rpc"
 	"github.com/canonical/jimm/v3/internal/openfga"
 	ofganames "github.com/canonical/jimm/v3/internal/openfga/names"
@@ -89,13 +88,13 @@ func (r *controllerRoot) Cloud(ctx context.Context, ents jujuparams.Entities) (j
 			cloudResults[i].Error = mapError(errors.E(op, errors.CodeBadRequest, err))
 			continue
 		}
+
 		cloud, err := r.jimm.GetCloud(ctx, r.user, tag)
 		if err != nil {
 			cloudResults[i].Error = mapError(errors.E(op, err))
 			continue
 		}
-		cloudResults[i].Cloud = new(jujuparams.Cloud)
-		*cloudResults[i].Cloud = cloud.ToJujuCloud()
+		cloudResults[i].Cloud = &cloud
 	}
 	return jujuparams.CloudResults{
 		Results: cloudResults,
@@ -109,14 +108,13 @@ func (r *controllerRoot) Clouds(ctx context.Context) (jujuparams.CloudsResult, e
 	res := jujuparams.CloudsResult{
 		Clouds: make(map[string]jujuparams.Cloud),
 	}
-	err := r.jimm.ForEachUserCloud(ctx, r.user, func(cld *dbmodel.Cloud) error {
-		res.Clouds[cld.Tag().String()] = cld.ToJujuCloud()
-		return nil
-	})
+	clouds, err := r.jimm.GetClouds(ctx, r.user)
 	if err != nil {
 		return res, errors.E(op, err)
 	}
-	return res, nil
+	return jujuparams.CloudsResult{
+		Clouds: clouds,
+	}, nil
 }
 
 // UserCredentials implements the UserCredentials method of the Cloud facade.
@@ -493,14 +491,12 @@ func (r *controllerRoot) CloudInfo(ctx context.Context, args jujuparams.Entities
 			results[i].Error = mapError(errors.E(op, err, errors.CodeBadRequest))
 			continue
 		}
-		cloud, err := r.jimm.GetCloud(ctx, r.user, tag)
+		cloud, err := r.jimm.GetCloudInfo(ctx, r.user, tag)
 		if err != nil {
 			results[i].Error = mapError(errors.E(op, err))
 			continue
 		}
-
-		results[i].Result = new(jujuparams.CloudInfo)
-		*results[i].Result = cloud.ToJujuCloudInfo()
+		results[i].Result = &cloud
 	}
 	return jujuparams.CloudInfoResults{
 		Results: results,
@@ -511,21 +507,7 @@ func (r *controllerRoot) CloudInfo(ctx context.Context, args jujuparams.Entities
 func (r *controllerRoot) ListCloudInfo(ctx context.Context, args jujuparams.ListCloudsRequest) (jujuparams.ListCloudInfoResults, error) {
 	const op = errors.Op("jujuapi.ListCloudInfo")
 
-	listF := r.jimm.ForEachUserCloud
-	if args.All {
-		listF = r.jimm.ForEachCloud
-	}
-
-	var results []jujuparams.ListCloudInfoResult
-	err := listF(ctx, r.user, func(c *dbmodel.Cloud) error {
-		results = append(results, jujuparams.ListCloudInfoResult{
-			Result: &jujuparams.ListCloudInfo{
-				CloudDetails: c.ToJujuCloudDetails(),
-				Access:       permissions.ToCloudAccessString(r.user.GetCloudAccess(ctx, c.ResourceTag())),
-			},
-		})
-		return nil
-	})
+	results, err := r.jimm.ListCloudsInfo(ctx, r.user, args.All)
 	if err != nil {
 		return jujuparams.ListCloudInfoResults{}, errors.E(op, err)
 	}

@@ -1,4 +1,4 @@
-// Copyright 2024 Canonical.
+// Copyright 2025 Canonical.
 
 package jimm
 
@@ -20,35 +20,173 @@ import (
 	ofganames "github.com/canonical/jimm/v3/internal/openfga/names"
 )
 
+// GetUserCloudAccess returns users access level for the specified cloud.
+func (j *JIMM) GetUserCloudAccess(ctx context.Context, user *openfga.User, cloud names.CloudTag) (string, error) {
+	accessLevel := user.GetCloudAccess(ctx, cloud)
+	return permissions.ToCloudAccessString(accessLevel), nil
+}
+
 // GetCloud retrieves the cloud for the given cloud tag. If the cloud
 // cannot be found then an error with the code CodeNotFound is
 // returned. If the user does not have permission to view the cloud then an
 // error with a code of CodeUnauthorized is returned. If the user only has
 // add-model access to the cloud then the returned Users field will only
 // contain the authentcated user.
-func (j *JIMM) GetCloud(ctx context.Context, user *openfga.User, tag names.CloudTag) (dbmodel.Cloud, error) {
-	const op = errors.Op("jimm.GetCloud")
+func (j *JIMM) GetCloud(ctx context.Context, user *openfga.User, tag names.CloudTag) (jujuparams.Cloud, error) {
+	const op = errors.Op("jimm.CloudInfo")
+	zapctx.Info(ctx, string(op))
+	var cl dbmodel.Cloud
+	cl.SetTag(tag)
+
+	if err := j.Database.GetCloud(ctx, &cl); err != nil {
+		return jujuparams.Cloud{}, errors.E(op, err)
+	}
+	// TODO (SimoneDutto): refactor this to use `user.IsCloudAdmin()`
+	accessLevel, err := j.GetUserCloudAccess(ctx, user, tag)
+	if err != nil {
+		return jujuparams.Cloud{}, errors.E(op, err)
+	}
+	if accessLevel == "" {
+		return jujuparams.Cloud{}, errors.E(op, errors.CodeUnauthorized, "unauthorized")
+	}
+
+	return j.getCloudFromController(ctx, cl)
+}
+
+func (j *JIMM) getCloudFromController(ctx context.Context, cl dbmodel.Cloud) (jujuparams.Cloud, error) {
+	const op = errors.Op("jimm.getCloudFromController")
+
+	var jCl jujuparams.Cloud
+	controllers := make([]dbmodel.Controller, 0)
+	for _, cr := range cl.Regions {
+		for _, c := range cr.Controllers {
+			controllers = append(controllers, c.Controller)
+		}
+	}
+	err := j.firstSuccessfulController(ctx, controllers, func(api API) error {
+		return api.Cloud(ctx, cl.ResourceTag(), &jCl)
+	})
+	if err != nil {
+		return jCl, errors.E(op, err)
+	}
+	jCl.IsControllerCloud = false // jimm doesn't know where is deployed, so none of the clouds should have this field set.
+	return jCl, nil
+}
+
+func (j *JIMM) GetClouds(ctx context.Context, user *openfga.User) (map[string]jujuparams.Cloud, error) {
+	const op = errors.Op("jimm.GetClouds")
+	zapctx.Info(ctx, string(op))
+
+	var clouds []dbmodel.Cloud
+
+	err := j.ForEachUserCloud(ctx, user, func(c *dbmodel.Cloud) error {
+		clouds = append(clouds, *c)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	results := make(map[string]jujuparams.Cloud, 0)
+	for _, cl := range clouds {
+		cloud, err := j.getCloudFromController(ctx, cl)
+		if err != nil {
+			return nil, errors.E(op, err)
+		}
+		results[cl.ResourceTag().String()] = cloud
+	}
+
+	return results, err
+}
+
+// GetCloud retrieves the cloud for the given cloud tag. If the cloud
+// cannot be found then an error with the code CodeNotFound is
+// returned. If the user does not have permission to view the cloud then an
+// error with a code of CodeUnauthorized is returned. If the user only has
+// add-model access to the cloud then the returned Users field will only
+// contain the authentcated user.
+func (j *JIMM) GetCloudInfo(ctx context.Context, user *openfga.User, tag names.CloudTag) (jujuparams.CloudInfo, error) {
+	const op = errors.Op("jimm.CloudInfo")
+	zapctx.Info(ctx, string(op))
 
 	var cl dbmodel.Cloud
 	cl.SetTag(tag)
 
 	if err := j.Database.GetCloud(ctx, &cl); err != nil {
-		return cl, errors.E(op, err)
+		return jujuparams.CloudInfo{}, errors.E(op, err)
 	}
-
-	accessLevel, err := j.permissionManager.GetUserCloudAccess(ctx, user, tag)
+	// TODO (SimoneDutto): refactor this to use `user.IsCloudAdmin()`
+	accessLevel, err := j.permissionManager.GetUserCloudAccess(ctx, user, cl.ResourceTag())
 	if err != nil {
-		return dbmodel.Cloud{}, errors.E(op, err)
+		return jujuparams.CloudInfo{}, errors.E(op, err)
+	}
+	if accessLevel == "" {
+		return jujuparams.CloudInfo{}, errors.E(op, errors.CodeUnauthorized, "unauthorized")
 	}
 
-	switch accessLevel {
-	case "":
-		return dbmodel.Cloud{}, errors.E(op, errors.CodeUnauthorized, "unauthorized")
-	case "admin":
-		return cl, nil
-	default:
-		return cl, nil
+	return j.getCloudInfoFromController(ctx, cl)
+}
+
+func (j *JIMM) getCloudInfoFromController(ctx context.Context, cl dbmodel.Cloud) (jujuparams.CloudInfo, error) {
+	const op = errors.Op("jimm.getCloudInfoFromController")
+	var gCl jujuparams.CloudInfo
+
+	controllers := make([]dbmodel.Controller, 0)
+	for _, cr := range cl.Regions {
+		for _, c := range cr.Controllers {
+			controllers = append(controllers, c.Controller)
+		}
 	}
+	err := j.firstSuccessfulController(ctx, controllers, func(api API) error {
+		return api.CloudInfo(ctx, cl.ResourceTag(), &gCl)
+	})
+	if err != nil {
+		return gCl, errors.E(op, err)
+	}
+
+	return jujuparams.CloudInfo{
+		CloudDetails: gCl.CloudDetails,
+		// TODO(Kian) CSS-6040 Determine whether to combine OpenFGA Tuples
+		// with Postgres data objects for a consolidated view.
+		Users: nil,
+	}, nil
+}
+
+func (j *JIMM) ListCloudsInfo(ctx context.Context, user *openfga.User, all bool) ([]jujuparams.ListCloudInfoResult, error) {
+	const op = errors.Op("jimm.ListCloudsInfo")
+	zapctx.Info(ctx, string(op))
+
+	var clouds []dbmodel.Cloud
+	var err error
+	if all {
+		err = j.ForEachCloud(ctx, user, func(c *dbmodel.Cloud) error {
+			clouds = append(clouds, *c)
+			return nil
+		})
+	} else {
+		err = j.ForEachUserCloud(ctx, user, func(c *dbmodel.Cloud) error {
+			clouds = append(clouds, *c)
+			return nil
+		})
+	}
+	if err != nil {
+		return nil, err
+	}
+	var result []jujuparams.ListCloudInfoResult
+	for _, cl := range clouds {
+		cloudInfo, err := j.getCloudInfoFromController(ctx, cl)
+		if err != nil {
+			return nil, errors.E(op, err)
+		}
+		cloudAccessLevel := permissions.ToCloudAccessString(user.GetCloudAccess(ctx, cl.ResourceTag()))
+		result = append(result, jujuparams.ListCloudInfoResult{
+			Result: &jujuparams.ListCloudInfo{
+				CloudDetails: cloudInfo.CloudDetails,
+				Access:       cloudAccessLevel,
+			},
+		})
+	}
+	return result, nil
+
 }
 
 // ForEachUserCloud iterates through all of the clouds a user has access to

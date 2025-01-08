@@ -50,13 +50,17 @@ type JIMM struct {
 	ForEachUserCloudCredential_        func(ctx context.Context, u *dbmodel.Identity, ct names.CloudTag, f func(cred *dbmodel.CloudCredential) error) error
 	GetApplicationOffer_               func(ctx context.Context, user *openfga.User, offerURL string) (*jujuparams.ApplicationOfferAdminDetailsV5, error)
 	GetApplicationOfferConsumeDetails_ func(ctx context.Context, user *openfga.User, details *jujuparams.ConsumeOfferDetails, v bakery.Version) error
-	GetCloud_                          func(ctx context.Context, u *openfga.User, tag names.CloudTag) (dbmodel.Cloud, error)
+	GetCloud_                          func(ctx context.Context, u *openfga.User, tag names.CloudTag) (jujuparams.Cloud, error)
+	GetClouds_                         func(ctx context.Context, user *openfga.User) (map[string]jujuparams.Cloud, error)
 	GetCloudCredential_                func(ctx context.Context, user *openfga.User, tag names.CloudCredentialTag) (*dbmodel.CloudCredential, error)
 	GetCloudCredentialAttributes_      func(ctx context.Context, u *openfga.User, cred *dbmodel.CloudCredential, hidden bool) (attrs map[string]string, redacted []string, err error)
+	GetCloudInfo_                      func(ctx context.Context, user *openfga.User, tag names.CloudTag) (jujuparams.CloudInfo, error)
 	GetCredentialStore_                func() jimmcreds.CredentialStore
 	InitiateInternalMigration_         func(ctx context.Context, user *openfga.User, modelNameOrUUID string, targetController string) (jujuparams.InitiateMigrationResult, error)
 	InitiateMigration_                 func(ctx context.Context, user *openfga.User, spec jujuparams.MigrationSpec) (jujuparams.InitiateMigrationResult, error)
 	ListApplicationOffers_             func(ctx context.Context, user *openfga.User, filters ...jujuparams.OfferFilter) ([]jujuparams.ApplicationOfferAdminDetailsV5, error)
+	ListCloudsInfo_                    func(ctx context.Context, user *openfga.User, all bool) ([]jujuparams.ListCloudInfoResult, error)
+	ListIdentities_                    func(ctx context.Context, user *openfga.User, pagination pagination.LimitOffsetPagination, match string) ([]openfga.User, error)
 	ListResources_                     func(ctx context.Context, user *openfga.User, filter pagination.LimitOffsetPagination, namePrefixFilter, typeFilter string) ([]db.Resource, error)
 	Offer_                             func(ctx context.Context, user *openfga.User, offer jimm.AddApplicationOfferParams) error
 	PubSubHub_                         func() *pubsub.Hub
@@ -154,12 +158,27 @@ func (j *JIMM) GetApplicationOfferConsumeDetails(ctx context.Context, user *open
 	}
 	return j.GetApplicationOfferConsumeDetails_(ctx, user, details, v)
 }
-func (j *JIMM) GetCloud(ctx context.Context, u *openfga.User, tag names.CloudTag) (dbmodel.Cloud, error) {
+func (j *JIMM) GetCloud(ctx context.Context, u *openfga.User, tag names.CloudTag) (jujuparams.Cloud, error) {
 	if j.GetCloud_ == nil {
-		return dbmodel.Cloud{}, errors.E(errors.CodeNotImplemented)
+		return jujuparams.Cloud{}, errors.E(errors.CodeNotImplemented)
 	}
 	return j.GetCloud_(ctx, u, tag)
 }
+
+func (j *JIMM) GetClouds(ctx context.Context, user *openfga.User) (map[string]jujuparams.Cloud, error) {
+	if j.GetClouds_ == nil {
+		return nil, errors.E(errors.CodeNotImplemented)
+	}
+	return j.GetClouds_(ctx, user)
+}
+
+func (j *JIMM) GetCloudInfo(ctx context.Context, user *openfga.User, tag names.CloudTag) (jujuparams.CloudInfo, error) {
+	if j.GetCloud_ == nil {
+		return jujuparams.CloudInfo{}, errors.E(errors.CodeNotImplemented)
+	}
+	return j.GetCloudInfo_(ctx, user, tag)
+}
+
 func (j *JIMM) GetCloudCredential(ctx context.Context, user *openfga.User, tag names.CloudCredentialTag) (*dbmodel.CloudCredential, error) {
 	if j.GetCloudCredential_ == nil {
 		return nil, errors.E(errors.CodeNotImplemented)
@@ -233,6 +252,13 @@ func (j *JIMM) ListApplicationOffers(ctx context.Context, user *openfga.User, fi
 	}
 	return j.ListApplicationOffers_(ctx, user, filters...)
 }
+func (j *JIMM) ListCloudsInfo(ctx context.Context, user *openfga.User, all bool) ([]jujuparams.ListCloudInfoResult, error) {
+	if j.ListCloudsInfo_ == nil {
+		return nil, errors.E(errors.CodeNotImplemented)
+	}
+	return j.ListCloudsInfo_(ctx, user, all)
+}
+
 func (j *JIMM) ListResources(ctx context.Context, user *openfga.User, filter pagination.LimitOffsetPagination, namePrefixFilter, typeFilter string) ([]db.Resource, error) {
 	if j.ListResources_ == nil {
 		return nil, errors.E(errors.CodeNotImplemented)

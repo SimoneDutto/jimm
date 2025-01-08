@@ -1,4 +1,4 @@
-// Copyright 2024 Canonical.
+// Copyright 2025 Canonical.
 
 // service defines the methods necessary to start a JIMM server
 // alongside all the config options that can be supplied to configure JIMM.

@@ -1,4 +1,4 @@
-// Copyright 2024 Canonical.
+// Copyright 2025 Canonical.
 
 package jimm_test
 
@@ -18,12 +18,72 @@ import (
 	"github.com/canonical/jimm/v3/internal/testutils/jimmtest"
 )
 
+const getCloudTestEnv = `clouds:
+- name: test-cloud
+  type: test-provider
+  regions:
+  - name: test-region
+- name: test-cloud-1
+  type: maas
+  host-cloud-region: test-provider/test-region
+  regions:
+  - name: default
+controllers:
+- name: test-controller
+  uuid: 00000001-0000-0000-0000-000000000001
+  cloud: test-cloud
+  region: test-region
+  cloud-regions:
+  - cloud: test-cloud
+    region: test-region
+    priority: 1
+  - cloud: test-cloud-1
+    region: default
+    priority: 1
+`
+
 func TestGetCloud(t *testing.T) {
 	c := qt.New(t)
 
 	ctx := context.Background()
 
-	j := jimmtest.NewJIMM(c, nil)
+	api := &jimmtest.API{
+		Cloud_: func(_ context.Context, tag names.CloudTag, cld *jujuparams.Cloud) error {
+			if tag.Id() == "test-cloud" {
+				cld.Type = "kubernetes"
+			} else {
+				cld.Type = "maas"
+			}
+			cld.HostCloudRegion = "test-provider/test-region"
+			cld.AuthTypes = []string{"empty", "userpass"}
+			cld.Endpoint = "https://example.com"
+			cld.IdentityEndpoint = "https://example.com/identity"
+			cld.StorageEndpoint = "https://example.com/storage"
+			cld.Regions = []jujuparams.CloudRegion{{
+				Name: "default",
+			}}
+			cld.CACertificates = []string{"CACERT"}
+			cld.Config = map[string]interface{}{"A": "a"}
+			cld.RegionConfig = map[string]map[string]interface{}{
+				"default": {"B": 2},
+			}
+			return nil
+		},
+		AddCloud_: func(context.Context, names.CloudTag, jujuparams.Cloud, bool) error {
+			return nil
+		},
+		GrantCloudAccess_: func(context.Context, names.CloudTag, names.UserTag, string) error {
+			return nil
+		},
+	}
+
+	dialer := &jimmtest.Dialer{
+		API: api,
+	}
+
+	j := jimmtest.NewJIMM(c, &jimm.Parameters{
+		Dialer: dialer,
+	})
 
 	aliceIdentity, err := dbmodel.NewIdentity("alice@canonical.com")
 	c.Assert(err, qt.IsNil)
@@ -59,13 +119,11 @@ func TestGetCloud(t *testing.T) {
 		ofganames.AdministratorRelation,
 	)
 	c.Assert(err, qt.IsNil)
-
-	cloud := &dbmodel.Cloud{
-		Name: "test-cloud-1",
+	env := jimmtest.ParseEnvironment(c, getCloudTestEnv)
+	env.PopulateDBAndPermissions(c, j.ResourceTag(), j.Database, j.OpenFGAClient)
+	cloud := dbmodel.Cloud{
+		Name: "test-cloud",
 	}
-	err = j.Database.AddCloud(ctx, cloud)
-	c.Assert(err, qt.IsNil)
-
 	err = j.OpenFGAClient.AddCloudController(context.Background(), cloud.ResourceTag(), j.ResourceTag())
 	c.Assert(err, qt.IsNil)
 
@@ -74,63 +132,81 @@ func TestGetCloud(t *testing.T) {
 
 	err = bob.SetCloudAccess(context.Background(), cloud.ResourceTag(), ofganames.CanAddModelRelation)
 	c.Assert(err, qt.IsNil)
-
-	cloud2 := &dbmodel.Cloud{
-		Name: "test-cloud-2",
+	cloud1 := dbmodel.Cloud{
+		Name: "test-cloud-1",
 	}
-	err = j.Database.AddCloud(ctx, cloud2)
 	c.Assert(err, qt.IsNil)
 
-	err = j.OpenFGAClient.AddCloudController(context.Background(), cloud2.ResourceTag(), j.ResourceTag())
+	err = j.OpenFGAClient.AddCloudController(context.Background(), cloud1.ResourceTag(), j.ResourceTag())
 	c.Assert(err, qt.IsNil)
 
-	err = j.EveryoneUser().SetCloudAccess(context.Background(), cloud2.ResourceTag(), ofganames.CanAddModelRelation)
+	err = j.EveryoneUser().SetCloudAccess(context.Background(), cloud1.ResourceTag(), ofganames.CanAddModelRelation)
 	c.Assert(err, qt.IsNil)
 
 	_, err = j.GetCloud(ctx, alice, names.NewCloudTag("test-cloud-0"))
 	c.Check(errors.ErrorCode(err), qt.Equals, errors.CodeNotFound)
 
-	_, err = j.GetCloud(ctx, charlie, names.NewCloudTag("test-cloud-1"))
+	_, err = j.GetCloud(ctx, charlie, cloud.ResourceTag())
 	c.Check(errors.ErrorCode(err), qt.Equals, errors.CodeUnauthorized)
 
-	cld, err := j.GetCloud(ctx, alice, names.NewCloudTag("test-cloud-1"))
+	cld, err := j.GetCloud(ctx, alice, cloud.ResourceTag())
 	c.Assert(err, qt.IsNil)
-	c.Check(cld, qt.DeepEquals, dbmodel.Cloud{
-		ID:        1,
-		CreatedAt: now,
-		UpdatedAt: now,
-		Name:      "test-cloud-1",
-		Regions:   []dbmodel.CloudRegion{},
+	c.Assert(cld, qt.DeepEquals, jujuparams.Cloud{
+		Type:             "kubernetes",
+		HostCloudRegion:  "test-provider/test-region",
+		AuthTypes:        []string{"empty", "userpass"},
+		Endpoint:         "https://example.com",
+		IdentityEndpoint: "https://example.com/identity",
+		StorageEndpoint:  "https://example.com/storage",
+		Regions:          []jujuparams.CloudRegion{{Name: "default"}},
+		CACertificates:   []string{"CACERT"},
+		Config:           map[string]any{"A": string("a")},
+		RegionConfig:     map[string]map[string]any{"default": {"B": int(2)}},
 	})
 
-	cld, err = j.GetCloud(ctx, bob, names.NewCloudTag("test-cloud-1"))
+	cld, err = j.GetCloud(ctx, bob, cloud.ResourceTag())
 	c.Assert(err, qt.IsNil)
-	c.Check(cld, qt.DeepEquals, dbmodel.Cloud{
-		ID:        1,
-		CreatedAt: now,
-		UpdatedAt: now,
-		Name:      "test-cloud-1",
-		Regions:   []dbmodel.CloudRegion{},
+	c.Assert(cld, qt.DeepEquals, jujuparams.Cloud{
+		Type:             "kubernetes",
+		HostCloudRegion:  "test-provider/test-region",
+		AuthTypes:        []string{"empty", "userpass"},
+		Endpoint:         "https://example.com",
+		IdentityEndpoint: "https://example.com/identity",
+		StorageEndpoint:  "https://example.com/storage",
+		Regions:          []jujuparams.CloudRegion{{Name: "default"}},
+		CACertificates:   []string{"CACERT"},
+		Config:           map[string]any{"A": string("a")},
+		RegionConfig:     map[string]map[string]any{"default": {"B": int(2)}},
 	})
 
-	cld, err = j.GetCloud(ctx, daphne, names.NewCloudTag("test-cloud-1"))
+	cld, err = j.GetCloud(ctx, daphne, cloud1.ResourceTag())
 	c.Assert(err, qt.IsNil)
-	c.Check(cld, qt.DeepEquals, dbmodel.Cloud{
-		ID:        1,
-		CreatedAt: now,
-		UpdatedAt: now,
-		Name:      "test-cloud-1",
-		Regions:   []dbmodel.CloudRegion{},
+	c.Assert(cld, qt.DeepEquals, jujuparams.Cloud{
+		Type:             "maas",
+		HostCloudRegion:  "test-provider/test-region",
+		AuthTypes:        []string{"empty", "userpass"},
+		Endpoint:         "https://example.com",
+		IdentityEndpoint: "https://example.com/identity",
+		StorageEndpoint:  "https://example.com/storage",
+		Regions:          []jujuparams.CloudRegion{{Name: "default"}},
+		CACertificates:   []string{"CACERT"},
+		Config:           map[string]any{"A": string("a")},
+		RegionConfig:     map[string]map[string]any{"default": {"B": int(2)}},
 	})
 
-	cld, err = j.GetCloud(ctx, charlie, names.NewCloudTag("test-cloud-2"))
+	cld, err = j.GetCloud(ctx, charlie, cloud1.ResourceTag())
 	c.Assert(err, qt.IsNil)
-	c.Check(cld, qt.DeepEquals, dbmodel.Cloud{
-		ID:        2,
-		CreatedAt: now,
-		UpdatedAt: now,
-		Name:      "test-cloud-2",
-		Regions:   []dbmodel.CloudRegion{},
+	c.Assert(cld, qt.DeepEquals, jujuparams.Cloud{
+		Type:             "maas",
+		HostCloudRegion:  "test-provider/test-region",
+		AuthTypes:        []string{"empty", "userpass"},
+		Endpoint:         "https://example.com",
+		IdentityEndpoint: "https://example.com/identity",
+		StorageEndpoint:  "https://example.com/storage",
+		Regions:          []jujuparams.CloudRegion{{Name: "default"}},
+		CACertificates:   []string{"CACERT"},
+		Config:           map[string]any{"A": string("a")},
+		RegionConfig:     map[string]map[string]any{"default": {"B": int(2)}},
 	})
 }
 
@@ -357,7 +433,7 @@ var addHostedCloudTests = []struct {
 	username         string
 	cloudName        string
 	cloud            jujuparams.Cloud
-	expectCloud      dbmodel.Cloud
+	expectCloud      jujuparams.Cloud
 	expectError      string
 	expectErrorCode  errors.Code
 }{{
@@ -395,29 +471,17 @@ var addHostedCloudTests = []struct {
 		IdentityEndpoint: "https://example.com/identity",
 		StorageEndpoint:  "https://example.com/storage",
 	},
-	expectCloud: dbmodel.Cloud{
-		Name:             "new-cloud",
+	expectCloud: jujuparams.Cloud{
 		Type:             "kubernetes",
 		HostCloudRegion:  "test-provider/test-region",
 		AuthTypes:        []string{"empty", "userpass"},
 		Endpoint:         "https://example.com",
 		IdentityEndpoint: "https://example.com/identity",
 		StorageEndpoint:  "https://example.com/storage",
-		Regions: []dbmodel.CloudRegion{{
-			Name:   "default",
-			Config: dbmodel.Map{"B": float64(2)},
-			Controllers: []dbmodel.CloudRegionControllerPriority{{
-				Controller: dbmodel.Controller{
-					Name:        "test-controller",
-					UUID:        "00000001-0000-0000-0000-000000000001",
-					CloudName:   "test-cloud",
-					CloudRegion: "test-region",
-				},
-				Priority: 1,
-			}},
-		}},
-		CACertificates: dbmodel.Strings{"CACERT"},
-		Config:         dbmodel.Map{"A": string("a")},
+		Regions:          []jujuparams.CloudRegion{{Name: "default"}},
+		CACertificates:   []string{"CACERT"},
+		Config:           map[string]any{"A": string("a")},
+		RegionConfig:     map[string]map[string]any{"default": {"B": int(2)}},
 	},
 }, {
 	name: "Success - with cloud name and region",
@@ -454,29 +518,17 @@ var addHostedCloudTests = []struct {
 		IdentityEndpoint: "https://example.com/identity",
 		StorageEndpoint:  "https://example.com/storage",
 	},
-	expectCloud: dbmodel.Cloud{
-		Name:             "new-cloud",
+	expectCloud: jujuparams.Cloud{
 		Type:             "kubernetes",
 		HostCloudRegion:  "test-cloud/test-region",
 		AuthTypes:        []string{"empty", "userpass"},
 		Endpoint:         "https://example.com",
 		IdentityEndpoint: "https://example.com/identity",
 		StorageEndpoint:  "https://example.com/storage",
-		Regions: []dbmodel.CloudRegion{{
-			Name:   "default",
-			Config: dbmodel.Map{"B": float64(2)},
-			Controllers: []dbmodel.CloudRegionControllerPriority{{
-				Controller: dbmodel.Controller{
-					Name:        "test-controller",
-					UUID:        "00000001-0000-0000-0000-000000000001",
-					CloudName:   "test-cloud",
-					CloudRegion: "test-region",
-				},
-				Priority: 1,
-			}},
-		}},
-		CACertificates: dbmodel.Strings{"CACERT"},
-		Config:         dbmodel.Map{"A": string("a")},
+		Regions:          []jujuparams.CloudRegion{{Name: "default"}},
+		CACertificates:   []string{"CACERT"},
+		Config:           map[string]any{"A": string("a")},
+		RegionConfig:     map[string]map[string]any{"default": {"B": int(2)}},
 	},
 }, {
 	name: "Success - with cloud name",
@@ -513,29 +565,17 @@ var addHostedCloudTests = []struct {
 		IdentityEndpoint: "https://example.com/identity",
 		StorageEndpoint:  "https://example.com/storage",
 	},
-	expectCloud: dbmodel.Cloud{
-		Name:             "new-cloud",
+	expectCloud: jujuparams.Cloud{
 		Type:             "kubernetes",
 		HostCloudRegion:  "test-cloud/test-region",
 		AuthTypes:        []string{"empty", "userpass"},
 		Endpoint:         "https://example.com",
 		IdentityEndpoint: "https://example.com/identity",
 		StorageEndpoint:  "https://example.com/storage",
-		Regions: []dbmodel.CloudRegion{{
-			Name:   "default",
-			Config: dbmodel.Map{"B": float64(2)},
-			Controllers: []dbmodel.CloudRegionControllerPriority{{
-				Controller: dbmodel.Controller{
-					Name:        "test-controller",
-					UUID:        "00000001-0000-0000-0000-000000000001",
-					CloudName:   "test-cloud",
-					CloudRegion: "test-region",
-				},
-				Priority: 1,
-			}},
-		}},
-		CACertificates: dbmodel.Strings{"CACERT"},
-		Config:         dbmodel.Map{"A": string("a")},
+		Regions:          []jujuparams.CloudRegion{{Name: "default"}},
+		CACertificates:   []string{"CACERT"},
+		Config:           map[string]any{"A": string("a")},
+		RegionConfig:     map[string]map[string]any{"default": {"B": int(2)}},
 	},
 }, {
 	name:      "CloudWithReservedName",
@@ -713,7 +753,7 @@ var addHostedCloudToControllerTests = []struct {
 	controllerName   string
 	cloudName        string
 	cloud            jujuparams.Cloud
-	expectCloud      dbmodel.Cloud
+	expectCloud      jujuparams.Cloud
 	expectError      string
 	expectErrorCode  errors.Code
 }{{
@@ -751,29 +791,17 @@ var addHostedCloudToControllerTests = []struct {
 		IdentityEndpoint: "https://example.com/identity",
 		StorageEndpoint:  "https://example.com/storage",
 	},
-	expectCloud: dbmodel.Cloud{
-		Name:             "new-cloud",
+	expectCloud: jujuparams.Cloud{
 		Type:             "maas",
 		HostCloudRegion:  "test-provider/test-region",
 		AuthTypes:        []string{"empty", "userpass"},
 		Endpoint:         "https://example.com",
 		IdentityEndpoint: "https://example.com/identity",
 		StorageEndpoint:  "https://example.com/storage",
-		Regions: []dbmodel.CloudRegion{{
-			Name:   "default",
-			Config: dbmodel.Map{"B": float64(2)},
-			Controllers: []dbmodel.CloudRegionControllerPriority{{
-				Controller: dbmodel.Controller{
-					Name:        "test-controller",
-					UUID:        "00000001-0000-0000-0000-000000000001",
-					CloudName:   "test-cloud",
-					CloudRegion: "test-region",
-				},
-				Priority: 1,
-			}},
-		}},
-		CACertificates: dbmodel.Strings{"CACERT"},
-		Config:         dbmodel.Map{"A": string("a")},
+		Regions:          []jujuparams.CloudRegion{{Name: "default"}},
+		CACertificates:   []string{"CACERT"},
+		Config:           map[string]any{"A": string("a")},
+		RegionConfig:     map[string]map[string]any{"default": {"B": int(2)}},
 	},
 }, {
 	name: "Controller not found",
@@ -1243,13 +1271,9 @@ var updateCloudTests = []struct {
 			}},
 		},
 		expectCloud: dbmodel.Cloud{
-			Name:             "test",
-			Type:             "kubernetes",
-			HostCloudRegion:  "test-cloud/test-cloud-region",
-			AuthTypes:        []string{"empty", "userpass"},
-			Endpoint:         "https://k8s.example.com",
-			IdentityEndpoint: "https://k8s.identity.example.com",
-			StorageEndpoint:  "https://k8s.storage.example.com",
+			Name:            "test",
+			Type:            "kubernetes",
+			HostCloudRegion: "test-cloud/test-cloud-region",
 			Regions: []dbmodel.CloudRegion{{
 				Name: "default",
 				Controllers: []dbmodel.CloudRegionControllerPriority{{

@@ -1,4 +1,4 @@
-// Copyright 2024 Canonical.
+// Copyright 2025 Canonical.
 
 // Package jimmtest contains useful helpers for testing JIMM.
 package jimmtest

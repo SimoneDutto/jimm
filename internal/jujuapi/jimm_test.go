@@ -1,4 +1,4 @@
-// Copyright 2024 Canonical.
+// Copyright 2025 Canonical.
 
 package jujuapi_test
 
@@ -664,7 +664,6 @@ func (s *jimmSuite) TestAddCloudToController(c *gc.C) {
 
 	cloud, err := s.JIMM.GetCloud(context.Background(), user, names.NewCloudTag("test-cloud"))
 	c.Assert(err, gc.IsNil)
-	c.Assert(cloud.Name, gc.DeepEquals, "test-cloud")
 	c.Assert(cloud.Type, gc.DeepEquals, "kubernetes")
 }
 
@@ -701,10 +700,14 @@ func (s *jimmSuite) TestAddExistingCloudToController(c *gc.C) {
 	user := openfga.NewUser(u, s.OFGAClient)
 	cloud, err := s.JIMM.GetCloud(context.Background(), user, names.NewCloudTag("test-cloud"))
 	c.Assert(err, gc.IsNil)
-	c.Assert(cloud.Name, gc.DeepEquals, "test-cloud")
 	c.Assert(cloud.Type, gc.DeepEquals, "MAAS")
 	// Simulate the cloud being present on the Juju controller but not in JIMM.
-	err = s.JIMM.Database.DeleteCloud(ctx, &cloud)
+	cloudDb := dbmodel.Cloud{
+		Name: "test-cloud",
+	}
+	err = s.JIMM.Database.GetCloud(ctx, &cloudDb)
+	c.Assert(err, gc.IsNil)
+	err = s.JIMM.Database.DeleteCloud(ctx, &cloudDb)
 	c.Assert(err, gc.IsNil)
 	cloud, err = s.JIMM.GetCloud(context.Background(), user, names.NewCloudTag("test-cloud"))
 	c.Assert(err, gc.NotNil)
@@ -713,7 +716,6 @@ func (s *jimmSuite) TestAddExistingCloudToController(c *gc.C) {
 	c.Assert(err, gc.Equals, nil)
 	cloud, err = s.JIMM.GetCloud(context.Background(), user, names.NewCloudTag("test-cloud"))
 	c.Assert(err, gc.IsNil)
-	c.Assert(cloud.Name, gc.DeepEquals, "test-cloud")
 	c.Assert(cloud.Type, gc.DeepEquals, "MAAS")
 }
 

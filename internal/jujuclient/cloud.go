@@ -1,4 +1,4 @@
-// Copyright 2024 Canonical.
+// Copyright 2025 Canonical.
 
 package jujuclient
 
@@ -284,6 +284,26 @@ func (c Connection) CloudInfo(ctx context.Context, tag names.CloudTag, ci *jujup
 		return errors.E(op, resp.Results[0].Error)
 	}
 	return nil
+}
+
+// ListCloudInfo returns the list of cloud information supported by the controller.
+func (c Connection) ListCloudInfo(ctx context.Context, args jujuparams.ListCloudsRequest) (jujuparams.ListCloudInfoResults, error) {
+	const op = errors.Op("jujuclient.ListCloudInfo")
+
+	args = jujuparams.ListCloudsRequest{
+		UserTag: c.userTag,
+		All:     true,
+	}
+
+	resp := jujuparams.ListCloudInfoResults{}
+	err := c.CallHighestFacadeVersion(ctx, "Cloud", []int{7, 2}, "", "ListCloudInfo", &args, &resp)
+	if err != nil {
+		return resp, errors.E(op, jujuerrors.Cause(err))
+	}
+	if resp.Results[0].Error != nil {
+		return resp, errors.E(op, resp.Results[0].Error)
+	}
+	return resp, nil
 }
 
 // UpdateCloud updates the given cloud with the given cloud definition.
