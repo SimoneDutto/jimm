@@ -349,6 +349,8 @@ require (
 require github.com/golang-migrate/migrate/v4 v4.17.1
 
 require (
+	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be // indirect
+	github.com/gliderlabs/ssh v0.3.8 // indirect
 	github.com/klauspost/compress v1.17.7 // indirect
 	github.com/moby/patternmatcher v0.6.0 // indirect
 	github.com/moby/sys/sequential v0.6.0 // indirect
