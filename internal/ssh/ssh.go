@@ -93,34 +93,36 @@ func directTCPIPHandler(resolver Resolver) func(srv *ssh.Server, conn *gossh.Ser
 			return
 		}
 
-		dChan, reqs, err := client.OpenChannel("direct-tcpip", gossh.Marshal(d))
+		dstChan, reqs, err := client.OpenChannel("direct-tcpip", gossh.Marshal(d))
 		if err != nil {
 			rejectConnectionAndLogError(ctx, newChan, "Failed to open destination channel", err)
 			return
 		}
-
+		// gossh.Request are requests sent outside of the normal stream of data (ex. pty-req for an interactive session).
+		// Since we only need the raw data to redirect, we can discard them.
 		go gossh.DiscardRequests(reqs)
 
-		ch, reqs, err := newChan.Accept()
+		srcDest, reqs, err := newChan.Accept()
 		if err != nil {
-			dChan.Close()
+			dstChan.Close()
 			return
 		}
-
+		// gossh.Request are requests sent outside of the normal stream of data (ex. pty-req for an interactive session).
+		// Since we only need the raw data to redirect, we can discard them.
 		go gossh.DiscardRequests(reqs)
 
 		go func() {
-			defer ch.Close()
-			defer dChan.Close()
-			_, err := io.Copy(ch, dChan)
+			defer srcDest.Close()
+			defer dstChan.Close()
+			_, err := io.Copy(srcDest, dstChan)
 			if err != nil {
 				rejectConnectionAndLogError(ctx, newChan, "Failed to copy data from src to dts", err)
 			}
 		}()
 		go func() {
-			defer ch.Close()
-			defer dChan.Close()
-			_, err := io.Copy(dChan, ch)
+			defer srcDest.Close()
+			defer dstChan.Close()
+			_, err := io.Copy(dstChan, srcDest)
 			if err != nil {
 				rejectConnectionAndLogError(ctx, newChan, "Failed to copy data from dst to src", err)
 			}

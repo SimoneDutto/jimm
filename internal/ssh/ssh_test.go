@@ -116,7 +116,7 @@ func (s *sshSuite) TestSSHJump(c *qt.C) {
 		SrcPort:  0,
 	}
 	s.testInDestinationServerF = func(fm ssh.ForwardMessage) {
-		c.Assert(fm.DestAddr, qt.Equals, "model1")
+		c.Check(fm.DestAddr, qt.Equals, "model1")
 	}
 	ch, _, err := client.OpenChannel("direct-tcpip", gossh.Marshal(&msg))
 	c.Check(err, qt.IsNil)
@@ -159,7 +159,7 @@ func (s *sshSuite) TestSSHFinalDestinationDialFail(c *qt.C) {
 		SrcPort:  0,
 	}
 	s.testInDestinationServerF = func(fm ssh.ForwardMessage) {
-		c.Assert(fm.DestAddr, qt.Equals, "model1")
+		c.Check(fm.DestAddr, qt.Equals, "model1")
 	}
 	_, _, err = client.OpenChannel("direct-tcpip", gossh.Marshal(&msg))
 	c.Assert(err, qt.ErrorMatches, ".*connect failed.*")
