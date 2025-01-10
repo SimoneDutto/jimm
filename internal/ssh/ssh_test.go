@@ -1,4 +1,5 @@
 // Copyright 2025 Canonical.
+
 package ssh_test
 
 import (
@@ -25,7 +26,7 @@ import (
 
 type resolver struct{}
 
-func (r resolver) GetAddrFromModelUUID(ctx context.Context, user openfga.User, modelName string) (string, error) {
+func (r resolver) AddrFromModelUUID(ctx context.Context, user openfga.User, modelName string) (string, error) {
 	return "", nil
 }
 
@@ -35,7 +36,7 @@ type sshSuite struct {
 	jumpSSHServer            ssh.Server
 	jumpServerPort           int
 	privateKey               gossh.Signer
-	testF                    func(fm ssh.ForwardMessage)
+	testInDestinationServerF func(fm ssh.ForwardMessage)
 	received                 chan bool
 }
 
@@ -56,7 +57,7 @@ func (s *sshSuite) Init(c *qt.C) {
 				}
 				_, _, err := newChan.Accept()
 				c.Assert(err, qt.IsNil)
-				s.testF(d)
+				s.testInDestinationServerF(d)
 				s.received <- true
 			},
 		},
@@ -87,18 +88,15 @@ func (s *sshSuite) Init(c *qt.C) {
 
 	s.privateKey, err = gossh.ParsePrivateKey(keyPEM)
 	c.Assert(err, qt.IsNil)
-}
-
-// CleanUp doesn't exist in qtsuite, so it needs to be called manually
-func (s *sshSuite) CleanUp(c *qt.C) {
-	err := s.destinationJujuSSHServer.Close()
-	c.Assert(err, qt.IsNil)
-	err = s.jumpSSHServer.Close()
-	c.Assert(err, qt.IsNil)
+	c.Cleanup(func() {
+		err := s.destinationJujuSSHServer.Close()
+		c.Check(err, qt.IsNil)
+		err = s.jumpSSHServer.Close()
+		c.Check(err, qt.IsNil)
+	})
 }
 
 func (s *sshSuite) TestSSHJump(c *qt.C) {
-	defer s.CleanUp(c)
 	client, err := gossh.Dial("tcp", fmt.Sprintf(":%d", s.jumpServerPort), &gossh.ClientConfig{
 		//nolint:gosec // this will be removed once we handle hostkeys
 		HostKeyCallback: gossh.InsecureIgnoreHostKey(),
@@ -117,21 +115,20 @@ func (s *sshSuite) TestSSHJump(c *qt.C) {
 		SrcAddr:  "localhost",
 		SrcPort:  0,
 	}
-	s.testF = func(fm ssh.ForwardMessage) {
+	s.testInDestinationServerF = func(fm ssh.ForwardMessage) {
 		c.Assert(fm.DestAddr, qt.Equals, "model1")
 	}
 	ch, _, err := client.OpenChannel("direct-tcpip", gossh.Marshal(&msg))
-	c.Assert(err, qt.IsNil)
+	c.Check(err, qt.IsNil)
 	defer ch.Close()
 	select {
 	case <-s.received:
 	case <-time.After(100 * time.Millisecond):
-		c.Fatalf("ssh jump test timeout")
+		c.Fail()
 	}
 }
 
 func (s *sshSuite) TestSSHJumpDialFail(c *qt.C) {
-	defer s.CleanUp(c)
 	_, err := gossh.Dial("tcp", fmt.Sprintf(":%d", 1), &gossh.ClientConfig{
 		//nolint:gosec // this will be removed once we handle hostkeys
 		HostKeyCallback: gossh.InsecureIgnoreHostKey(),
@@ -143,7 +140,6 @@ func (s *sshSuite) TestSSHJumpDialFail(c *qt.C) {
 }
 
 func (s *sshSuite) TestSSHFinalDestinationDialFail(c *qt.C) {
-	defer s.CleanUp(c)
 
 	client, err := gossh.Dial("tcp", fmt.Sprintf(":%d", s.jumpServerPort), &gossh.ClientConfig{
 		//nolint:gosec // this will be removed once we handle hostkeys
@@ -158,11 +154,11 @@ func (s *sshSuite) TestSSHFinalDestinationDialFail(c *qt.C) {
 	msg := ssh.ForwardMessage{
 		DestAddr: "model1",
 		//nolint:gosec
-		DestPort: 1,
+		DestPort: 1, // the test fails because there is no ssh server on this port.
 		SrcAddr:  "localhost",
 		SrcPort:  0,
 	}
-	s.testF = func(fm ssh.ForwardMessage) {
+	s.testInDestinationServerF = func(fm ssh.ForwardMessage) {
 		c.Assert(fm.DestAddr, qt.Equals, "model1")
 	}
 	_, _, err = client.OpenChannel("direct-tcpip", gossh.Marshal(&msg))

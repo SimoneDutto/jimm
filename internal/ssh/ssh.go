@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 
 	"github.com/gliderlabs/ssh"
 	"github.com/juju/zaputil/zapctx"
@@ -15,13 +16,13 @@ import (
 	"github.com/canonical/jimm/v3/internal/openfga"
 )
 
-// JUJU_SSH_DEFAULT_PORT is the default port we expect the juju controllers to respond on.
-const JUJU_SSH_DEFAULT_PORT = 2223
+// juju_ssh_default_port is the default port we expect the juju controllers to respond on.
+const juju_ssh_default_port = 17022
 
 // Resolver is the interface with the methods needed by the ssh jump server to route request.
 type Resolver interface {
-	// GetAddrFromModelUUID is the method to resolve the address of the controller to contact given the model UUID.
-	GetAddrFromModelUUID(ctx context.Context, user openfga.User, modelUUID string) (string, error)
+	// AddrFromModelUUID is the method to resolve the address of the controller to contact given the model UUID.
+	AddrFromModelUUID(ctx context.Context, user openfga.User, modelUUID string) (string, error)
 }
 
 // fowardMessage is the struct holding the information about the jump message received by the ssh client.
@@ -69,14 +70,14 @@ func directTCPIPHandler(resolver Resolver) func(srv *ssh.Server, conn *gossh.Ser
 			return
 		}
 		if d.DestPort == 0 {
-			d.DestPort = JUJU_SSH_DEFAULT_PORT
+			d.DestPort = juju_ssh_default_port
 		}
-		addr, err := resolver.GetAddrFromModelUUID(ctx, openfga.User{}, d.DestAddr)
+		addr, err := resolver.AddrFromModelUUID(ctx, openfga.User{}, d.DestAddr)
 		if err != nil {
 			rejectConnectionAndLogError(ctx, newChan, "Failed to resolve address from model uuid", err)
 			return
 		}
-		dest := fmt.Sprintf("%s:%d", addr, d.DestPort)
+		dest := net.JoinHostPort(addr, fmt.Sprint(d.DestPort))
 		// this is temporary. The way we dial to the controller will heavily change.
 		client, err := gossh.Dial("tcp", dest, &gossh.ClientConfig{
 			//nolint:gosec // this will be removed once we handle hostkeys
