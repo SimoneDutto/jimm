@@ -43,6 +43,10 @@ type Server struct {
 // NewJumpSSHServer creates the jump server struct.
 func NewJumpSSHServer(ctx context.Context, port int, resolver Resolver) (Server, error) {
 	zapctx.Info(ctx, "NewSSHServer")
+
+	if resolver == nil {
+		return Server{}, fmt.Errorf("Cannot create JumpSSHServer with a nil resolver.")
+	}
 	server := Server{
 		Server: &ssh.Server{
 			Addr: fmt.Sprintf(":%d", port),

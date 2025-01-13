@@ -21,7 +21,7 @@ import (
 
 	"github.com/canonical/jimm/v3/internal/openfga"
 	"github.com/canonical/jimm/v3/internal/ssh"
-	"github.com/canonical/jimm/v3/internal/utils"
+	"github.com/canonical/jimm/v3/internal/testutils/jimmtest"
 )
 
 type resolver struct{}
@@ -42,7 +42,7 @@ type sshSuite struct {
 
 func (s *sshSuite) Init(c *qt.C) {
 	s.received = make(chan bool)
-	port, err := utils.GetFreePort()
+	port, err := jimmtest.GetFreePort()
 	c.Assert(err, qt.IsNil)
 	s.destinationServerPort = port
 	s.destinationJujuSSHServer = gliderssh.Server{
@@ -68,7 +68,7 @@ func (s *sshSuite) Init(c *qt.C) {
 	s.destinationServerPort, err = strconv.Atoi(strings.Split(s.destinationJujuSSHServer.Addr, ":")[1])
 	c.Assert(err, qt.IsNil)
 
-	port, err = utils.GetFreePort()
+	port, err = jimmtest.GetFreePort()
 	c.Assert(err, qt.IsNil)
 	s.jumpServerPort = port
 	s.jumpSSHServer, err = ssh.NewJumpSSHServer(context.Background(), port, resolver{})

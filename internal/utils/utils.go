@@ -5,8 +5,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"errors"
-	"net"
 
 	"github.com/juju/zaputil/zapctx"
 	"go.uber.org/zap"
@@ -22,16 +20,4 @@ func NewConversationID() string {
 
 	}
 	return hex.EncodeToString(buf)
-}
-
-// GetFreePort asks the kernel for a free open port that is ready to use.
-func GetFreePort() (int, error) {
-	if a, err := net.ResolveTCPAddr("tcp", "localhost:0"); err == nil {
-		var l *net.TCPListener
-		if l, err = net.ListenTCP("tcp", a); err == nil {
-			defer l.Close()
-			return l.Addr().(*net.TCPAddr).Port, nil
-		}
-	}
-	return 0, errors.New("Couldn't find any free port")
 }
