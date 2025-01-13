@@ -17,18 +17,17 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/frankban/quicktest/qtsuite"
 	gliderssh "github.com/gliderlabs/ssh"
+	"github.com/juju/names/v5"
 	gossh "golang.org/x/crypto/ssh"
 
+	"github.com/canonical/jimm/v3/internal/db"
+	"github.com/canonical/jimm/v3/internal/dbmodel"
 	"github.com/canonical/jimm/v3/internal/openfga"
+	ofganames "github.com/canonical/jimm/v3/internal/openfga/names"
 	"github.com/canonical/jimm/v3/internal/ssh"
 	"github.com/canonical/jimm/v3/internal/testutils/jimmtest"
+	"github.com/canonical/jimm/v3/internal/testutils/jimmtest/mocks"
 )
-
-type resolver struct{}
-
-func (r resolver) AddrFromModelUUID(ctx context.Context, user openfga.User, modelName string) (string, error) {
-	return "", nil
-}
 
 type sshSuite struct {
 	destinationJujuSSHServer gliderssh.Server
@@ -39,9 +38,36 @@ type sshSuite struct {
 	hostKey                  gossh.Signer
 	testInDestinationServerF func(fm ssh.ForwardMessage)
 	received                 chan bool
+
+	allowedModelUUID string
 }
 
 func (s *sshSuite) Init(c *qt.C) {
+	ctx := context.Background()
+	// Setup DB
+	db := &db.Database{
+		DB: jimmtest.PostgresDB(c, time.Now),
+	}
+	err := db.Migrate(context.Background())
+	c.Assert(err, qt.IsNil)
+
+	// Setup OFGA
+	ofgaClient, _, _, err := jimmtest.SetupTestOFGAClient(c.Name())
+	c.Assert(err, qt.IsNil)
+
+	// create a user and set permission for one model
+	i1, err := dbmodel.NewIdentity("alice")
+	c.Assert(err, qt.IsNil)
+	userWithAccess := openfga.NewUser(i1, ofgaClient)
+	s.allowedModelUUID = "deadbeef-1bad-500d-9000-4b1d0d06f00d"
+	err = userWithAccess.SetModelAccess(ctx, names.NewModelTag(s.allowedModelUUID), ofganames.WriterRelation)
+	c.Assert(err, qt.IsNil)
+	// create a user and don't set any permission
+	i2, err := dbmodel.NewIdentity("bob")
+	c.Assert(err, qt.IsNil)
+	userWithoutAccess := openfga.NewUser(i2, ofgaClient)
+
+	// setup destination server
 	s.received = make(chan bool)
 	port, err := jimmtest.GetFreePort()
 	c.Assert(err, qt.IsNil)
@@ -69,6 +95,7 @@ func (s *sshSuite) Init(c *qt.C) {
 	s.destinationServerPort, err = strconv.Atoi(strings.Split(s.destinationJujuSSHServer.Addr, ":")[1])
 	c.Assert(err, qt.IsNil)
 
+	// setup jump server
 	port, err = jimmtest.GetFreePort()
 	c.Assert(err, qt.IsNil)
 	s.jumpServerPort = port
@@ -87,13 +114,27 @@ func (s *sshSuite) Init(c *qt.C) {
 		ssh.Config{
 			Port:    fmt.Sprint(port),
 			HostKey: hostKey},
-		resolver{},
-	)
+		mocks.SSHManager{
+			AddrFromModelUUID_: func(ctx context.Context, user *openfga.User, modelTag names.ModelTag) (string, error) {
+				return "", nil
+			},
+			FetchIdentity_: func(ctx context.Context, id string) (*openfga.User, error) {
+				if id == "alice" {
+					return userWithAccess, nil
+				} else {
+					return userWithoutAccess, nil
+				}
+			},
+			VerifyPublicKey_: func(ctx context.Context, user *openfga.User, fingerprint string) (bool, error) {
+				return true, nil
+			},
+		})
 	c.Assert(err, qt.IsNil)
 	go func() {
 		_ = s.jumpSSHServer.ListenAndServe()
 	}()
 
+	// setup private key
 	k, err = rsa.GenerateKey(rand.Reader, 2048)
 	c.Assert(err, qt.IsNil)
 	keyPEM := pem.EncodeToMemory(
@@ -105,6 +146,8 @@ func (s *sshSuite) Init(c *qt.C) {
 
 	s.privateKey, err = gossh.ParsePrivateKey(keyPEM)
 	c.Assert(err, qt.IsNil)
+
+	// cleanup
 	c.Cleanup(func() {
 		err := s.destinationJujuSSHServer.Close()
 		c.Check(err, qt.IsNil)
@@ -119,20 +162,21 @@ func (s *sshSuite) TestSSHJump(c *qt.C) {
 		Auth: []gossh.AuthMethod{
 			gossh.PublicKeys(s.privateKey),
 		},
+		User: "alice",
 	})
 	c.Assert(err, qt.IsNil)
 	defer client.Close()
 
 	// send forward message
 	msg := ssh.ForwardMessage{
-		DestAddr: "model1",
+		DestAddr: s.allowedModelUUID,
 		//nolint:gosec
 		DestPort: uint32(s.destinationServerPort),
 		SrcAddr:  "localhost",
 		SrcPort:  0,
 	}
 	s.testInDestinationServerF = func(fm ssh.ForwardMessage) {
-		c.Check(fm.DestAddr, qt.Equals, "model1")
+		c.Check(fm.DestAddr, qt.Equals, s.allowedModelUUID)
 	}
 	ch, _, err := client.OpenChannel("direct-tcpip", gossh.Marshal(&msg))
 	c.Check(err, qt.IsNil)
@@ -144,23 +188,68 @@ func (s *sshSuite) TestSSHJump(c *qt.C) {
 	}
 }
 
+func (s *sshSuite) TestSSHJumpPermissionFail(c *qt.C) {
+	client, err := gossh.Dial("tcp", fmt.Sprintf(":%d", s.jumpServerPort), &gossh.ClientConfig{
+		HostKeyCallback: gossh.FixedHostKey(s.hostKey.PublicKey()),
+		Auth: []gossh.AuthMethod{
+			gossh.PublicKeys(s.privateKey),
+		},
+		User: "alice",
+	})
+	c.Assert(err, qt.IsNil)
+	defer client.Close()
+
+	// send forward message
+	msg := ssh.ForwardMessage{
+		DestAddr: "982b16d9-a945-4762-b684-fd4fd885aa11",
+		//nolint:gosec
+		DestPort: uint32(s.destinationServerPort),
+		SrcAddr:  "localhost",
+		SrcPort:  0,
+	}
+	_, _, err = client.OpenChannel("direct-tcpip", gossh.Marshal(&msg))
+	c.Assert(err, qt.ErrorMatches, ".*user doesn't have permission.*")
+
+	client, err = gossh.Dial("tcp", fmt.Sprintf(":%d", s.jumpServerPort), &gossh.ClientConfig{
+		//nolint:gosec // this will be removed once we handle hostkeys
+		HostKeyCallback: gossh.InsecureIgnoreHostKey(),
+		Auth: []gossh.AuthMethod{
+			gossh.PublicKeys(s.privateKey),
+		},
+		User: "bob",
+	})
+	c.Assert(err, qt.IsNil)
+	defer client.Close()
+	// send forward message
+	msg = ssh.ForwardMessage{
+		DestAddr: s.allowedModelUUID,
+		//nolint:gosec
+		DestPort: uint32(s.destinationServerPort),
+		SrcAddr:  "localhost",
+		SrcPort:  0,
+	}
+	_, _, err = client.OpenChannel("direct-tcpip", gossh.Marshal(&msg))
+	c.Assert(err, qt.ErrorMatches, ".*user doesn't have permission.*")
+}
+
 func (s *sshSuite) TestSSHJumpDialFail(c *qt.C) {
 	_, err := gossh.Dial("tcp", fmt.Sprintf(":%d", 1), &gossh.ClientConfig{
 		HostKeyCallback: gossh.FixedHostKey(s.hostKey.PublicKey()),
 		Auth: []gossh.AuthMethod{
 			gossh.PublicKeys(s.privateKey),
 		},
+		User: "alice",
 	})
 	c.Assert(err, qt.ErrorMatches, ".*connect: connection refused.*")
 }
 
 func (s *sshSuite) TestSSHFinalDestinationDialFail(c *qt.C) {
-
 	client, err := gossh.Dial("tcp", fmt.Sprintf(":%d", s.jumpServerPort), &gossh.ClientConfig{
 		HostKeyCallback: gossh.FixedHostKey(s.hostKey.PublicKey()),
 		Auth: []gossh.AuthMethod{
 			gossh.PublicKeys(s.privateKey),
 		},
+		User: "alice",
 	})
 	c.Assert(err, qt.IsNil)
 
@@ -177,7 +266,6 @@ func (s *sshSuite) TestSSHFinalDestinationDialFail(c *qt.C) {
 	}
 	_, _, err = client.OpenChannel("direct-tcpip", gossh.Marshal(&msg))
 	c.Assert(err, qt.ErrorMatches, ".*connect failed.*")
-
 }
 
 func TestIdentityManager(t *testing.T) {
