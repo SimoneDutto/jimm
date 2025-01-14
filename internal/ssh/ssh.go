@@ -25,23 +25,8 @@ type Resolver interface {
 	AddrFromModelUUID(ctx context.Context, user openfga.User, modelUUID string) (string, error)
 }
 
-// fowardMessage is the struct holding the information about the jump message received by the ssh client.
-type forwardMessage struct {
-	DestAddr string
-	DestPort uint32
-	SrcAddr  string
-	SrcPort  uint32
-}
-
-// Server is the custom struct to embed the gliderlabs.ssh server and a resolver.
-type Server struct {
-	*ssh.Server
-
-	resolver Resolver
-}
-
 // NewJumpSSHServer creates the jump server struct.
-func NewJumpSSHServer(ctx context.Context, port int, resolver Resolver) (Server, error) {
+func NewJumpSSHServer(ctx context.Context, config SSHServerConfig, resolver Resolver) (Server, error) {
 	zapctx.Info(ctx, "NewSSHServer")
 
 	if resolver == nil {
@@ -49,7 +34,7 @@ func NewJumpSSHServer(ctx context.Context, port int, resolver Resolver) (Server,
 	}
 	server := Server{
 		Server: &ssh.Server{
-			Addr: fmt.Sprintf(":%d", port),
+			Addr: fmt.Sprintf(":%s", config.Port),
 			ChannelHandlers: map[string]ssh.ChannelHandler{
 				"direct-tcpip": directTCPIPHandler(resolver),
 			},
@@ -59,6 +44,11 @@ func NewJumpSSHServer(ctx context.Context, port int, resolver Resolver) (Server,
 		},
 		resolver: resolver,
 	}
+	s, err := gossh.ParsePrivateKey([]byte(config.HostKey))
+	if err != nil {
+		return Server{}, fmt.Errorf("Cannot parse hostkey.")
+	}
+	server.AddHostKey(s)
 
 	return server, nil
 }
