@@ -25,6 +25,28 @@ type Resolver interface {
 	AddrFromModelUUID(ctx context.Context, user openfga.User, modelUUID string) (string, error)
 }
 
+// forwardMessage is the struct holding the information about the jump message received by the ssh client.
+type forwardMessage struct {
+	DestAddr string
+	DestPort uint32
+	SrcAddr  string
+	SrcPort  uint32
+}
+
+// Server is the custom struct to embed the gliderlabs.ssh server and a resolver.
+type Server struct {
+	*ssh.Server
+
+	resolver Resolver
+}
+
+// Config is the struct holding the configuration for the jump server.
+type Config struct {
+	Port                     string
+	HostKey                  []byte
+	MaxConcurrentConnections string
+}
+
 // NewJumpServer creates the jump server struct.
 func NewJumpServer(ctx context.Context, config Config, resolver Resolver) (Server, error) {
 	zapctx.Info(ctx, "NewJumpServer")
