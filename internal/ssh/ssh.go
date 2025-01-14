@@ -25,9 +25,9 @@ type Resolver interface {
 	AddrFromModelUUID(ctx context.Context, user openfga.User, modelUUID string) (string, error)
 }
 
-// NewJumpSSHServer creates the jump server struct.
-func NewJumpSSHServer(ctx context.Context, config SSHServerConfig, resolver Resolver) (Server, error) {
-	zapctx.Info(ctx, "NewSSHServer")
+// NewJumpServer creates the jump server struct.
+func NewJumpServer(ctx context.Context, config Config, resolver Resolver) (Server, error) {
+	zapctx.Info(ctx, "NewJumpServer")
 
 	if resolver == nil {
 		return Server{}, fmt.Errorf("Cannot create JumpSSHServer with a nil resolver.")

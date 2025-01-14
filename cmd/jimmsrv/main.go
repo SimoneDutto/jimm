@@ -210,17 +210,5 @@ func start(ctx context.Context, s *service.Service) error {
 	s.Go(httpsrv.ListenAndServe)
 	zapctx.Info(ctx, "Successfully started JIMM server")
 
-	// // this is to show the integration, we will uncommented it once the ssh implementation is ready.
-	// sshJumpServer, err := ssh.NewJumpSSHServer(ctx, ssh.SSHServerConfig{
-	// 	Port:                     os.Getenv("JIMM_SSH_PORT"),
-	// 	HostKey:                  []byte(os.Getenv("JIMM_SSH_HOST_KEY")),
-	// 	MaxConcurrentConnections: os.Getenv("JIMM_SSH_MAX_CONCURRENT_CONNECTIONS"),
-	// }, jimmsvc.JIMM().SSHManager())
-	// if err != nil {
-	// 	return err
-	// }
-	// s.Go(sshJumpServer.ListenAndServe)
-	// zapctx.Info(ctx, "Successfully started JIMM ssh jump server")
-
 	return nil
 }

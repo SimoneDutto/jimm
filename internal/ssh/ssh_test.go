@@ -83,8 +83,8 @@ func (s *sshSuite) Init(c *qt.C) {
 	s.hostKey, err = gossh.ParsePrivateKey(hostKey)
 	c.Assert(err, qt.IsNil)
 
-	s.jumpSSHServer, err = ssh.NewJumpSSHServer(context.Background(),
-		ssh.SSHServerConfig{
+	s.jumpSSHServer, err = ssh.NewJumpServer(context.Background(),
+		ssh.Config{
 			Port:    fmt.Sprint(port),
 			HostKey: hostKey},
 		resolver{},

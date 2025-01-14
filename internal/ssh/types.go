@@ -1,4 +1,5 @@
 // Copyright 2025 Canonical.
+
 package ssh
 
 import "github.com/gliderlabs/ssh"
@@ -18,7 +19,7 @@ type Server struct {
 	resolver Resolver
 }
 
-type SSHServerConfig struct {
+type Config struct {
 	Port                     string
 	HostKey                  []byte
 	MaxConcurrentConnections string
