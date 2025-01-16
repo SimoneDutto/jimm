@@ -10,27 +10,30 @@ import (
 	"github.com/canonical/jimm/v3/internal/openfga"
 )
 
-type identityManager interface {
+// IdentityManager provides a means to fetch an identity from the identity service.
+type IdentityManager interface {
 	FetchIdentity(ctx context.Context, id string) (*openfga.User, error)
 }
 
-type modelManager interface {
+// ModelManager provides a means to fetch a model from the model service.
+type ModelManager interface {
 	GetModel(ctx context.Context, uuid string) (dbmodel.Model, error)
 }
 
-type sshKeyManager interface {
-	VerifyPublicKey(ctx context.Context, user *openfga.User, fingerprint string) (bool, error)
+// SSHKeyManager provides a means to manage ssh keys within JIMM.
+type SSHKeyManager interface {
+	VerifyPublicKey(ctx context.Context, claimUser string, publicKey []byte) (bool, error)
 }
 
 // sshManager provides a means to manage ssh server within JIMM.
 type sshManager struct {
-	modelManager
-	identityManager
-	sshKeyManager
+	ModelManager
+	IdentityManager
+	SSHKeyManager
 }
 
 // NewSSHManager returns a new SSHManager that offers jimm functionality to the SSHJumpServer.
-func NewSSHManager(identityManager identityManager, modelManager modelManager, sshKeyManager sshKeyManager) (*sshManager, error) {
+func NewSSHManager(identityManager IdentityManager, modelManager ModelManager, sshKeyManager SSHKeyManager) (*sshManager, error) {
 	if identityManager == nil {
 		return nil, errors.E("identityManager cannot be nil")
 	}
@@ -41,8 +44,8 @@ func NewSSHManager(identityManager identityManager, modelManager modelManager, s
 		return nil, errors.E("sshManager cannot be nil")
 	}
 	return &sshManager{
-		modelManager:    modelManager,
-		identityManager: identityManager,
-		sshKeyManager:   sshKeyManager,
+		ModelManager:    modelManager,
+		IdentityManager: identityManager,
+		SSHKeyManager:   sshKeyManager,
 	}, nil
 }

@@ -125,7 +125,7 @@ func (s *sshSuite) Init(c *qt.C) {
 					return userWithoutAccess, nil
 				}
 			},
-			VerifyPublicKey_: func(ctx context.Context, user *openfga.User, fingerprint string) (bool, error) {
+			VerifyPublicKey_: func(ctx context.Context, claimUser string, publicKey []byte) (bool, error) {
 				return true, nil
 			},
 		})

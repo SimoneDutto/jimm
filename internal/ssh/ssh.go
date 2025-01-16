@@ -31,7 +31,7 @@ type SSHManager interface {
 	FetchIdentity(ctx context.Context, id string) (*openfga.User, error)
 
 	// VerifyPublicKey verifies the identityName is
-	VerifyPublicKey(ctx context.Context, user *openfga.User, fingerprint string) (bool, error)
+	VerifyPublicKey(ctx context.Context, claimUser string, publicKey []byte) (bool, error)
 }
 
 // forwardMessage is the struct holding the information about the jump message received by the ssh client.
@@ -70,13 +70,14 @@ func NewJumpServer(ctx context.Context, config Config, sshManager SSHManager) (S
 				"direct-tcpip": directTCPIPHandler(sshManager),
 			},
 			PublicKeyHandler: func(ctx ssh.Context, key ssh.PublicKey) bool {
-				user, err := sshManager.FetchIdentity(ctx, ctx.User())
-				if err != nil {
-					zapctx.Info(ctx, fmt.Sprintf("cannot find user %s", ctx.User()))
+				claimUser := ctx.User()
+				if ok, err := sshManager.VerifyPublicKey(ctx, claimUser, key.Marshal()); !ok || err != nil {
+					zapctx.Info(ctx, fmt.Sprintf("cannot verify key for user %s", ctx.User()), zap.Error(err))
 					return false
 				}
-				if ok, err := sshManager.VerifyPublicKey(ctx, user, gossh.FingerprintSHA256(key)); !ok || err != nil {
-					zapctx.Info(ctx, fmt.Sprintf("cannot verify key for user %s", ctx.User()), zap.Error(err))
+				user, err := sshManager.FetchIdentity(ctx, claimUser)
+				if err != nil {
+					zapctx.Info(ctx, fmt.Sprintf("cannot find user %s", ctx.User()))
 					return false
 				}
 				ctx.SetValue(publicKeySSHUserKey{}, user)
@@ -111,7 +112,7 @@ func directTCPIPHandler(sshManager SSHManager) func(srv *ssh.Server, conn *gossh
 			return
 		}
 		modelTag := names.NewModelTag(d.DestAddr)
-		user, err := fetchAndVerifySSHUser(ctx, modelTag)
+		user, err := fetchAndAuthorizeUser(ctx, modelTag)
 		if err != nil {
 			rejectConnectionAndLogError(ctx, newChan, err.Error(), err)
 			return
@@ -175,8 +176,8 @@ func directTCPIPHandler(sshManager SSHManager) func(srv *ssh.Server, conn *gossh
 	}
 }
 
-// fetchAndVerifySSHUser extracts the user from the context and checks the user has permission to ssh.
-func fetchAndVerifySSHUser(ctx ssh.Context, modelTag names.ModelTag) (*openfga.User, error) {
+// fetchAndAuthorizeUser extracts the user from the context and checks the user has permission to ssh.
+func fetchAndAuthorizeUser(ctx ssh.Context, modelTag names.ModelTag) (*openfga.User, error) {
 	user, ok := ctx.Value(publicKeySSHUserKey{}).(*openfga.User)
 	if !ok {
 		return nil, fmt.Errorf("fo user in the context")
