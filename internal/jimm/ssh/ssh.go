@@ -53,6 +53,8 @@ type sshManager struct {
 	sshKeyManager   SSHKeyManager
 }
 
+// PublicKeyHandler is the method to verify the public key of the user. It first checks for the public key and then fetches the user.
+// It returns a user if successful.
 func (s *sshManager) PublicKeyHandler(ctx context.Context, claimUser string, key []byte) (*openfga.User, error) {
 	zapctx.Info(ctx, "PublicKeyHandler")
 	if ok, err := s.sshKeyManager.VerifyPublicKey(ctx, claimUser, key); !ok || err != nil {
