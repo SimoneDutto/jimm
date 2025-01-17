@@ -93,6 +93,73 @@ func (s *sshKeysManagerSuite) TestListUserPublicKeys(c *qt.C) {
 	c.Assert(keys[0].Marshal(), qt.DeepEquals, s.pubKey.Marshal())
 }
 
+func (s *sshKeysManagerSuite) TestVerifyPublicKeys(c *qt.C) {
+	c.Parallel()
+	ctx := context.Background()
+
+	err := s.manager.AddUserPublicKey(ctx, s.user, s.pubKey)
+	c.Assert(err, qt.IsNil)
+
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	c.Assert(err, qt.IsNil)
+	anotherPubKey, err := gossh.NewPublicKey(&key.PublicKey)
+	c.Assert(err, qt.IsNil)
+	err = s.manager.AddUserPublicKey(ctx, s.user, sshkeys.PublicKey{PublicKey: anotherPubKey, Comment: "myComment"})
+	c.Assert(err, qt.IsNil)
+
+	key, err = rsa.GenerateKey(rand.Reader, 2048)
+	c.Assert(err, qt.IsNil)
+	notAddedKey, err := gossh.NewPublicKey(&key.PublicKey)
+	c.Assert(err, qt.IsNil)
+
+	tests := []struct {
+		name          string
+		user          string
+		key           []byte
+		okExpected    bool
+		errorExpected string
+	}{
+		{
+			name:       "valid key",
+			user:       s.user.Name,
+			key:        s.pubKey.Marshal(),
+			okExpected: true,
+		},
+		{
+			name:       "valid key",
+			user:       s.user.Name,
+			key:        anotherPubKey.Marshal(),
+			okExpected: true,
+		},
+		{
+			name:          "not existing user",
+			user:          "not-existing",
+			key:           s.pubKey.Marshal(),
+			okExpected:    false,
+			errorExpected: "cannot find a matching key for this user.",
+		},
+		{
+			name:          "not added key",
+			user:          s.user.Name,
+			key:           notAddedKey.Marshal(),
+			okExpected:    false,
+			errorExpected: "cannot find a matching key for this user.",
+		},
+	}
+
+	for _, test := range tests {
+		c.Run(test.name, func(c *qt.C) {
+			ok, err := s.manager.VerifyPublicKey(ctx, test.user, test.key)
+			c.Assert(ok, qt.Equals, test.okExpected)
+			if test.errorExpected != "" {
+				c.Assert(err, qt.ErrorMatches, test.errorExpected)
+			} else {
+				c.Assert(err, qt.IsNil)
+			}
+		})
+	}
+}
+
 func (s *sshKeysManagerSuite) TestRemoveUserKeyByComment(c *qt.C) {
 	c.Parallel()
 	ctx := context.Background()
