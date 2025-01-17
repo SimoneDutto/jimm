@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"time"
 
 	"github.com/gliderlabs/ssh"
 	"github.com/juju/names/v5"
@@ -19,6 +20,7 @@ import (
 
 // juju_ssh_default_port is the default port we expect the juju controllers to respond on.
 const juju_ssh_default_port = 17022
+const defaultAcceptConnectionTimeout = time.Second
 
 type publicKeySSHUserKey struct{}
 
@@ -47,38 +49,66 @@ type forwardMessage struct {
 type Config struct {
 	Port                     string
 	HostKey                  []byte
-	MaxConcurrentConnections string
+	MaxConcurrentConnections int
+	AcceptConnectionTimeout  time.Duration
+}
+
+type Server struct {
+	*ssh.Server
+
+	MaxConcurrentConnections int
+	AcceptConnectionTimeout  time.Duration
 }
 
 // NewJumpServer creates the jump server struct.
-func NewJumpServer(ctx context.Context, config Config, sshAuthorizer SSHAuthorizer, sshResolver SSHResolver) (*ssh.Server, error) {
+func NewJumpServer(ctx context.Context, config Config, sshAuthorizer SSHAuthorizer, sshResolver SSHResolver) (Server, error) {
 	zapctx.Info(ctx, "NewJumpServer")
 
 	if sshResolver == nil {
-		return nil, fmt.Errorf("Cannot create JumpSSHServer with a nil resolver.")
+		return Server{}, fmt.Errorf("Cannot create JumpSSHServer with a nil resolver.")
 	}
-	server := &ssh.Server{
-		Addr: fmt.Sprintf(":%s", config.Port),
-		ChannelHandlers: map[string]ssh.ChannelHandler{
-			"direct-tcpip": directTCPIPHandler(sshResolver),
+	server := Server{
+		Server: &ssh.Server{
+			Addr: fmt.Sprintf(":%s", config.Port),
+			ChannelHandlers: map[string]ssh.ChannelHandler{
+				"direct-tcpip": directTCPIPHandler(sshResolver),
+			},
+			PublicKeyHandler: func(ctx ssh.Context, key ssh.PublicKey) bool {
+				user, err := sshAuthorizer.PublicKeyHandler(ctx, ctx.User(), key.Marshal())
+				if err != nil {
+					zapctx.Debug(ctx, fmt.Sprintf("cannot verify key for user %s", ctx.User()), zap.Error(err))
+					return false
+				}
+				ctx.SetValue(publicKeySSHUserKey{}, user)
+				return true
+			},
 		},
-		PublicKeyHandler: func(ctx ssh.Context, key ssh.PublicKey) bool {
-			user, err := sshAuthorizer.PublicKeyHandler(ctx, ctx.User(), key.Marshal())
-			if err != nil {
-				zapctx.Debug(ctx, fmt.Sprintf("cannot verify key for user %s", ctx.User()), zap.Error(err))
-				return false
-			}
-			ctx.SetValue(publicKeySSHUserKey{}, user)
-			return true
-		},
+		MaxConcurrentConnections: config.MaxConcurrentConnections,
+		AcceptConnectionTimeout:  config.AcceptConnectionTimeout,
 	}
 	hostKey, err := gossh.ParsePrivateKey([]byte(config.HostKey))
 	if err != nil {
-		return nil, fmt.Errorf("Cannot parse hostkey.")
+		return Server{}, fmt.Errorf("Cannot parse hostkey.")
 	}
 	server.AddHostKey(hostKey)
 
 	return server, nil
+}
+
+// ListenAndServe create a LimitListenerWithTimeout and Serve requests.
+func (srv Server) ListenAndServe() error {
+	ln, err := net.Listen("tcp", srv.Addr)
+	if srv.MaxConcurrentConnections == 0 {
+		srv.MaxConcurrentConnections = 100
+	}
+	if srv.AcceptConnectionTimeout == 0 {
+		srv.AcceptConnectionTimeout = defaultAcceptConnectionTimeout
+	}
+	ln = LimitListenerWithTimeout(ln, srv.MaxConcurrentConnections, srv.AcceptConnectionTimeout)
+	if err != nil {
+		return err
+	}
+	return srv.Serve(ln)
 }
 
 func directTCPIPHandler(sshResolver SSHResolver) func(srv *ssh.Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx ssh.Context) {
