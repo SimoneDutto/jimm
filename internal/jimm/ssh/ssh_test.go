@@ -13,6 +13,7 @@ import (
 
 func TestSSHManagerCreation(t *testing.T) {
 	c := qt.New(t)
+	// TODO(simonedutto): add proper testing when implementing the sshkeymanager VerifyPublicKey method.
 	_, err := ssh.NewSSHManager(&mocks.IdentityManager{}, &mocks.ModelManager{}, &mocks.SSHKeyManager{})
 	c.Assert(err, qt.IsNil)
 }

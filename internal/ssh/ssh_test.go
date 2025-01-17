@@ -30,9 +30,9 @@ import (
 )
 
 type sshSuite struct {
-	destinationJujuSSHServer gliderssh.Server
+	destinationJujuSSHServer *gliderssh.Server
 	destinationServerPort    int
-	jumpSSHServer            ssh.Server
+	jumpSSHServer            *gliderssh.Server
 	jumpServerPort           int
 	privateKey               gossh.Signer
 	hostKey                  gossh.Signer
@@ -72,7 +72,7 @@ func (s *sshSuite) Init(c *qt.C) {
 	port, err := jimmtest.GetFreePort()
 	c.Assert(err, qt.IsNil)
 	s.destinationServerPort = port
-	s.destinationJujuSSHServer = gliderssh.Server{
+	s.destinationJujuSSHServer = &gliderssh.Server{
 		Addr: fmt.Sprintf(":%d", port),
 		ChannelHandlers: map[string]gliderssh.ChannelHandler{
 			"direct-tcpip": func(srv *gliderssh.Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx gliderssh.Context) {
@@ -110,25 +110,26 @@ func (s *sshSuite) Init(c *qt.C) {
 	s.hostKey, err = gossh.ParsePrivateKey(hostKey)
 	c.Assert(err, qt.IsNil)
 
-	s.jumpSSHServer, err = ssh.NewJumpServer(context.Background(),
+	jumpServer, err := ssh.NewJumpServer(context.Background(),
 		ssh.Config{
 			Port:    fmt.Sprint(port),
-			HostKey: hostKey},
-		mocks.SSHManager{
+			HostKey: hostKey,
+		},
+		mocks.SSHAuthorizer{
+			PublicKeyHandler_: func(ctx context.Context, claimUser string, key []byte) (*openfga.User, error) {
+				if claimUser == "alice" {
+					return userWithAccess, nil
+				}
+				return userWithoutAccess, nil
+			},
+		},
+		mocks.SSHResolver{
 			AddrFromModelUUID_: func(ctx context.Context, user *openfga.User, modelTag names.ModelTag) (string, error) {
 				return "", nil
 			},
-			FetchIdentity_: func(ctx context.Context, id string) (*openfga.User, error) {
-				if id == "alice" {
-					return userWithAccess, nil
-				} else {
-					return userWithoutAccess, nil
-				}
-			},
-			VerifyPublicKey_: func(ctx context.Context, claimUser string, publicKey []byte) (bool, error) {
-				return true, nil
-			},
 		})
+	c.Assert(err, qt.IsNil)
+	s.jumpSSHServer = jumpServer
 	c.Assert(err, qt.IsNil)
 	go func() {
 		_ = s.jumpSSHServer.ListenAndServe()

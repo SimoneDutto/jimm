@@ -22,16 +22,17 @@ const juju_ssh_default_port = 17022
 
 type publicKeySSHUserKey struct{}
 
-// SSHManager is the interface with the methods needed by the ssh jump server to route request.
-type SSHManager interface {
+// SSHAuthorizer is the interface to authorize users via public key.
+type SSHAuthorizer interface {
+	// PublicKeyHandler is the method to verify the public key of the user. It returns a user if successful.
+	PublicKeyHandler(ctx context.Context, claimUser string, key []byte) (*openfga.User, error)
+}
+
+// TODO(simonedutto): this is going to change to reuse as much as our dial logic as we possibly can.
+// SSHResolver is the interface to resolve controller's addresses.
+type SSHResolver interface {
 	// AddrFromModelUUID is the method to resolve the address of the controller to contact given the model UUID.
 	AddrFromModelUUID(ctx context.Context, user *openfga.User, modelTag names.ModelTag) (string, error)
-
-	// FetchIdentity
-	FetchIdentity(ctx context.Context, id string) (*openfga.User, error)
-
-	// VerifyPublicKey verifies the identityName is
-	VerifyPublicKey(ctx context.Context, claimUser string, publicKey []byte) (bool, error)
 }
 
 // forwardMessage is the struct holding the information about the jump message received by the ssh client.
@@ -42,13 +43,6 @@ type forwardMessage struct {
 	SrcPort  uint32
 }
 
-// Server is the custom struct to embed the gliderlabs.ssh server and a sshManager.
-type Server struct {
-	*ssh.Server
-
-	sshManager SSHManager
-}
-
 // Config is the struct holding the configuration for the jump server.
 type Config struct {
 	Port                     string
@@ -57,45 +51,37 @@ type Config struct {
 }
 
 // NewJumpServer creates the jump server struct.
-func NewJumpServer(ctx context.Context, config Config, sshManager SSHManager) (Server, error) {
+func NewJumpServer(ctx context.Context, config Config, sshAuthorizer SSHAuthorizer, sshResolver SSHResolver) (*ssh.Server, error) {
 	zapctx.Info(ctx, "NewJumpServer")
 
-	if sshManager == nil {
-		return Server{}, fmt.Errorf("Cannot create JumpSSHServer with a nil resolver.")
+	if sshResolver == nil {
+		return nil, fmt.Errorf("Cannot create JumpSSHServer with a nil resolver.")
 	}
-	server := Server{
-		Server: &ssh.Server{
-			Addr: fmt.Sprintf(":%s", config.Port),
-			ChannelHandlers: map[string]ssh.ChannelHandler{
-				"direct-tcpip": directTCPIPHandler(sshManager),
-			},
-			PublicKeyHandler: func(ctx ssh.Context, key ssh.PublicKey) bool {
-				claimUser := ctx.User()
-				if ok, err := sshManager.VerifyPublicKey(ctx, claimUser, key.Marshal()); !ok || err != nil {
-					zapctx.Info(ctx, fmt.Sprintf("cannot verify key for user %s", ctx.User()), zap.Error(err))
-					return false
-				}
-				user, err := sshManager.FetchIdentity(ctx, claimUser)
-				if err != nil {
-					zapctx.Info(ctx, fmt.Sprintf("cannot find user %s", ctx.User()))
-					return false
-				}
-				ctx.SetValue(publicKeySSHUserKey{}, user)
-				return true
-			},
+	server := &ssh.Server{
+		Addr: fmt.Sprintf(":%s", config.Port),
+		ChannelHandlers: map[string]ssh.ChannelHandler{
+			"direct-tcpip": directTCPIPHandler(sshResolver),
 		},
-		sshManager: sshManager,
+		PublicKeyHandler: func(ctx ssh.Context, key ssh.PublicKey) bool {
+			user, err := sshAuthorizer.PublicKeyHandler(ctx, ctx.User(), key.Marshal())
+			if err != nil {
+				zapctx.Debug(ctx, fmt.Sprintf("cannot verify key for user %s", ctx.User()), zap.Error(err))
+				return false
+			}
+			ctx.SetValue(publicKeySSHUserKey{}, user)
+			return true
+		},
 	}
-	s, err := gossh.ParsePrivateKey([]byte(config.HostKey))
+	hostKey, err := gossh.ParsePrivateKey([]byte(config.HostKey))
 	if err != nil {
-		return Server{}, fmt.Errorf("Cannot parse hostkey.")
+		return nil, fmt.Errorf("Cannot parse hostkey.")
 	}
-	server.AddHostKey(s)
+	server.AddHostKey(hostKey)
 
 	return server, nil
 }
 
-func directTCPIPHandler(sshManager SSHManager) func(srv *ssh.Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx ssh.Context) {
+func directTCPIPHandler(sshResolver SSHResolver) func(srv *ssh.Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx ssh.Context) {
 	return func(srv *ssh.Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx ssh.Context) {
 		d := forwardMessage{}
 		k := newChan.ExtraData()
@@ -117,7 +103,7 @@ func directTCPIPHandler(sshManager SSHManager) func(srv *ssh.Server, conn *gossh
 			rejectConnectionAndLogError(ctx, newChan, err.Error(), err)
 			return
 		}
-		addr, err := sshManager.AddrFromModelUUID(ctx, user, modelTag)
+		addr, err := sshResolver.AddrFromModelUUID(ctx, user, modelTag)
 		if err != nil {
 			rejectConnectionAndLogError(ctx, newChan, "failed to resolve address from model uuid", err)
 			return

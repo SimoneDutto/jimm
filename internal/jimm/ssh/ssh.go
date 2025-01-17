@@ -4,6 +4,9 @@ package ssh
 
 import (
 	"context"
+	"fmt"
+
+	"github.com/juju/zaputil/zapctx"
 
 	"github.com/canonical/jimm/v3/internal/dbmodel"
 	"github.com/canonical/jimm/v3/internal/errors"
@@ -25,13 +28,6 @@ type SSHKeyManager interface {
 	VerifyPublicKey(ctx context.Context, claimUser string, publicKey []byte) (bool, error)
 }
 
-// sshManager provides a means to manage ssh server within JIMM.
-type sshManager struct {
-	ModelManager
-	IdentityManager
-	SSHKeyManager
-}
-
 // NewSSHManager returns a new SSHManager that offers jimm functionality to the SSHJumpServer.
 func NewSSHManager(identityManager IdentityManager, modelManager ModelManager, sshKeyManager SSHKeyManager) (*sshManager, error) {
 	if identityManager == nil {
@@ -44,8 +40,28 @@ func NewSSHManager(identityManager IdentityManager, modelManager ModelManager, s
 		return nil, errors.E("sshManager cannot be nil")
 	}
 	return &sshManager{
-		ModelManager:    modelManager,
-		IdentityManager: identityManager,
-		SSHKeyManager:   sshKeyManager,
+		modelManager:    modelManager,
+		identityManager: identityManager,
+		sshKeyManager:   sshKeyManager,
 	}, nil
+}
+
+// sshManager provides a means to manage ssh server within JIMM.
+type sshManager struct {
+	modelManager    ModelManager
+	identityManager IdentityManager
+	sshKeyManager   SSHKeyManager
+}
+
+func (s *sshManager) PublicKeyHandler(ctx context.Context, claimUser string, key []byte) (*openfga.User, error) {
+	zapctx.Info(ctx, "PublicKeyHandler")
+	if ok, err := s.sshKeyManager.VerifyPublicKey(ctx, claimUser, key); !ok || err != nil {
+		return nil, fmt.Errorf("cannot verify key for user %s: %s", claimUser, err.Error())
+	}
+	user, err := s.identityManager.FetchIdentity(ctx, claimUser)
+	if err != nil {
+		zapctx.Info(ctx, fmt.Sprintf("cannot find user %s", claimUser))
+		return nil, fmt.Errorf("cannot find user %s: %s", claimUser, err.Error())
+	}
+	return user, nil
 }
