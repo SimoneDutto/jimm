@@ -18,7 +18,9 @@ import (
 
 	jimmsvc "github.com/canonical/jimm/v3/cmd/jimmsrv/service"
 	"github.com/canonical/jimm/v3/internal/errors"
+	jimmssh "github.com/canonical/jimm/v3/internal/jimm/ssh"
 	"github.com/canonical/jimm/v3/internal/logger"
+	"github.com/canonical/jimm/v3/internal/ssh"
 	"github.com/canonical/jimm/v3/version"
 )
 
@@ -141,19 +143,26 @@ func start(ctx context.Context, s *service.Service) error {
 		return errors.E("jimm session store secret must be at least 64 characters")
 	}
 
+	hostKeyRaw := os.Getenv("JIMM_SSH_HOST_KEY")
+	fingerprint, err := ssh.GetFingerprintFromPrivateKey([]byte(hostKeyRaw))
+	if err != nil {
+		return errors.E("Cannot parse hostkey")
+	}
+
 	corsAllowedOrigins := strings.Split(os.Getenv("CORS_ALLOWED_ORIGINS"), " ")
 
 	logSQL, _ := strconv.ParseBool(os.Getenv("JIMM_LOG_SQL"))
 
 	jimmsvc, err := jimmsvc.NewService(ctx, jimmsvc.Params{
-		ControllerUUID:    os.Getenv("JIMM_UUID"),
-		DSN:               os.Getenv("JIMM_DSN"),
-		ControllerAdmins:  strings.Fields(os.Getenv("JIMM_ADMINS")),
-		VaultRoleID:       os.Getenv("VAULT_ROLE_ID"),
-		VaultRoleSecretID: os.Getenv("VAULT_ROLE_SECRET_ID"),
-		VaultAddress:      os.Getenv("VAULT_ADDR"),
-		VaultPath:         os.Getenv("VAULT_PATH"),
-		PublicDNSName:     os.Getenv("JIMM_DNS_NAME"),
+		ControllerUUID:        os.Getenv("JIMM_UUID"),
+		DSN:                   os.Getenv("JIMM_DSN"),
+		SSHHostKeyFingerprint: fingerprint,
+		ControllerAdmins:      strings.Fields(os.Getenv("JIMM_ADMINS")),
+		VaultRoleID:           os.Getenv("VAULT_ROLE_ID"),
+		VaultRoleSecretID:     os.Getenv("VAULT_ROLE_SECRET_ID"),
+		VaultAddress:          os.Getenv("VAULT_ADDR"),
+		VaultPath:             os.Getenv("VAULT_PATH"),
+		PublicDNSName:         os.Getenv("JIMM_DNS_NAME"),
 		OpenFGAParams: jimmsvc.OpenFGAParams{
 			Scheme:    os.Getenv("OPENFGA_SCHEME"),
 			Host:      os.Getenv("OPENFGA_HOST"),
@@ -210,5 +219,19 @@ func start(ctx context.Context, s *service.Service) error {
 	s.Go(httpsrv.ListenAndServe)
 	zapctx.Info(ctx, "Successfully started JIMM server")
 
+	sshManager, err := jimmssh.NewSSHManager(jimmsvc.JIMM().IdentityManager(), jimmsvc.JIMM(), jimmsvc.JIMM().SSHKeyManager())
+	if err != nil {
+		return err
+	}
+	sshServer, err := ssh.NewJumpServer(ctx, ssh.Config{
+		Port:                     os.Getenv("JIMM_SSH_PORT"),
+		HostKey:                  []byte(hostKeyRaw),
+		MaxConcurrentConnections: os.Getenv("JIMM_SSH_MAX_CONCURRENT_CONNECTIONS"),
+	}, sshManager)
+	if err != nil {
+		return err
+	}
+	s.Go(sshServer.ListenAndServe)
+	zapctx.Info(ctx, "Successfully started JIMM ssh server")
 	return nil
 }

@@ -47,3 +47,11 @@ func dialControllerSSHServer(addrs []string, destPort uint32) (*gossh.Client, er
 	}
 	return client, nil
 }
+
+func GetFingerprintFromPrivateKey(privateKey []byte) (string, error) {
+	key, err := gossh.ParsePrivateKey(privateKey)
+	if err != nil {
+		return "", err
+	}
+	return gossh.FingerprintSHA256(key.PublicKey()), nil
+}

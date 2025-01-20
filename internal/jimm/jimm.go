@@ -253,6 +253,8 @@ type SSHKeyManager interface {
 	RemoveUserKeyByComment(ctx context.Context, user *openfga.User, comment string) error
 	// RemoveUserKeyByFingerprint removes a user's public key(s) by the key fingerprint.
 	RemoveUserKeyByFingerprint(ctx context.Context, user *openfga.User, fingerprint string) error
+	// VerifyPublicKey lists the key for a user and compares the key to find a match.
+	VerifyPublicKey(ctx context.Context, claimUser string, publicKey []byte) (bool, error)
 }
 
 // Parameters holds the services and static fields passed to the jimm.New() constructor.
