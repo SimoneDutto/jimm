@@ -11,6 +11,7 @@ import (
 	"github.com/canonical/jimm/v3/internal/dbmodel"
 	"github.com/canonical/jimm/v3/internal/errors"
 	"github.com/canonical/jimm/v3/internal/openfga"
+	"github.com/canonical/jimm/v3/internal/rpc"
 )
 
 // IdentityManager provides a means to fetch an identity from the identity service.
@@ -66,4 +67,21 @@ func (s *sshManager) PublicKeyHandler(ctx context.Context, claimUser string, key
 		return nil, fmt.Errorf("cannot find user %s: %s", claimUser, err.Error())
 	}
 	return user, nil
+}
+
+// ResolveAddressesFromModelUUID is the method to resolve the address of the controller to contact given the model UUID.
+func (s *sshManager) ResolveAddressesFromModelUUID(ctx context.Context, modelUUID string) ([]string, error) {
+	zapctx.Info(ctx, "ResolveAddressesFromModelUUID")
+
+	model, err := s.modelManager.GetModel(ctx, modelUUID)
+	if err != nil {
+		return nil, fmt.Errorf("cannot find model %s", modelUUID)
+	}
+
+	addrs, _ := rpc.GetAddressesAndTLSConfig(ctx, &model.Controller)
+	if len(addrs) == 0 {
+		return nil, fmt.Errorf("cannot find addresses for model %s", modelUUID)
+	}
+
+	return addrs, nil
 }
