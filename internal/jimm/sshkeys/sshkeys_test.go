@@ -100,18 +100,23 @@ func (s *sshKeysManagerSuite) TestVerifyPublicKeys(c *qt.C) {
 	err := s.manager.AddUserPublicKey(ctx, s.user, s.pubKey)
 	c.Assert(err, qt.IsNil)
 
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	rawKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	c.Assert(err, qt.IsNil)
-	anotherPubKey, err := gossh.NewPublicKey(&key.PublicKey)
+	anotherPubKey, err := gossh.NewPublicKey(&rawKey.PublicKey)
 	c.Assert(err, qt.IsNil)
 	err = s.manager.AddUserPublicKey(ctx, s.user, sshkeys.PublicKey{PublicKey: anotherPubKey, Comment: "myComment"})
 	c.Assert(err, qt.IsNil)
 
-	key, err = rsa.GenerateKey(rand.Reader, 2048)
+	rawKey, err = rsa.GenerateKey(rand.Reader, 2048)
 	c.Assert(err, qt.IsNil)
-	notAddedKey, err := gossh.NewPublicKey(&key.PublicKey)
+	notAddedPublicKey, err := gossh.NewPublicKey(&rawKey.PublicKey)
 	c.Assert(err, qt.IsNil)
 
+	i, err := dbmodel.NewIdentity("bob")
+	c.Assert(err, qt.IsNil)
+	s.db.DB.Create(i)
+
+	// Create test identity
 	tests := []struct {
 		name          string
 		user          string
@@ -120,13 +125,13 @@ func (s *sshKeysManagerSuite) TestVerifyPublicKeys(c *qt.C) {
 		errorExpected string
 	}{
 		{
-			name:       "valid key",
+			name:       "valid key for valid user",
 			user:       s.user.Name,
 			key:        s.pubKey.Marshal(),
 			okExpected: true,
 		},
 		{
-			name:       "valid key",
+			name:       "another valid key for valid user",
 			user:       s.user.Name,
 			key:        anotherPubKey.Marshal(),
 			okExpected: true,
@@ -139,9 +144,16 @@ func (s *sshKeysManagerSuite) TestVerifyPublicKeys(c *qt.C) {
 			errorExpected: "cannot find a matching key for this user.",
 		},
 		{
-			name:          "not added key",
+			name:          "valid user with a not added key",
 			user:          s.user.Name,
-			key:           notAddedKey.Marshal(),
+			key:           notAddedPublicKey.Marshal(),
+			okExpected:    false,
+			errorExpected: "cannot find a matching key for this user.",
+		},
+		{
+			name:          "valid user with a key added on another user",
+			user:          "bob",
+			key:           anotherPubKey.Marshal(),
 			okExpected:    false,
 			errorExpected: "cannot find a matching key for this user.",
 		},
