@@ -285,7 +285,7 @@ func (s *sshSuite) TestMaxConcurrentConnections(c *qt.C) {
 		c.Check(err, qt.IsNil)
 		clients = append(clients, client)
 	}
-	// this connection is sent when we are at maximum connection>
+	// this connection is dropped when we are at maximum connections
 	_, err := gossh.Dial("tcp", fmt.Sprintf(":%d", s.jumpServerPort), &gossh.ClientConfig{
 		HostKeyCallback: gossh.FixedHostKey(s.hostKey.PublicKey()),
 		Auth: []gossh.AuthMethod{

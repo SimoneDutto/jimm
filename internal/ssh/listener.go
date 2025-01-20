@@ -8,8 +8,8 @@ import (
 )
 
 // N.B.:
-// This is a copypaste of netutil.LimiLister, but we add a timeout so when we are at the limit
-// we actively close connections instead of waiting indefinetely. (Look at line 44)
+// This is a copypaste of netutil.LimiLister (link: https://cs.opensource.google/go/x/net/+/refs/tags/v0.34.0:netutil/listen.go),
+// but we add a timeout so when we are at the limit we actively close connections instead of waiting indefinetely. (Look at line 44)
 
 // LimitListenerWithTimeout returns a Listener that accepts at most n simultaneous
 // connections from the provided Listener, and it timeouts when the max

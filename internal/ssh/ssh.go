@@ -18,8 +18,8 @@ import (
 	"github.com/canonical/jimm/v3/internal/openfga"
 )
 
-// juju_ssh_default_port is the default port we expect the juju controllers to respond on.
-const juju_ssh_default_port = 17022
+// jujuSSHDefaultPort is the default port we expect the juju controllers to respond on.
+const jujuSSHDefaultPort = 17022
 const defaultAcceptConnectionTimeout = time.Second
 
 type publicKeySSHUserKey struct{}
@@ -67,6 +67,7 @@ func NewJumpServer(ctx context.Context, config Config, sshAuthorizer SSHAuthoriz
 	if sshResolver == nil {
 		return Server{}, fmt.Errorf("Cannot create JumpSSHServer with a nil resolver.")
 	}
+	config = setConfigDefaults(config)
 	server := Server{
 		Server: &ssh.Server{
 			Addr: fmt.Sprintf(":%s", config.Port),
@@ -95,6 +96,20 @@ func NewJumpServer(ctx context.Context, config Config, sshAuthorizer SSHAuthoriz
 	return server, nil
 }
 
+// setConfigDefaults sets the default values for the configuration.
+func setConfigDefaults(config Config) Config {
+	if config.Port == "" {
+		config.Port = fmt.Sprint(jujuSSHDefaultPort)
+	}
+	if config.MaxConcurrentConnections <= 0 {
+		config.MaxConcurrentConnections = 100
+	}
+	if config.AcceptConnectionTimeout <= 0 {
+		config.AcceptConnectionTimeout = defaultAcceptConnectionTimeout
+	}
+	return config
+}
+
 // ListenAndServe create a LimitListenerWithTimeout and Serve requests.
 func (srv Server) ListenAndServe() error {
 	ln, err := net.Listen("tcp", srv.Addr)
@@ -121,7 +136,7 @@ func directTCPIPHandler(sshResolver SSHResolver) func(srv *ssh.Server, conn *gos
 			return
 		}
 		if d.DestPort == 0 {
-			d.DestPort = juju_ssh_default_port
+			d.DestPort = jujuSSHDefaultPort
 		}
 		if !names.IsValidModel(d.DestAddr) {
 			rejectConnectionAndLogError(ctx, newChan, "invalid model uuid", nil)
