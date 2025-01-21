@@ -21,6 +21,7 @@ import (
 // jujuSSHDefaultPort is the default port we expect the juju controllers to respond on.
 const jujuSSHDefaultPort = 17022
 const defaultAcceptConnectionTimeout = time.Second
+const defaultMaxConcurrentConnections = 100
 
 type publicKeySSHUserKey struct{}
 
@@ -53,11 +54,12 @@ type Config struct {
 	AcceptConnectionTimeout  time.Duration
 }
 
+// Server is the struct holding the jump server and some
 type Server struct {
 	*ssh.Server
 
-	MaxConcurrentConnections int
-	AcceptConnectionTimeout  time.Duration
+	maxConcurrentConnections int
+	acceptConnectionTimeout  time.Duration
 }
 
 // NewJumpServer creates the jump server struct.
@@ -84,8 +86,8 @@ func NewJumpServer(ctx context.Context, config Config, sshAuthorizer SSHAuthoriz
 				return true
 			},
 		},
-		MaxConcurrentConnections: config.MaxConcurrentConnections,
-		AcceptConnectionTimeout:  config.AcceptConnectionTimeout,
+		maxConcurrentConnections: config.MaxConcurrentConnections,
+		acceptConnectionTimeout:  config.AcceptConnectionTimeout,
 	}
 	hostKey, err := gossh.ParsePrivateKey([]byte(config.HostKey))
 	if err != nil {
@@ -102,7 +104,7 @@ func setConfigDefaults(config Config) Config {
 		config.Port = fmt.Sprint(jujuSSHDefaultPort)
 	}
 	if config.MaxConcurrentConnections <= 0 {
-		config.MaxConcurrentConnections = 100
+		config.MaxConcurrentConnections = defaultMaxConcurrentConnections
 	}
 	if config.AcceptConnectionTimeout <= 0 {
 		config.AcceptConnectionTimeout = defaultAcceptConnectionTimeout
@@ -113,13 +115,13 @@ func setConfigDefaults(config Config) Config {
 // ListenAndServe create a LimitListenerWithTimeout and Serve requests.
 func (srv Server) ListenAndServe() error {
 	ln, err := net.Listen("tcp", srv.Addr)
-	if srv.MaxConcurrentConnections == 0 {
-		srv.MaxConcurrentConnections = 100
+	if srv.maxConcurrentConnections == 0 {
+		srv.maxConcurrentConnections = 100
 	}
-	if srv.AcceptConnectionTimeout == 0 {
-		srv.AcceptConnectionTimeout = defaultAcceptConnectionTimeout
+	if srv.acceptConnectionTimeout == 0 {
+		srv.acceptConnectionTimeout = defaultAcceptConnectionTimeout
 	}
-	ln = LimitListenerWithTimeout(ln, srv.MaxConcurrentConnections, srv.AcceptConnectionTimeout)
+	ln = limitListenerWithTimeout(ln, srv.maxConcurrentConnections, srv.acceptConnectionTimeout)
 	if err != nil {
 		return err
 	}

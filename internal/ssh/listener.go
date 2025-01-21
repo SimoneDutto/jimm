@@ -4,19 +4,15 @@
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
-//
 //   - Redistributions of source code must retain the above copyright
-//
-// notice, this list of conditions and the following disclaimer.
+//     notice, this list of conditions and the following disclaimer.
 //   - Redistributions in binary form must reproduce the above
-//
-// copyright notice, this list of conditions and the following disclaimer
-// in the documentation and/or other materials provided with the
-// distribution.
+//     copyright notice, this list of conditions and the following disclaimer
+// 	   in the documentation and/or other materials provided with the
+//     distribution.
 //   - Neither the name of Google LLC nor the names of its
-//
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
+//     contributors may be used to endorse or promote products derived from
+//     this software without specific prior written permission.
 //
 // THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
 // "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
@@ -42,10 +38,10 @@ import (
 // This is a copypaste of netutil.LimiLister (link: https://cs.opensource.google/go/x/net/+/refs/tags/v0.34.0:netutil/listen.go),
 // but we add a timeout so when we are at the limit we actively close connections instead of waiting indefinetely. (Look at line 44)
 
-// LimitListenerWithTimeout returns a Listener that accepts at most n simultaneous
+// limitListenerWithTimeout returns a Listener that accepts at most n simultaneous
 // connections from the provided Listener, and it timeouts when the max
 // has been reached and no seats has been freed for the timeout period.
-func LimitListenerWithTimeout(l net.Listener, n int, timeout time.Duration) net.Listener {
+func limitListenerWithTimeout(l net.Listener, n int, timeout time.Duration) net.Listener {
 	return &limitListener{
 		Listener: l,
 		sem:      make(chan struct{}, n),
