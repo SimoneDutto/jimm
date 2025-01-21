@@ -115,12 +115,6 @@ func setConfigDefaults(config Config) Config {
 // ListenAndServe create a LimitListenerWithTimeout and Serve requests.
 func (srv Server) ListenAndServe() error {
 	ln, err := net.Listen("tcp", srv.Addr)
-	if srv.maxConcurrentConnections == 0 {
-		srv.maxConcurrentConnections = 100
-	}
-	if srv.acceptConnectionTimeout == 0 {
-		srv.acceptConnectionTimeout = defaultAcceptConnectionTimeout
-	}
 	ln = limitListenerWithTimeout(ln, srv.maxConcurrentConnections, srv.acceptConnectionTimeout)
 	if err != nil {
 		return err
