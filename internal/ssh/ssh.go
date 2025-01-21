@@ -21,7 +21,8 @@ const juju_ssh_default_port = 17022
 
 type publicKeySSHUserKey struct{}
 
-// SSHManager is the interface to
+// SSHManager is the interface to enable the ssh server to operate. Performing public key verification and
+// resolving addresses from model uuids.
 type SSHManager interface {
 	// PublicKeyHandler is the method to verify the public key of the user. It returns a user if successful.
 	PublicKeyHandler(ctx context.Context, claimUser string, key []byte) (*openfga.User, error)
@@ -162,4 +163,13 @@ func fetchAndAuthorizeUser(ctx ssh.Context, modelTag names.ModelTag) (*openfga.U
 		return nil, fmt.Errorf("user doesn't have permission")
 	}
 	return user, nil
+}
+
+// rejectConnectionAndLogError logs the error and rejects the channel with a message.
+func rejectConnectionAndLogError(ctx context.Context, newChan gossh.NewChannel, msg string, err error) {
+	zapctx.Error(ctx, msg, zap.Error(err))
+	err = newChan.Reject(gossh.ConnectionFailed, msg)
+	if err != nil {
+		zapctx.Error(ctx, msg, zap.Error(err))
+	}
 }

@@ -2,24 +2,12 @@
 package ssh
 
 import (
-	"context"
 	"fmt"
 	"net"
 	"time"
 
-	"github.com/juju/zaputil/zapctx"
-	"go.uber.org/zap"
 	gossh "golang.org/x/crypto/ssh"
 )
-
-// rejectConnectionAndLogError logs the error and rejects the channel with a message.
-func rejectConnectionAndLogError(ctx context.Context, newChan gossh.NewChannel, msg string, err error) {
-	zapctx.Error(ctx, msg, zap.Error(err))
-	err = newChan.Reject(gossh.ConnectionFailed, msg)
-	if err != nil {
-		zapctx.Error(ctx, msg, zap.Error(err))
-	}
-}
 
 // dialControllerSSHServer dials the controller ssh server, trying the addresses sequentially and returning a go ssh client.
 func dialControllerSSHServer(addrs []string, destPort uint32) (*gossh.Client, error) {
