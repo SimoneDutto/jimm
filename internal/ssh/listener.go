@@ -78,6 +78,7 @@ func (l *limitListener) acquire() bool {
 }
 func (l *limitListener) release() { <-l.sem }
 
+// Accept waits for and returns the next connection to the listener, by checking the semaphore and the timeout.
 func (l *limitListener) Accept() (net.Conn, error) {
 	if !l.acquire() {
 		// If the semaphore isn't acquired because the listener was closed, expect
