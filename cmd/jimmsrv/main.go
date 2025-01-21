@@ -218,7 +218,7 @@ func start(ctx context.Context, s *service.Service) error {
 	})
 	s.Go(httpsrv.ListenAndServe)
 	zapctx.Info(ctx, "Successfully started JIMM server")
-
+	maxConccurentConncetions, _ := strconv.Atoi(os.Getenv("JIMM_SSH_MAX_CONCURRENT_CONNECTIONS"))
 	sshManager, err := jimmssh.NewSSHManager(jimmsvc.JIMM().IdentityManager(), jimmsvc.JIMM(), jimmsvc.JIMM().SSHKeyManager())
 	if err != nil {
 		return err
@@ -226,7 +226,7 @@ func start(ctx context.Context, s *service.Service) error {
 	sshServer, err := ssh.NewJumpServer(ctx, ssh.Config{
 		Port:                     os.Getenv("JIMM_SSH_PORT"),
 		HostKey:                  []byte(hostKeyRaw),
-		MaxConcurrentConnections: os.Getenv("JIMM_SSH_MAX_CONCURRENT_CONNECTIONS"),
+		MaxConcurrentConnections: maxConccurentConncetions,
 	}, sshManager)
 	if err != nil {
 		return err

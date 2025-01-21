@@ -67,6 +67,7 @@ func NewJumpServer(ctx context.Context, config Config, sshManager SSHManager) (S
 		return Server{}, fmt.Errorf("Cannot create JumpSSHServer with a nil ssh manager.")
 	}
 	config = setConfigDefaults(config)
+
 	server := Server{
 		Server: &ssh.Server{
 			Addr: fmt.Sprintf(":%s", config.Port),
@@ -205,4 +206,13 @@ func fetchAndAuthorizeUser(ctx ssh.Context, modelTag names.ModelTag) (*openfga.U
 		return nil, fmt.Errorf("user doesn't have permission")
 	}
 	return user, nil
+}
+
+// rejectConnectionAndLogError logs the error and rejects the channel with a message.
+func rejectConnectionAndLogError(ctx context.Context, newChan gossh.NewChannel, msg string, err error) {
+	zapctx.Error(ctx, msg, zap.Error(err))
+	err = newChan.Reject(gossh.ConnectionFailed, msg)
+	if err != nil {
+		zapctx.Error(ctx, msg, zap.Error(err))
+	}
 }
