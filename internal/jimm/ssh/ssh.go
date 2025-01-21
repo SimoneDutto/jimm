@@ -59,12 +59,12 @@ type sshManager struct {
 func (s *sshManager) PublicKeyHandler(ctx context.Context, claimUser string, key []byte) (*openfga.User, error) {
 	zapctx.Info(ctx, "PublicKeyHandler")
 	if ok, err := s.sshKeyManager.VerifyPublicKey(ctx, claimUser, key); !ok || err != nil {
-		return nil, fmt.Errorf("cannot verify key for user %s: %s", claimUser, err.Error())
+		return nil, errors.E(err, "cannot verify key for user")
 	}
 	user, err := s.identityManager.FetchIdentity(ctx, claimUser)
 	if err != nil {
 		zapctx.Info(ctx, fmt.Sprintf("cannot find user %s", claimUser))
-		return nil, fmt.Errorf("cannot find user %s: %s", claimUser, err.Error())
+		return nil, errors.E(err, "cannot find user")
 	}
 	return user, nil
 }
@@ -75,12 +75,12 @@ func (s *sshManager) ResolveAddressesFromModelUUID(ctx context.Context, modelUUI
 
 	model, err := s.modelManager.GetModel(ctx, modelUUID)
 	if err != nil {
-		return nil, fmt.Errorf("cannot find model %s", modelUUID)
+		return nil, errors.E(err, "cannot find model")
 	}
 
 	addrs, _ := rpc.GetAddressesAndTLSConfig(ctx, &model.Controller)
 	if len(addrs) == 0 {
-		return nil, fmt.Errorf("cannot find addresses for model %s", modelUUID)
+		return nil, errors.E(err, "cannot find addresses for model's controller")
 	}
 
 	return addrs, nil
