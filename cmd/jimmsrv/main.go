@@ -143,9 +143,12 @@ func start(ctx context.Context, s *service.Service) error {
 	}
 
 	hostKeyRaw := os.Getenv("JIMM_SSH_HOST_KEY")
+	if hostKeyRaw == "" {
+		return errors.E("empty hostkey from env variable")
+	}
 	fingerprints, err := ssh.GetFingerprintsFromPrivateKey([]byte(hostKeyRaw))
 	if err != nil {
-		return errors.E("Cannot parse hostkey")
+		return errors.E("cannot parse hostkey from env variable")
 	}
 
 	corsAllowedOrigins := strings.Split(os.Getenv("CORS_ALLOWED_ORIGINS"), " ")

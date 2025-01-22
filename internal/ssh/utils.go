@@ -12,9 +12,9 @@ func GetFingerprintsFromPrivateKey(privateKey []byte) (map[string]string, error)
 	if err != nil {
 		return nil, err
 	}
-	m := make(map[string]string)
 
-	m["SHA256"] = gossh.FingerprintSHA256(key.PublicKey())
-	m["MD5"] = gossh.FingerprintLegacyMD5(key.PublicKey())
-	return m, nil
+	return map[string]string{
+		"SHA256": gossh.FingerprintSHA256(key.PublicKey()),
+		"MD5":    gossh.FingerprintLegacyMD5(key.PublicKey()),
+	}, nil
 }

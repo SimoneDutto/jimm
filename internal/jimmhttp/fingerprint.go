@@ -1,4 +1,5 @@
 // Copyright 2025 Canonical.
+
 package jimmhttp
 
 import (
@@ -16,6 +17,7 @@ func WriteFingerprints(m map[string]string) func(http.ResponseWriter, *http.Requ
 		b, err := json.Marshal(m)
 		if err != nil {
 			zapctx.Error(ctx, "failed to marshal map", zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
