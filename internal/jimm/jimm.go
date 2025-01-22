@@ -36,6 +36,7 @@ import (
 	"github.com/canonical/jimm/v3/internal/jimm/permissions"
 	"github.com/canonical/jimm/v3/internal/jimm/role"
 	"github.com/canonical/jimm/v3/internal/jimm/serviceaccount"
+	"github.com/canonical/jimm/v3/internal/jimm/ssh"
 	"github.com/canonical/jimm/v3/internal/jimm/sshkeys"
 	"github.com/canonical/jimm/v3/internal/jimmjwx"
 	"github.com/canonical/jimm/v3/internal/openfga"
@@ -257,6 +258,16 @@ type SSHKeyManager interface {
 	VerifyPublicKey(ctx context.Context, claimUser string, publicKey []byte) (bool, error)
 }
 
+// SSHManager is the interface to enable the ssh server to operate. Performing public key verification and
+// resolving addresses from model uuids.
+type SSHManager interface {
+	// PublicKeyHandler is the method to verify the public key of the user. It returns a user if successful.
+	PublicKeyHandler(ctx context.Context, claimUser string, key []byte) (*openfga.User, error)
+
+	// ResolveAddressesFromModelUUID is the method to resolve the address of the controller to contact given the model UUID.
+	ResolveAddressesFromModelUUID(ctx context.Context, modelUUID string) ([]string, error)
+}
+
 // Parameters holds the services and static fields passed to the jimm.New() constructor.
 // You can provide mock implementations of certain services where necessary for dependency injection.
 type Parameters struct {
@@ -404,6 +415,11 @@ func New(p Parameters) (*JIMM, error) {
 	}
 	j.sshKeyManager = sshKeyManager
 
+	sshManager, err := ssh.NewSSHManager(j.identityManager, j, j.sshKeyManager)
+	if err != nil {
+		return nil, err
+	}
+	j.sshManager = sshManager
 	return j, nil
 }
 
@@ -438,6 +454,9 @@ type JIMM struct {
 
 	// sshKeyManager provides a means to manage SSH keys within JIMM.
 	sshKeyManager SSHKeyManager
+
+	// sshManager provides a means to manage SSH operations withing JIMM.
+	sshManager SSHManager
 }
 
 // ResourceTag returns JIMM's controller tag stating its UUID.
@@ -497,6 +516,12 @@ func (j *JIMM) ServiceAccountManager() ServiceAccountManager {
 // related to ssh keys.
 func (j *JIMM) SSHKeyManager() SSHKeyManager {
 	return j.sshKeyManager
+}
+
+// SSHManager returns a manager that enables operations
+// related to ssh.
+func (j *JIMM) SSHManager() SSHManager {
+	return j.sshManager
 }
 
 type permission struct {

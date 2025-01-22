@@ -195,8 +195,8 @@ type Params struct {
 	// Setting this to "debug" enables the requests logger as well.
 	LogLevel string
 
-	// SSHHostKeyFingerprint is the fingerprint of the SSH public host key.
-	SSHHostKeyFingerprint string
+	// HostKeyFingerprints is the fingerprint of the SSH public host key.
+	HostKeyFingerprints map[string]string
 }
 
 // A Service is the implementation of a JIMM server.
@@ -500,12 +500,7 @@ func NewService(ctx context.Context, p Params) (*Service, error) {
 	)
 
 	// serve the ssh public key fingerprint
-	s.mux.Get("/ssh/public-key-fingerprint", func(w http.ResponseWriter, _ *http.Request) {
-		_, err := w.Write([]byte(p.SSHHostKeyFingerprint))
-		if err != nil {
-			zapctx.Error(ctx, "failed to write public key fingerprint", zap.Error(err))
-		}
-	})
+	s.mux.Get("/ssh/public-key-fingerprints", jimmhttp.WriteFingerprints(p.HostKeyFingerprints))
 
 	s.isLeader = p.IsLeader
 
