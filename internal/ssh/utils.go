@@ -6,7 +6,7 @@ import (
 	gossh "golang.org/x/crypto/ssh"
 )
 
-// GetFingerprintsFromPrivateKey returns the fingerprints of the public key from the private key.
+// GetFingerprintsFromPrivateKey returns the fingerprints of the host key.
 func GetFingerprintsFromPrivateKey(privateKey []byte) (map[string]string, error) {
 	key, err := gossh.ParsePrivateKey(privateKey)
 	if err != nil {
