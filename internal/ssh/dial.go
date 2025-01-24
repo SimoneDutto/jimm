@@ -14,7 +14,7 @@ import (
 )
 
 // dialControllerSSHServer dials the controller ssh server, trying the addresses sequentially and returning a go ssh client.
-func dialControllerSSHServer(addrs []string, destPort uint32) (*gossh.Client, error) {
+func dialControllerSSHServer(addrs []string, destPort uint32, jwt string) (*gossh.Client, error) {
 	var client *gossh.Client
 	var err error
 	var errs []error
@@ -25,7 +25,7 @@ func dialControllerSSHServer(addrs []string, destPort uint32) (*gossh.Client, er
 			HostKeyCallback: gossh.InsecureIgnoreHostKey(),
 			Auth: []gossh.AuthMethod{
 				gossh.PasswordCallback(func() (secret string, err error) {
-					return "jwt", nil
+					return jwt, nil
 				}),
 			},
 			Timeout: 5 * time.Second,

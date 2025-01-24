@@ -88,6 +88,9 @@ func (s *sshSuite) Init(c *qt.C) {
 				s.received <- true
 			},
 		},
+		PasswordHandler: func(ctx gliderssh.Context, password string) bool {
+			return "valid-jwt" == password
+		},
 	}
 	go func() {
 		_ = s.destinationJujuSSHServer.ListenAndServe()
@@ -123,8 +126,11 @@ func (s *sshSuite) Init(c *qt.C) {
 				}
 				return userWithoutAccess, nil
 			},
-			ResolveAddressesFromModelUUID_: func(ctx context.Context, modelUUID string) ([]string, error) {
-				return []string{""}, nil
+			ConnInfoFromModelUUID_: func(ctx context.Context, modelUUID string, user *openfga.User) ([]string, string, error) {
+				if user == userWithAccess {
+					return []string{""}, "valid-jwt", nil
+				}
+				return []string{""}, "", nil
 			},
 		})
 	c.Assert(err, qt.IsNil)
@@ -189,47 +195,56 @@ func (s *sshSuite) TestSSHJump(c *qt.C) {
 }
 
 func (s *sshSuite) TestSSHJumpPermissionFail(c *qt.C) {
-	client, err := gossh.Dial("tcp", fmt.Sprintf(":%d", s.jumpServerPort), &gossh.ClientConfig{
-		HostKeyCallback: gossh.FixedHostKey(s.hostKey.PublicKey()),
-		Auth: []gossh.AuthMethod{
-			gossh.PublicKeys(s.privateKey),
+	tests := []struct {
+		name     string
+		user     string
+		destAddr string
+		errMsg   string
+	}{
+		{
+			name:     "alice not allowed on this model",
+			user:     "alice",
+			destAddr: "982b16d9-a945-4762-b684-fd4fd885aa11",
+			errMsg:   "ssh: rejected: connect failed (user doesn't have permission)",
 		},
-		User: "alice",
-	})
-	c.Assert(err, qt.IsNil)
-	defer client.Close()
-
-	// send forward message
-	msg := ssh.ForwardMessage{
-		DestAddr: "982b16d9-a945-4762-b684-fd4fd885aa11",
-		//nolint:gosec
-		DestPort: uint32(s.destinationServerPort),
-		SrcAddr:  "localhost",
-		SrcPort:  0,
-	}
-	_, _, err = client.OpenChannel("direct-tcpip", gossh.Marshal(&msg))
-	c.Assert(err, qt.ErrorMatches, ".*user doesn't have permission.*")
-
-	client, err = gossh.Dial("tcp", fmt.Sprintf(":%d", s.jumpServerPort), &gossh.ClientConfig{
-		//nolint:gosec // this will be removed once we handle hostkeys
-		HostKeyCallback: gossh.InsecureIgnoreHostKey(),
-		Auth: []gossh.AuthMethod{
-			gossh.PublicKeys(s.privateKey),
+		{
+			name:     "bob not allowed on this model",
+			user:     "bob",
+			destAddr: s.allowedModelUUID,
+			errMsg:   "ssh: rejected: connect failed (user doesn't have permission)",
 		},
-		User: "bob",
-	})
-	c.Assert(err, qt.IsNil)
-	defer client.Close()
-	// send forward message
-	msg = ssh.ForwardMessage{
-		DestAddr: s.allowedModelUUID,
-		//nolint:gosec
-		DestPort: uint32(s.destinationServerPort),
-		SrcAddr:  "localhost",
-		SrcPort:  0,
+		{
+			name:     "not existing user",
+			user:     "mark",
+			destAddr: s.allowedModelUUID,
+			errMsg:   "ssh: rejected: connect failed (user doesn't have permission)",
+		},
 	}
-	_, _, err = client.OpenChannel("direct-tcpip", gossh.Marshal(&msg))
-	c.Assert(err, qt.ErrorMatches, ".*user doesn't have permission.*")
+
+	for _, test := range tests {
+		c.Run(test.name, func(c *qt.C) {
+			client, err := gossh.Dial("tcp", fmt.Sprintf(":%d", s.jumpServerPort), &gossh.ClientConfig{
+				HostKeyCallback: gossh.FixedHostKey(s.hostKey.PublicKey()),
+				Auth: []gossh.AuthMethod{
+					gossh.PublicKeys(s.privateKey),
+				},
+				User: test.user,
+			})
+			c.Assert(err, qt.IsNil)
+			defer client.Close()
+
+			// send forward message
+			msg := ssh.ForwardMessage{
+				DestAddr: test.destAddr,
+				//nolint:gosec
+				DestPort: uint32(s.destinationServerPort),
+				SrcAddr:  "localhost",
+				SrcPort:  0,
+			}
+			_, _, err = client.OpenChannel("direct-tcpip", gossh.Marshal(&msg))
+			c.Assert(err.Error(), qt.Equals, test.errMsg)
+		})
+	}
 }
 
 func (s *sshSuite) TestSSHJumpDialFail(c *qt.C) {
