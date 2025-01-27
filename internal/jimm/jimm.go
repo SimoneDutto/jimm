@@ -197,7 +197,7 @@ type SSHManager interface {
 
 	// ConnInfoFromModelUUID is the method to resolve the address of the controller to contact given the model UUID and
 	// a valid JWT To connect to the controller.
-	ConnInfoFromModelUUID(ctx context.Context, modelUUID string, user *openfga.User) ([]string, string, error)
+	ConnInfoFromModelUUID(ctx context.Context, modelUUID string, user *openfga.User) (ssh.ConnInfo, error)
 }
 
 // JujuManager is the interface to manage all Juju related operations.

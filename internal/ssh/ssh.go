@@ -15,6 +15,7 @@ import (
 	"go.uber.org/zap"
 	gossh "golang.org/x/crypto/ssh"
 
+	jimmssh "github.com/canonical/jimm/v3/internal/jimm/ssh"
 	"github.com/canonical/jimm/v3/internal/openfga"
 )
 
@@ -33,7 +34,7 @@ type SSHManager interface {
 
 	// ConnInfoFromModelUUID is the method to resolve the address of the controller to contact given the model UUID and
 	// a valid JWT To connect to the controller.
-	ConnInfoFromModelUUID(ctx context.Context, modelUUID string, user *openfga.User) ([]string, string, error)
+	ConnInfoFromModelUUID(ctx context.Context, modelUUID string, user *openfga.User) (jimmssh.ConnInfo, error)
 }
 
 // forwardMessage is the struct holding the information about the jump message received by the ssh client.
@@ -143,12 +144,12 @@ func directTCPIPHandler(sshManager SSHManager) func(srv *ssh.Server, conn *gossh
 			rejectConnectionAndLogError(ctx, newChan, err.Error(), err)
 			return
 		}
-		addrs, jwt, err := sshManager.ConnInfoFromModelUUID(ctx, modelTag.Id(), user)
+		connInfo, err := sshManager.ConnInfoFromModelUUID(ctx, modelTag.Id(), user)
 		if err != nil {
 			rejectConnectionAndLogError(ctx, newChan, "failed to get connection info", err)
 			return
 		}
-		client, err := dialControllerSSHServer(addrs, d.DestPort, string(jwt))
+		client, err := dialControllerSSHServer(connInfo, d.DestPort)
 		if err != nil {
 			rejectConnectionAndLogError(ctx, newChan, fmt.Sprintf("failed to dial controller ssh: %v", err), err)
 			return

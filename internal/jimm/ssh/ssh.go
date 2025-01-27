@@ -15,6 +15,11 @@ import (
 	"github.com/canonical/jimm/v3/internal/rpc"
 )
 
+type ConnInfo struct {
+	Addrs []string
+	JWT   string
+}
+
 // IdentityManager provides a means to fetch an identity from the identity service.
 type IdentityManager interface {
 	FetchIdentity(ctx context.Context, id string) (*openfga.User, error)
@@ -81,21 +86,25 @@ func (s *sshManager) PublicKeyHandler(ctx context.Context, claimUser string, key
 
 // ConnInfoFromModelUUID is the method to resolve the address of the controller to contact given the model UUID and
 // a valid JWT To connect to the controller.
-func (s *sshManager) ConnInfoFromModelUUID(ctx context.Context, modelUUID string, user *openfga.User) ([]string, string, error) {
+func (s *sshManager) ConnInfoFromModelUUID(ctx context.Context, modelUUID string, user *openfga.User) (ConnInfo, error) {
 	zapctx.Info(ctx, "ConnInfoFromModelUUID")
 	model, err := s.modelManager.GetModel(ctx, modelUUID)
 	if err != nil {
-		return nil, "", errors.E(err, "cannot find model")
+		return ConnInfo{}, errors.E(err, "cannot find model")
 	}
 	addrs, _ := rpc.GetAddressesAndTLSConfig(ctx, &model.Controller)
 	if len(addrs) == 0 {
-		return nil, "", errors.E(err, "cannot find addresses for model's controller")
+		return ConnInfo{}, errors.E(err, "cannot find addresses for model's controller")
 	}
 	jwtGenerator := s.jwtFactory.New()
 	jwtGenerator.SetTags(model.ResourceTag(), model.Controller.ResourceTag())
 	jwt, err := jwtGenerator.MakeLoginToken(ctx, user)
 	if err != nil {
-		return nil, "", errors.E(err, "cannot generate jwt")
+		return ConnInfo{}, errors.E(err, "cannot generate jwt")
 	}
-	return addrs, string(jwt), nil
+
+	return ConnInfo{
+		Addrs: addrs,
+		JWT:   string(jwt),
+	}, nil
 }
