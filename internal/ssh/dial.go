@@ -15,11 +15,11 @@ import (
 )
 
 // dialControllerSSHServer dials the controller ssh server, trying the addresses sequentially and returning a go ssh client.
-func dialControllerSSHServer(connInfo jimmssh.ConnInfo, destPort uint32) (*gossh.Client, error) {
+func dialControllerSSHServer(connInfo jimmssh.ControllerInfo, destPort uint32) (*gossh.Client, error) {
 	var client *gossh.Client
 	var err error
 	var errs []error
-	for _, addr := range connInfo.Addrs {
+	for _, addr := range connInfo.Addresses {
 		dest := net.JoinHostPort(addr, fmt.Sprint(destPort))
 		client, err = gossh.Dial("tcp", dest, &gossh.ClientConfig{
 			//nolint:gosec // this will be removed once we handle hostkeys

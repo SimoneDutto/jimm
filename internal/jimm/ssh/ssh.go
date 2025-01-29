@@ -15,9 +15,12 @@ import (
 	"github.com/canonical/jimm/v3/internal/rpc"
 )
 
-type ConnInfo struct {
-	Addrs []string
-	JWT   string
+// ControllerInfo is the struct holding the infomation to contact a controller
+type ControllerInfo struct {
+	// addresses to dial the controller
+	Addresses []string
+	// JWT to authenticate to the controller
+	JWT string
 }
 
 // IdentityManager provides a means to fetch an identity from the identity service.
@@ -35,12 +38,13 @@ type SSHKeyManager interface {
 	VerifyPublicKey(ctx context.Context, claimUser string, publicKey []byte) (bool, error)
 }
 
-type JWTFactory interface {
+// JWTGeneratorFactory provides a means to create a token generator.
+type JWTGeneratorFactory interface {
 	New() jujuauth.TokenGenerator
 }
 
 // NewSSHManager returns a new SSHManager that offers jimm functionality to the SSHJumpServer.
-func NewSSHManager(identityManager IdentityManager, modelManager ModelManager, sshKeyManager SSHKeyManager, jwtFactory JWTFactory) (*sshManager, error) {
+func NewSSHManager(identityManager IdentityManager, modelManager ModelManager, sshKeyManager SSHKeyManager, jwtFactory JWTGeneratorFactory) (*sshManager, error) {
 	if identityManager == nil {
 		return nil, errors.E("identityManager cannot be nil")
 	}
@@ -66,7 +70,7 @@ type sshManager struct {
 	modelManager    ModelManager
 	identityManager IdentityManager
 	sshKeyManager   SSHKeyManager
-	jwtFactory      JWTFactory
+	jwtFactory      JWTGeneratorFactory
 }
 
 // PublicKeyHandler is the method to verify the public key of the user. It first checks for the public key and then fetches the user.
@@ -84,27 +88,27 @@ func (s *sshManager) PublicKeyHandler(ctx context.Context, claimUser string, key
 	return user, nil
 }
 
-// ConnInfoFromModelUUID is the method to resolve the address of the controller to contact given the model UUID and
+// ControllerInfoFromModelUUID is the method to resolve the address of the controller to contact given the model UUID and
 // a valid JWT To connect to the controller.
-func (s *sshManager) ConnInfoFromModelUUID(ctx context.Context, modelUUID string, user *openfga.User) (ConnInfo, error) {
-	zapctx.Info(ctx, "ConnInfoFromModelUUID")
+func (s *sshManager) ControllerInfoFromModelUUID(ctx context.Context, modelUUID string, user *openfga.User) (ControllerInfo, error) {
+	zapctx.Info(ctx, "ControllerInfoFromModelUUID")
 	model, err := s.modelManager.GetModel(ctx, modelUUID)
 	if err != nil {
-		return ConnInfo{}, errors.E(err, "cannot find model")
+		return ControllerInfo{}, errors.E(err, "cannot find model")
 	}
 	addrs, _ := rpc.GetAddressesAndTLSConfig(ctx, &model.Controller)
 	if len(addrs) == 0 {
-		return ConnInfo{}, errors.E(err, "cannot find addresses for model's controller")
+		return ControllerInfo{}, errors.E(err, "cannot find addresses for model's controller")
 	}
 	jwtGenerator := s.jwtFactory.New()
 	jwtGenerator.SetTags(model.ResourceTag(), model.Controller.ResourceTag())
 	jwt, err := jwtGenerator.MakeLoginToken(ctx, user)
 	if err != nil {
-		return ConnInfo{}, errors.E(err, "cannot generate jwt")
+		return ControllerInfo{}, errors.E(err, "cannot generate jwt")
 	}
 
-	return ConnInfo{
-		Addrs: addrs,
-		JWT:   string(jwt),
+	return ControllerInfo{
+		Addresses: addrs,
+		JWT:       string(jwt),
 	}, nil
 }

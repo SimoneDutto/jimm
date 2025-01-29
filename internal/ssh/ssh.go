@@ -32,9 +32,9 @@ type SSHManager interface {
 	// PublicKeyHandler is the method to verify the public key of the user. It returns a user if successful.
 	PublicKeyHandler(ctx context.Context, claimUser string, key []byte) (*openfga.User, error)
 
-	// ConnInfoFromModelUUID is the method to resolve the address of the controller to contact given the model UUID and
+	// ControllerInfoFromModelUUID is the method to resolve the address of the controller to contact given the model UUID and
 	// a valid JWT To connect to the controller.
-	ConnInfoFromModelUUID(ctx context.Context, modelUUID string, user *openfga.User) (jimmssh.ConnInfo, error)
+	ControllerInfoFromModelUUID(ctx context.Context, modelUUID string, user *openfga.User) (jimmssh.ControllerInfo, error)
 }
 
 // forwardMessage is the struct holding the information about the jump message received by the ssh client.
@@ -144,7 +144,7 @@ func directTCPIPHandler(sshManager SSHManager) func(srv *ssh.Server, conn *gossh
 			rejectConnectionAndLogError(ctx, newChan, err.Error(), err)
 			return
 		}
-		connInfo, err := sshManager.ConnInfoFromModelUUID(ctx, modelTag.Id(), user)
+		connInfo, err := sshManager.ControllerInfoFromModelUUID(ctx, modelTag.Id(), user)
 		if err != nil {
 			rejectConnectionAndLogError(ctx, newChan, "failed to get connection info", err)
 			return

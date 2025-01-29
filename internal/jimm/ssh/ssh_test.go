@@ -157,17 +157,17 @@ func (s *sshManagerSuite) TestPublicKeyHandler(c *qt.C) {
 	c.Assert(err, qt.ErrorMatches, `cannot verify key for user`)
 }
 
-func (s *sshManagerSuite) TestConnInfoFromModelUUID(c *qt.C) {
+func (s *sshManagerSuite) TestControllerInfoFromModelUUID(c *qt.C) {
 	ctx := context.Background()
 
-	// Test that the ConnInfoFromModelUUID returns the correct controller address and user when the model UUID is valid.
-	connInfo, err := s.sshManager.ConnInfoFromModelUUID(ctx, s.allowedModelUUID, s.userWithAccess)
+	// Test that the ControllerInfoFromModelUUID returns the correct controller address and user when the model UUID is valid.
+	connInfo, err := s.sshManager.ControllerInfoFromModelUUID(ctx, s.allowedModelUUID, s.userWithAccess)
 	c.Assert(err, qt.IsNil)
-	c.Assert(connInfo.Addrs, qt.HasLen, 1)
+	c.Assert(connInfo.Addresses, qt.HasLen, 1)
 	c.Assert(connInfo.JWT, qt.Not(qt.HasLen), 0)
 
-	// Test that the ConnInfoFromModelUUID returns an error when the model UUID is invalid.
-	_, err = s.sshManager.ConnInfoFromModelUUID(ctx, "not-valid", s.userWithAccess)
+	// Test that the ControllerInfoFromModelUUID returns an error when the model UUID is invalid.
+	_, err = s.sshManager.ControllerInfoFromModelUUID(ctx, "not-valid", s.userWithAccess)
 	c.Assert(err, qt.ErrorMatches, ".*cannot find model.*")
 }
 

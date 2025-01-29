@@ -127,11 +127,11 @@ func (s *sshSuite) Init(c *qt.C) {
 				}
 				return userWithoutAccess, nil
 			},
-			ConnInfoFromModelUUID_: func(ctx context.Context, modelUUID string, user *openfga.User) (jimmssh.ConnInfo, error) {
+			ControllerInfoFromModelUUID_: func(ctx context.Context, modelUUID string, user *openfga.User) (jimmssh.ControllerInfo, error) {
 				if user == userWithAccess {
-					return jimmssh.ConnInfo{Addrs: []string{""}, JWT: "valid-jwt"}, nil
+					return jimmssh.ControllerInfo{Addresses: []string{""}, JWT: "valid-jwt"}, nil
 				}
-				return jimmssh.ConnInfo{Addrs: []string{""}, JWT: ""}, nil
+				return jimmssh.ControllerInfo{Addresses: []string{""}, JWT: ""}, nil
 			},
 		})
 	c.Assert(err, qt.IsNil)

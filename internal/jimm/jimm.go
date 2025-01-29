@@ -195,9 +195,9 @@ type SSHManager interface {
 	// PublicKeyHandler is the method to verify the public key of the user. It returns a user if successful.
 	PublicKeyHandler(ctx context.Context, claimUser string, key []byte) (*openfga.User, error)
 
-	// ConnInfoFromModelUUID is the method to resolve the address of the controller to contact given the model UUID and
+	// ControllerInfoFromModelUUID is the method to resolve the address of the controller to contact given the model UUID and
 	// a valid JWT To connect to the controller.
-	ConnInfoFromModelUUID(ctx context.Context, modelUUID string, user *openfga.User) (ssh.ConnInfo, error)
+	ControllerInfoFromModelUUID(ctx context.Context, modelUUID string, user *openfga.User) (ssh.ControllerInfo, error)
 }
 
 // JujuManager is the interface to manage all Juju related operations.
