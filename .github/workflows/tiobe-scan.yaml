@@ -1,4 +1,4 @@
-name: TICS scan
+name: TIOBE scan
 
 on:
   workflow_dispatch:
