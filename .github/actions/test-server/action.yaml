@@ -147,7 +147,7 @@ runs:
       shell: bash
     
     - name: Dump JIMM container logs
-      if: failure() || inputs.dump-logs == 'true'
+      if: always() && inputs.dump-logs == 'true'
       uses: gacts/run-and-post-run@v1
       with:
         post: docker logs ${{ env.container_name }}
