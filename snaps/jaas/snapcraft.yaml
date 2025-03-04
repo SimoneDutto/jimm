@@ -3,8 +3,7 @@ summary: JAAS plugin
 description: Juju plugin for providing JAAS functionality to the Juju CLI.
 version: git
 grade: stable
-base: bare
-build-base: core20
+base: core20
 confinement: strict
 
 slots:
@@ -14,10 +13,20 @@ slots:
     read: 
       - $SNAP/bin
 
-# The app has no plugs as it is intended to be invoked by the Juju CLI Snap.
+plugs:
+  dot-local-share-juju:
+    interface: personal-files
+    read:
+    - $HOME/.local/share/juju
+    write:
+    - $HOME/.local/share/juju
+
 apps:
   jaas:
     command: bin/jaas
+    plugs:
+     - dot-local-share-juju
+     - network
 
 parts:
   jaas:
