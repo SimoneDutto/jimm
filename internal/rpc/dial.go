@@ -70,8 +70,6 @@ func GetAddressesAndTLSConfig(ctx context.Context, ctl *dbmodel.Controller) ([]s
 	}
 	var addrs []string
 	if ctl.PublicAddress != "" {
-		// If there is a public-address configured it is almost
-		// certainly the one we want to use.
 		addrs = append(addrs, ctl.PublicAddress)
 	}
 
