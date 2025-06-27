@@ -8,8 +8,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/juju/description/v9"
 	"github.com/juju/juju/core/migration"
 	coremigration "github.com/juju/juju/core/migration"
+	"github.com/juju/juju/environs/config"
+	"github.com/juju/juju/rpc/params"
+	"github.com/juju/juju/state"
 	"github.com/juju/names/v5"
 	"github.com/juju/version/v2"
 	"github.com/juju/zaputil/zapctx"
@@ -56,6 +60,7 @@ func (j *JujuManager) AbortMigration(ctx context.Context, user *openfga.User, mo
 		// as the migration has already been aborted on the target controller.
 		zapctx.Error(ctx, "failed to delete incoming model migration", zap.Error(err), zap.String("modelUUID", modelUUID))
 	}
+	// TODO(SimoneDutto): delete the model from JIMM's state.
 	return nil
 }
 
@@ -207,8 +212,55 @@ func (j *JujuManager) modifyMigrationInfo(model *migration.ModelInfo, userMappin
 
 	newOwnerTag := names.NewUserTag(newOwner)
 	model.Owner = newOwnerTag
-	model.ModelDescription.SetOwner(newOwnerTag)
-	model.ModelDescription.SetUsers(nil) // Clear users with access since JIMM gates access.
+	err := j.modifyModelDescription(model.ModelDescription, userMapping)
+	if err != nil {
+		return errors.E(fmt.Errorf("failed to modify model description: %w", err))
+	}
+	return nil
+}
+
+func (j *JujuManager) modifyModelDescription(modelDescription description.Model, userMapping dbmodel.StringMap) error {
+	// change the owner of the model description if it is a local user
+	if modelDescription.Owner().IsLocal() {
+		// If the owner is a local user, we replace it with the external mapping.
+		newOwner, ok := userMapping[modelDescription.Owner().Id()]
+		if !ok {
+			return errors.E(fmt.Errorf("no external user mapping found for local user %q", modelDescription.Owner().Id()))
+		}
+		modelDescription.SetOwner(names.NewUserTag(newOwner))
+	}
+
+	modelDescription.SetUsers(nil)
+
+	// change cloud credendial owner if it is a local user
+	credentials := modelDescription.CloudCredential()
+	if credentials == nil {
+		return fmt.Errorf("model description must contain a cloud credential")
+	}
+	if !names.IsValidCloud(credentials.Cloud()) {
+		return errors.E(fmt.Errorf("invalid cloud name %q", credentials.Cloud()))
+	}
+	cloudTag := names.NewCloudTag(credentials.Cloud())
+
+	if !names.IsValidUser(credentials.Owner()) {
+		return errors.E(fmt.Errorf("invalid cloud credential owner %q", credentials.Owner()))
+	}
+	ownerTag := names.NewUserTag(credentials.Owner())
+	if ownerTag.IsLocal() {
+		newOwner, ok := userMapping[ownerTag.Id()]
+		if !ok {
+			return errors.E(fmt.Errorf("no external user mapping found for cloud credential local user %q", modelDescription.Owner().Id()))
+		}
+		ownerTag = names.NewUserTag(newOwner)
+	}
+
+	modelDescription.SetCloudCredential(description.CloudCredentialArgs{
+		Owner:      ownerTag,
+		Name:       credentials.Name(),
+		AuthType:   credentials.AuthType(),
+		Attributes: credentials.Attributes(),
+		Cloud:      cloudTag,
+	})
 	return nil
 }
 
@@ -281,7 +333,16 @@ func (j *JujuManager) Activate(ctx context.Context, modelTag names.ModelTag, mig
 				return errors.E(op, fmt.Errorf("failed to add user mapping for model %q: %w", modelTag.Id(), err))
 			}
 		}
-		// TODO(SimoneDutto): set the model we've created in Import to active.
+		model := dbmodel.Model{
+			UUID: sql.NullString{
+				String: modelTag.Id(),
+				Valid:  true,
+			},
+		}
+		err := db.SetMigrationMode(ctx, &model, state.MigrationModeNone)
+		if err != nil {
+			return errors.E(op, fmt.Errorf("failed to set migration mode for model %q: %w", modelTag.Id(), err))
+		}
 		err = db.DeleteIncomingModelMigration(ctx, &modelMigration)
 		if err != nil {
 			return errors.E(op, fmt.Errorf("failed to delete model migration for model %q: %w", modelTag.Id(), err))
@@ -292,4 +353,107 @@ func (j *JujuManager) Activate(ctx context.Context, modelTag names.ModelTag, mig
 		return errors.E(op, fmt.Errorf("failed to activate model %q: %w", modelTag.Id(), err))
 	}
 	return nil
+}
+
+// Import imports a model from a serialized description.
+//   - Checks the incoming model migration record in the database.
+//   - Modifies the model description to replace local user references with their external mapping for owner and
+//     cloud credential owner.
+//   - Imports the model into JIMM's state.
+//   - Calls the import method on the target Juju controller to import the model.
+func (j *JujuManager) Import(ctx context.Context, user *openfga.User, serialized params.SerializedModel) error {
+	const op = errors.Op("jimm.Import")
+
+	modelDescription, err := description.Deserialize(serialized.Bytes)
+	if err != nil {
+		return errors.E(op, fmt.Errorf("failed to deserialize model description: %w", err))
+	}
+	incomingMigration := &dbmodel.IncomingModelMigration{
+		ModelUUID: sql.NullString{
+			String: modelDescription.Tag().Id(),
+			Valid:  true,
+		},
+	}
+	err = j.Database.GetIncomingModelMigration(ctx, incomingMigration)
+	if err != nil {
+		return errors.E(op, fmt.Errorf("failed to add incoming model migration: %w", err))
+	}
+	err = j.modifyModelDescription(modelDescription, incomingMigration.UserMapping)
+	if err != nil {
+		return errors.E(op, fmt.Errorf("failed to modify model description: %w", err))
+	}
+	err = j.importModelFromDescription(ctx, incomingMigration.TargetController.ID, modelDescription)
+	if err != nil {
+		return errors.E(op, fmt.Errorf("failed to import model from description: %w", err))
+	}
+
+	api, err := j.dialController(ctx, &incomingMigration.TargetController)
+	if err != nil {
+		return errors.E(op, fmt.Errorf("failed to dial controller: %w", err))
+	}
+	defer api.Close()
+
+	serializedDescrition, err := description.Serialize(modelDescription)
+	if err != nil {
+		return errors.E(op, fmt.Errorf("failed to serialize model description: %w", err))
+	}
+	err = api.Import(serializedDescrition)
+	if err != nil {
+		// TODO: handle migration failure in a cleanup routine.
+		return errors.E(op, fmt.Errorf("failed to import model: %w", err))
+	}
+	return nil
+}
+
+func (j *JujuManager) importModelFromDescription(ctx context.Context, targetControllerID uint, description description.Model) error {
+	modelName, ok := description.Config()[config.NameKey]
+	if !ok {
+		return fmt.Errorf("model config must contain a %q key", config.NameKey)
+	}
+	// TODO: create the offers in JIMM's state.
+	modelNameStr, ok := modelName.(string)
+	if !ok {
+		return fmt.Errorf("model config %q must be a string", config.NameKey)
+	}
+
+	modelUUID, ok := description.Config()[config.UUIDKey]
+	if !ok {
+		return fmt.Errorf("model config must contain a %q key", config.UUIDKey)
+	}
+	modelUUIDStr, ok := modelUUID.(string)
+	if !ok {
+		return fmt.Errorf("model config %q must be a string", config.UUIDKey)
+	}
+
+	if description.CloudCredential() == nil {
+		return fmt.Errorf("model description must contain a cloud credential")
+	}
+	cloudCredential := &dbmodel.CloudCredential{
+		CloudName:         description.CloudCredential().Cloud(),
+		OwnerIdentityName: description.Owner().Id(),
+		Name:              description.CloudCredential().Name(),
+	}
+
+	err := j.Database.GetCloudCredential(ctx, cloudCredential)
+	if err != nil {
+		return err
+	}
+	region, err := j.Database.FindRegionByCloudName(ctx, description.CloudCredential().Cloud(), description.CloudRegion())
+	if err != nil {
+		return err
+	}
+
+	return j.Database.AddModel(ctx, &dbmodel.Model{
+		UUID: sql.NullString{
+			String: modelUUIDStr,
+			Valid:  true,
+		},
+		Name:              modelNameStr,
+		OwnerIdentityName: description.Owner().Id(),
+		ControllerID:      targetControllerID,
+		CloudCredentialID: cloudCredential.ID,
+		CloudRegionID:     region.ID,
+		Life:              "migrating",
+		MigrationMode:     state.MigrationModeImporting,
+	})
 }
