@@ -339,10 +339,18 @@ func (j *JujuManager) Activate(ctx context.Context, modelTag names.ModelTag, mig
 				Valid:  true,
 			},
 		}
-		err := db.SetMigrationMode(ctx, &model, state.MigrationModeNone)
+		err = db.GetModel(ctx, &model)
 		if err != nil {
-			return errors.E(op, fmt.Errorf("failed to set migration mode for model %q: %w", modelTag.Id(), err))
+			return errors.E(op, fmt.Errorf("failed to get model %q: %w", modelTag.Id(), err))
 		}
+		model.MigrationMode = state.MigrationModeNone
+		model.Life = state.Alive.String()
+
+		err = db.UpdateModel(ctx, &model)
+		if err != nil {
+			return errors.E(op, fmt.Errorf("failed to update model %q: %w", modelTag.Id(), err))
+		}
+
 		err = db.DeleteIncomingModelMigration(ctx, &modelMigration)
 		if err != nil {
 			return errors.E(op, fmt.Errorf("failed to delete model migration for model %q: %w", modelTag.Id(), err))
@@ -410,7 +418,7 @@ func (j *JujuManager) importModelFromDescription(ctx context.Context, targetCont
 	if !ok {
 		return fmt.Errorf("model config must contain a %q key", config.NameKey)
 	}
-	// TODO: create the offers in JIMM's state.
+	// TODO: create the offers in JIMM's state. Card: https://warthogs.atlassian.net/browse/JUJU-8192
 	modelNameStr, ok := modelName.(string)
 	if !ok {
 		return fmt.Errorf("model config %q must be a string", config.NameKey)
@@ -453,7 +461,6 @@ func (j *JujuManager) importModelFromDescription(ctx context.Context, targetCont
 		ControllerID:      targetControllerID,
 		CloudCredentialID: cloudCredential.ID,
 		CloudRegionID:     region.ID,
-		Life:              "migrating",
 		MigrationMode:     state.MigrationModeImporting,
 	})
 }

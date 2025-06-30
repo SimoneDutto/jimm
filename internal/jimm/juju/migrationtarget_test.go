@@ -442,6 +442,7 @@ func TestActivate_Success(t *testing.T) {
 	err = j.Database.GetModel(ctx, model)
 	c.Assert(err, qt.IsNil)
 	c.Assert(model.MigrationMode, qt.Equals, state.MigrationModeNone)
+	c.Assert(model.Life, qt.Equals, state.Alive.String())
 }
 
 func TestActivate_APIFailure(t *testing.T) {
