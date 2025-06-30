@@ -811,7 +811,7 @@ func TestImport_MissingCloudCredentialFromJIMMState(t *testing.T) {
 	err = j.Import(ctx, user, params.SerializedModel{
 		Bytes: bytes,
 	})
-	c.Assert(err, qt.ErrorMatches, "^failed to import model from description.*")
+	c.Assert(err, qt.ErrorMatches, `^failed to import model from description: cloudcredential \S+ not found$`)
 
 	// Check the model is created in the database with migration mode set to importing.
 	m := &dbmodel.Model{

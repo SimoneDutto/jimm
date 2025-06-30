@@ -219,6 +219,8 @@ func (j *JujuManager) modifyMigrationInfo(model *migration.ModelInfo, userMappin
 	return nil
 }
 
+// modifyModelDescription modifies the model description to replace local user references
+// with their external mapping for both the model owner and the cloud credential owner.
 func (j *JujuManager) modifyModelDescription(modelDescription description.Model, userMapping dbmodel.StringMap) error {
 	// change the owner of the model description if it is a local user
 	if modelDescription.Owner().IsLocal() {
@@ -413,28 +415,25 @@ func (j *JujuManager) Import(ctx context.Context, user *openfga.User, serialized
 	return nil
 }
 
+// importModelFromDescription imports a model into JIMM's state from a model description.
+// It creates a new model record in the database with the given target controller ID and model description
+// and sets the migration mode to importing.
+// It also ensures that the cloud credential and region are present in the database.
 func (j *JujuManager) importModelFromDescription(ctx context.Context, targetControllerID uint, description description.Model) error {
-	modelName, ok := description.Config()[config.NameKey]
+	op := errors.Op("jimm.importModelFromDescription")
+	modelNameStr, ok := description.Config()[config.NameKey].(string)
 	if !ok {
-		return fmt.Errorf("model config must contain a %q key", config.NameKey)
+		return errors.E(op, fmt.Errorf("model config must contain a string value for key %q", config.NameKey))
 	}
 	// TODO: create the offers in JIMM's state. Card: https://warthogs.atlassian.net/browse/JUJU-8192
-	modelNameStr, ok := modelName.(string)
-	if !ok {
-		return fmt.Errorf("model config %q must be a string", config.NameKey)
-	}
 
-	modelUUID, ok := description.Config()[config.UUIDKey]
+	modelUUIDStr, ok := description.Config()[config.UUIDKey].(string)
 	if !ok {
-		return fmt.Errorf("model config must contain a %q key", config.UUIDKey)
-	}
-	modelUUIDStr, ok := modelUUID.(string)
-	if !ok {
-		return fmt.Errorf("model config %q must be a string", config.UUIDKey)
+		return errors.E(op, fmt.Errorf("model config must contain a string value for key %q", config.UUIDKey))
 	}
 
 	if description.CloudCredential() == nil {
-		return fmt.Errorf("model description must contain a cloud credential")
+		return errors.E(op, fmt.Errorf("model description must contain a cloud credential"))
 	}
 	cloudCredential := &dbmodel.CloudCredential{
 		CloudName:         description.CloudCredential().Cloud(),
@@ -444,14 +443,13 @@ func (j *JujuManager) importModelFromDescription(ctx context.Context, targetCont
 
 	err := j.Database.GetCloudCredential(ctx, cloudCredential)
 	if err != nil {
-		return err
+		return errors.E(op, err)
 	}
 	region, err := j.Database.FindRegionByCloudName(ctx, description.CloudCredential().Cloud(), description.CloudRegion())
 	if err != nil {
-		return err
+		return errors.E(op, err)
 	}
-
-	return j.Database.AddModel(ctx, &dbmodel.Model{
+	err = j.Database.AddModel(ctx, &dbmodel.Model{
 		UUID: sql.NullString{
 			String: modelUUIDStr,
 			Valid:  true,
@@ -463,4 +461,8 @@ func (j *JujuManager) importModelFromDescription(ctx context.Context, targetCont
 		CloudRegionID:     region.ID,
 		MigrationMode:     state.MigrationModeImporting,
 	})
+	if err != nil {
+		return errors.E(op, fmt.Errorf("failed to add model %q: %w", modelUUIDStr, err))
+	}
+	return nil
 }
