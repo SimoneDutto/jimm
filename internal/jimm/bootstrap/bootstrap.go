@@ -57,7 +57,7 @@ func (b *bootstrapManager) GetBootstrapStatusAndLogs(ctx context.Context, _ *ope
 		return params.BootstrapStatusResponse{}, errors.E(op, "failed to query bootstrap logs", err)
 	}
 	return params.BootstrapStatusResponse{
-		Status:    string(job.Status),
+		Status:    params.JobStatus(job.Status),
 		Error:     job.Error,
 		Logs:      logs,
 		Watermark: newOffset,
