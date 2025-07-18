@@ -14,7 +14,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/canonical/jimm/v3/internal/db"
-	"github.com/canonical/jimm/v3/internal/dbmodel"
 	"github.com/canonical/jimm/v3/internal/jimm/bootstrap"
 	"github.com/canonical/jimm/v3/internal/jobtracker"
 	"github.com/canonical/jimm/v3/internal/openfga"
@@ -94,7 +93,7 @@ func (s *bootstrapManagerSuite) TestGetBootstrapStatusAndLogs(c *qt.C) {
 			logs = append(logs, "bootstrap logs "+fmt.Sprint(rune(batch*batchSize+j)))
 		}
 		c.Check(response.Logs, qt.DeepEquals, logs)
-		c.Assert(response.Status, qt.Equals, string(dbmodel.StatusRunning))
+		c.Assert(response.Status, qt.Equals, params.StatusRunning)
 		watermark = response.Watermark
 		read <- struct{}{} // Signal it has been read.
 	}

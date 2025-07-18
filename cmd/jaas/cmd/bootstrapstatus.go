@@ -38,15 +38,17 @@ func NewBootstrapStatusCommand() cmd.Command {
 	return modelcmd.WrapBase(cmd)
 }
 
-// bootstrapStatusCommand displays ogs for a bootstrap job.
+// bootstrapStatusCommand displays logs for a bootstrap job.
 type bootstrapStatusCommand struct {
 	modelcmd.ControllerCommandBase
 
-	store               jujuclient.ClientStore
-	dialOpts            *jujuapi.DialOpts
-	jobId               string
-	client              JIMMClient
+	store    jujuclient.ClientStore
+	dialOpts *jujuapi.DialOpts
+	jobId    string
+	client   JIMMClient
+
 	sleepBetweenGetLogs time.Duration
+	follow              bool
 }
 
 // Info implements cmd.Info interface.
@@ -63,6 +65,7 @@ func (c *bootstrapStatusCommand) Info() *cmd.Info {
 // SetFlags implements cmd.SetFlags interface.
 func (c *bootstrapStatusCommand) SetFlags(f *gnuflag.FlagSet) {
 	c.CommandBase.SetFlags(f)
+	f.BoolVar(&c.follow, "f", false, "follow the logs of the bootstrap job")
 }
 
 // Init implements the cmd.Command interface.
@@ -90,7 +93,7 @@ func (c *bootstrapStatusCommand) Init(args []string) error {
 	return nil
 }
 
-// Run implements Command.Run interface.
+// Run implements cmd.Command.Run interface.
 func (c *bootstrapStatusCommand) Run(ctxt *cmd.Context) error {
 	watermark := 0
 	for {
@@ -129,6 +132,9 @@ func (c *bootstrapStatusCommand) Run(ctxt *cmd.Context) error {
 			}
 		default:
 			return errors.E("unknown bootstrap job status: %s", response.Status)
+		}
+		if !c.follow {
+			return nil
 		}
 		time.Sleep(c.sleepBetweenGetLogs)
 	}

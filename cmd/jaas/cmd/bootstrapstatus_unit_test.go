@@ -40,6 +40,7 @@ func (s *bootstrapStatusSuite) TestBootstrapStatus(c *qt.C) {
 		client:              s.client,
 		jobId:               "test-job-id",
 		sleepBetweenGetLogs: 0,
+		follow:              true,
 	}
 	ctx := &cmd.Context{
 		Context: c.Context(),
@@ -63,6 +64,7 @@ func (s *bootstrapStatusSuite) TestBootstrapStatus_Failed(c *qt.C) {
 		client:              s.client,
 		jobId:               "test-job-id",
 		sleepBetweenGetLogs: 0,
+		follow:              true,
 	}
 	ctx := &cmd.Context{
 		Context: c.Context(),
@@ -110,11 +112,40 @@ func (s *bootstrapStatusSuite) TestBootstrapStatus_Running(c *qt.C) {
 		client:              s.client,
 		jobId:               "test-job-id",
 		sleepBetweenGetLogs: 0,
+		follow:              true,
 	}
 	ctx := &cmd.Context{
 		Context: c.Context(),
 		Stdout:  s.writer,
 	}
+	err := command.Run(ctx)
+	c.Assert(err, qt.IsNil)
+}
+
+func (s *bootstrapStatusSuite) TestBootstrapStatus_NoFollow(c *qt.C) {
+	ctrl := s.SetupMocks(c)
+	defer ctrl.Finish()
+
+	s.client.EXPECT().BootstrapStatus(gomock.Any()).Return(params.BootstrapStatusResponse{
+		Status:    params.StatusRunning,
+		Logs:      []string{"log1", "log2"},
+		Watermark: 2,
+	}, nil)
+	s.writer.EXPECT().Write([]byte("log1\n"))
+	s.writer.EXPECT().Write([]byte("log2\n"))
+
+	command := &bootstrapStatusCommand{
+		client:              s.client,
+		jobId:               "test-job-id",
+		sleepBetweenGetLogs: 0,
+		follow:              false,
+	}
+	ctx := &cmd.Context{
+		Context: c.Context(),
+		Stdout:  s.writer,
+	}
+	// Test that it does not wait for further logs.
+	// It should return after the first status check.
 	err := command.Run(ctx)
 	c.Assert(err, qt.IsNil)
 }
