@@ -37,8 +37,79 @@ func (s *bootstrapStatusSuite) TestBootstrapStatus(c *qt.C) {
 	s.writer.EXPECT().Write([]byte("Bootstrap job completed successfully.\n"))
 
 	command := &bootstrapStatusCommand{
-		client: s.client,
-		jobId:  "test-job-id",
+		client:              s.client,
+		jobId:               "test-job-id",
+		sleepBetweenGetLogs: 0,
+	}
+	ctx := &cmd.Context{
+		Context: c.Context(),
+		Stdout:  s.writer,
+	}
+	err := command.Run(ctx)
+	c.Assert(err, qt.IsNil)
+}
+
+func (s *bootstrapStatusSuite) TestBootstrapStatus_Failed(c *qt.C) {
+	ctrl := s.SetupMocks(c)
+	defer ctrl.Finish()
+
+	s.client.EXPECT().BootstrapStatus(gomock.Any()).Return(params.BootstrapStatusResponse{
+		Status: params.StatusFailed,
+		Error:  "Bootstrap job failed",
+	}, nil)
+	s.writer.EXPECT().Write([]byte("Bootstrap job failed: Bootstrap job failed\n"))
+
+	command := &bootstrapStatusCommand{
+		client:              s.client,
+		jobId:               "test-job-id",
+		sleepBetweenGetLogs: 0,
+	}
+	ctx := &cmd.Context{
+		Context: c.Context(),
+		Stdout:  s.writer,
+	}
+	err := command.Run(ctx)
+	c.Assert(err, qt.IsNil)
+}
+
+func (s *bootstrapStatusSuite) TestBootstrapStatus_Running(c *qt.C) {
+	ctrl := s.SetupMocks(c)
+	defer ctrl.Finish()
+
+	s.client.EXPECT().BootstrapStatus(gomock.Any()).Return(params.BootstrapStatusResponse{
+		Status:    params.StatusRunning,
+		Logs:      []string{"log1", "log2"},
+		Watermark: 2,
+	}, nil)
+	s.writer.EXPECT().Write([]byte("log1\n"))
+	s.writer.EXPECT().Write([]byte("log2\n"))
+
+	s.client.EXPECT().
+		BootstrapStatus(&params.BootstrapStatusRequest{
+			JobID:     "test-job-id",
+			Watermark: 2,
+		}).
+		Return(params.BootstrapStatusResponse{
+			Status:    params.StatusRunning,
+			Logs:      []string{"log3"},
+			Watermark: 3,
+		}, nil)
+	s.writer.EXPECT().Write([]byte("log3\n"))
+
+	s.client.EXPECT().
+		BootstrapStatus(&params.BootstrapStatusRequest{
+			JobID:     "test-job-id",
+			Watermark: 3,
+		}).
+		Return(params.BootstrapStatusResponse{
+			Status: params.StatusSuccessful,
+		}, nil)
+	s.writer.EXPECT().Write([]byte("Bootstrap job completed successfully.\n"))
+
+	command := &bootstrapStatusCommand{
+		client:              s.client,
+		jobId:               "test-job-id",
+		sleepBetweenGetLogs: 0,
 	}
 	ctx := &cmd.Context{
 		Context: c.Context(),

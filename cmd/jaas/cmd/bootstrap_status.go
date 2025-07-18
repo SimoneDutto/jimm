@@ -3,6 +3,8 @@
 package cmd
 
 import (
+	"time"
+
 	"github.com/juju/cmd/v3"
 	"github.com/juju/gnuflag"
 	jujuapi "github.com/juju/juju/api"
@@ -17,14 +19,17 @@ import (
 
 const (
 	bootstrapStatusCommandDoc = `
-Displays logs from a bootstrap job.
+Displays logs for a bootstrap job.
 `
 	bootstrapStatusCommandExample = `
     juju bootstrap-status 2cb433a6-04eb-4ec4-9567-90426d20a004 
 `
 )
 
-// NewbootstrapStatusCommand returns a command to display full model status.
+// sleepBetweenGetLogs is the duration to wait between successive calls to get logs for a bootstrap job.
+const sleepBetweenGetLogs = 1 * time.Second
+
+// NewbootstrapStatusCommand returns a command to display logs for a bootstrap job.
 func NewBootstrapStatusCommand() cmd.Command {
 	cmd := &bootstrapStatusCommand{
 		store: jujuclient.NewFileClientStore(),
@@ -33,28 +38,29 @@ func NewBootstrapStatusCommand() cmd.Command {
 	return modelcmd.WrapBase(cmd)
 }
 
-// bootstrapStatusCommand displays full
-// model status.
+// bootstrapStatusCommand displays ogs for a bootstrap job.
 type bootstrapStatusCommand struct {
 	modelcmd.ControllerCommandBase
 
-	store    jujuclient.ClientStore
-	dialOpts *jujuapi.DialOpts
-	jobId    string
-	client   JIMMClient
+	store               jujuclient.ClientStore
+	dialOpts            *jujuapi.DialOpts
+	jobId               string
+	client              JIMMClient
+	sleepBetweenGetLogs time.Duration
 }
 
+// Info implements cmd.Info interface.
 func (c *bootstrapStatusCommand) Info() *cmd.Info {
 	return jujucmd.Info(&cmd.Info{
 		Name:     "bootstrap-status",
 		Args:     "<job uuid>",
-		Purpose:  "Displays full model status",
+		Purpose:  "Displays logs for a bootstrap job",
 		Doc:      bootstrapStatusCommandDoc,
 		Examples: bootstrapStatusCommandExample,
 	})
 }
 
-// SetFlags implements Command.SetFlags.
+// SetFlags implements cmd.SetFlags interface.
 func (c *bootstrapStatusCommand) SetFlags(f *gnuflag.FlagSet) {
 	c.CommandBase.SetFlags(f)
 }
@@ -79,10 +85,12 @@ func (c *bootstrapStatusCommand) Init(args []string) error {
 	}
 
 	c.client = api.NewClient(apiCaller)
+
+	c.sleepBetweenGetLogs = sleepBetweenGetLogs
 	return nil
 }
 
-// Run implements Command.Run.
+// Run implements Command.Run interface.
 func (c *bootstrapStatusCommand) Run(ctxt *cmd.Context) error {
 	watermark := 0
 	for {
@@ -122,6 +130,7 @@ func (c *bootstrapStatusCommand) Run(ctxt *cmd.Context) error {
 		default:
 			return errors.E("unknown bootstrap job status: %s", response.Status)
 		}
+		time.Sleep(c.sleepBetweenGetLogs)
 	}
 
 }
