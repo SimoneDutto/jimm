@@ -5,8 +5,10 @@ package jujuclistore
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"html/template"
 	"io"
+	"math/rand/v2"
 	"net/http"
 	"os"
 	"sync"
@@ -14,11 +16,12 @@ import (
 	"time"
 
 	"github.com/juju/clock"
-	jujuerrrors "github.com/juju/errors"
+	jujuerrors "github.com/juju/errors"
 	"github.com/juju/retry"
-	"github.com/juju/zaputil/zapctx"
-	"go.uber.org/zap"
+	"github.com/juju/version/v2"
 )
+
+const timeoutRequestDuration = 5 * time.Minute
 
 // launchPadURL is the base URL for the Juju binary downloads.
 const launchPadURL = "https://launchpad.net/juju"
@@ -26,35 +29,43 @@ const launchPadURL = "https://launchpad.net/juju"
 // launchPadTemplate is the template for constructing the download URL for Juju binaries.
 const launchPadTemplate = "{{.BaseURL}}/{{.VersionWithMinor}}/{{.VersionWithPatch}}/+download/juju-{{.VersionWithPatch}}-{{.Os}}-{{.Arch}}.tar.xz"
 
-var retryRequestError = jujuerrrors.New("retry request error")
+var retryRequestError = jujuerrors.New("retry request error")
 
-// JujuCLIStoreConfig holds the configuration for the Juju binary fetcher.
-type JujuCLIStoreConfig struct {
-	BaseURL string // Base URL for the Juju binary downloads. Example: "https://launchpad.net/juju"
-	Dir     string // Directory to store the downloaded binaries. Defaults to the system's temp directory.
-
-	MaxEntries int // Maximum number of entries to keep in the directory. Defaults to 2.
+// Config holds the configuration for the Juju binary fetcher.
+type Config struct {
+	// Base URL for the Juju binary downloads. Example: "https://launchpad.net/juju"
+	BaseURL string
+	// Directory to store the downloaded binaries. Defaults to the system's temp directory.
+	Dir string
+	// Maximum number of entries to keep in the directory. Defaults to 2.
+	MaxEntries int
 }
 
 // JujuBinarySpec defines the specifications for a Juju binary to be downloaded.
 type JujuBinarySpec struct {
-	VersionWithMinor string // Version with minor version number, e.g., "3.6"
-	VersionWithPatch string // Version with patch version number, e.g., "3.6.2"
-	Os               string // Operating system, e.g., "linux"
-	Arch             string // Architecture, e.g., "amd64"
+	// Version with patch version number, e.g., "3.6.2"
+	Version string
+	// Operating system, e.g., "linux"
+	Os string
+	// Architecture, e.g., "amd64"
+	Arch string
 }
 
 type jujuCLIStore struct {
-	config   JujuCLIStoreConfig
+	config   Config
 	template template.Template
+	// HTTP client for making requests
+	client *http.Client
 
-	entries map[string]*Binary // Map to keep track of downloaded entries
-	lock    sync.Mutex         // Protects the entries map
+	// Protects the entries map
+	lock sync.Mutex
+	// Map to keep track of downloaded entries
+	entries map[string]*Binary
 }
 
 // NewJujuCLIStore creates a new jujuCLIFetcher instance with the provided configuration.
 // If the BaseURL is not provided, it defaults to the launchpad URL.
-func NewJujuCLIStore(cfg JujuCLIStoreConfig) (*jujuCLIStore, error) {
+func NewJujuCLIStore(cfg Config) (*jujuCLIStore, error) {
 	if cfg.BaseURL == "" {
 		// Default to the launchpad URL if no base URL is provided.
 		cfg.BaseURL = launchPadURL
@@ -68,9 +79,14 @@ func NewJujuCLIStore(cfg JujuCLIStoreConfig) (*jujuCLIStore, error) {
 		// equal to zero.
 		cfg.MaxEntries = 2
 	}
+	if cfg.MaxEntries > 10 {
+		// Limit the maximum number of entries to 10 to prevent excessive memory usage.
+		return nil, jujuerrors.Errorf("max entries limit is too high: %d, must be <= 10", cfg.MaxEntries)
+	}
 	return &jujuCLIStore{
 		config:   cfg,
 		template: *tmpl,
+		client:   &http.Client{Timeout: timeoutRequestDuration},
 		entries:  make(map[string]*Binary, cfg.MaxEntries),
 		lock:     sync.Mutex{},
 	}, nil
@@ -83,11 +99,14 @@ func NewJujuCLIStore(cfg JujuCLIStoreConfig) (*jujuCLIStore, error) {
 type Binary struct {
 	FullPath string
 
-	done atomic.Bool
+	referenceCount atomic.Int32
 }
 
+// Done marks the binary as done by decrementing its reference count.
+// This method should be called when the binary is no longer needed.
+// If the reference count reaches zero, it indicates that the binary can be deleted.
 func (b *Binary) Done() {
-	b.done.Store(true)
+	b.referenceCount.Add(-1)
 }
 
 // Get downloads the Juju binary specified by the JujuBinarySpec.
@@ -98,10 +117,16 @@ func (b *Binary) Done() {
 // The context can be used to cancel the operation.
 func (p *jujuCLIStore) Get(ctx context.Context, spec JujuBinarySpec) (*Binary, error) {
 	var buf bytes.Buffer
-	err := p.template.Execute(&buf, map[string]string{
+
+	v, err := version.Parse(spec.Version)
+	if err != nil {
+		return nil, jujuerrors.Annotatef(err, "invalid version %q", spec.Version)
+	}
+
+	err = p.template.Execute(&buf, map[string]string{
 		"BaseURL":          p.config.BaseURL,
-		"VersionWithMinor": spec.VersionWithMinor,
-		"VersionWithPatch": spec.VersionWithPatch,
+		"VersionWithMinor": fmt.Sprintf("%d.%d", v.Major, v.Minor),
+		"VersionWithPatch": fmt.Sprintf("%d.%d.%d", v.Major, v.Minor, v.Patch),
 		"Os":               spec.Os,
 		"Arch":             spec.Arch,
 	})
@@ -109,13 +134,17 @@ func (p *jujuCLIStore) Get(ctx context.Context, spec JujuBinarySpec) (*Binary, e
 		return nil, err
 	}
 	url := buf.String()
+	// worst case the lock will be help for the duration of the download
+	// of the binary. For now it is acceptable because we support bootstrapping
+	// one controller at a time.
 	p.lock.Lock()
 	defer p.lock.Unlock()
 	binary, ok := p.entries[url]
 	if ok {
+		binary.referenceCount.Add(1) // Increment reference count
 		return binary, nil
 	}
-	err = p.freeSpace(ctx)
+	err = p.freeEntry(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +158,7 @@ func (p *jujuCLIStore) Get(ctx context.Context, spec JujuBinarySpec) (*Binary, e
 			return nil
 		},
 		IsFatalError: func(err error) bool {
-			return !jujuerrrors.Is(err, retryRequestError)
+			return !jujuerrors.Is(err, retryRequestError)
 		},
 		BackoffFunc: retry.DoubleDelay,
 		Attempts:    10,
@@ -143,35 +172,41 @@ func (p *jujuCLIStore) Get(ctx context.Context, spec JujuBinarySpec) (*Binary, e
 	binary = &Binary{
 		FullPath: file.Name(),
 	}
+	binary.referenceCount.Store(1)
 	p.entries[url] = binary
 	return binary, nil
 }
 
-// freeSpace checks if the entries map has reached the maximum number of entries.
+// freeEntry checks if the entries map has reached the maximum number of entries.
 // If it has, it deletes a random entry from the map.
-// The randomness is guaranteed by the fact iterating over a map in Go does not guarantee order.
-func (p *jujuCLIStore) freeSpace(ctx context.Context) error {
+// It should be called when the entries map is locked to ensure thread safety.
+func (p *jujuCLIStore) freeEntry(ctx context.Context) error {
 	if len(p.entries) < p.config.MaxEntries {
 		return nil
 	}
-	deletion := false
+	entriesToDelete := []string{}
 	for key, binary := range p.entries {
-		if binary.done.Load() {
-			err := os.Remove(binary.FullPath)
-			if err != nil {
-				zapctx.Error(ctx, "failed to remove binary", zap.Error(err), zap.String("path", binary.FullPath))
-			} else {
-				delete(p.entries, key)
-				deletion = true
-				break
-			}
+		if binary.referenceCount.Load() == 0 {
+			entriesToDelete = append(entriesToDelete, key)
 		}
 	}
-	if !deletion {
-		// This shouldn't happen because we bootstrap a controller at the time, so there should always be at least one
-		// binary that can be deleted.
-		return jujuerrrors.Errorf("no entries to delete, max entries limit reached: %d", p.config.MaxEntries)
+
+	if len(entriesToDelete) == 0 {
+		// This shouldn't currently happen because we bootstrap one controller at a time,
+		// so there should always be at least one
+		return jujuerrors.Errorf("no entries to delete, max entries limit reached: %d", p.config.MaxEntries)
 	}
+	//nolint:gosec
+	// G404: Use of weak random number generator is acceptable here for cache eviction
+	entryToDelete := entriesToDelete[rand.IntN(len(entriesToDelete))]
+	binary := p.entries[entryToDelete]
+	err := os.Remove(binary.FullPath)
+	if err != nil {
+		return jujuerrors.Annotatef(err, "failed to remove binary at path %s", binary.FullPath)
+	} else {
+		delete(p.entries, entryToDelete)
+	}
+
 	return nil
 }
 
@@ -185,7 +220,7 @@ func (p *jujuCLIStore) downloadFile(ctx context.Context, downloadUrl string) (*o
 	if err != nil {
 		return nil, err
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := p.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +229,7 @@ func (p *jujuCLIStore) downloadFile(ctx context.Context, downloadUrl string) (*o
 		return nil, retryRequestError
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, jujuerrrors.Errorf("request failed with status %d", resp.StatusCode)
+		return nil, jujuerrors.Errorf("request failed with status %d", resp.StatusCode)
 	}
 	file, err := os.CreateTemp(p.config.Dir, "juju-*")
 	if err != nil {

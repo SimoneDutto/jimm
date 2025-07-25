@@ -17,10 +17,9 @@ import (
 func TestStore(t *testing.T) {
 	c := qt.New(t)
 	jujuSpec := JujuBinarySpec{
-		VersionWithMinor: "3.6",
-		VersionWithPatch: "3.6.2",
-		Os:               "linux",
-		Arch:             "amd64",
+		Version: "3.6.2",
+		Os:      "linux",
+		Arch:    "amd64",
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c.Assert(r.URL.Path, qt.Equals, "/3.6/3.6.2/+download/juju-3.6.2-linux-amd64.tar.xz")
@@ -30,7 +29,7 @@ func TestStore(t *testing.T) {
 	}))
 	defer server.Close()
 
-	store, err := NewJujuCLIStore(JujuCLIStoreConfig{
+	store, err := NewJujuCLIStore(Config{
 		BaseURL: server.URL,
 	})
 	c.Assert(err, qt.IsNil)
@@ -53,16 +52,15 @@ func TestStoreError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	fetch, err := NewJujuCLIStore(JujuCLIStoreConfig{
+	fetch, err := NewJujuCLIStore(Config{
 		BaseURL: server.URL,
 	})
 	c.Assert(err, qt.IsNil)
 
 	jujuSpec := JujuBinarySpec{
-		VersionWithMinor: "3.6",
-		VersionWithPatch: "3.6.2",
-		Os:               "linux",
-		Arch:             "amd64",
+		Version: "3.6.2",
+		Os:      "linux",
+		Arch:    "amd64",
 	}
 	_, err = fetch.Get(context.Background(), jujuSpec)
 	c.Assert(err, qt.ErrorMatches, "request failed with status 404")
@@ -83,16 +81,15 @@ func TestStoreRetry(t *testing.T) {
 	}))
 	defer server.Close()
 
-	store, err := NewJujuCLIStore(JujuCLIStoreConfig{
+	store, err := NewJujuCLIStore(Config{
 		BaseURL: server.URL,
 	})
 	c.Assert(err, qt.IsNil)
 
 	jujuSpec := JujuBinarySpec{
-		VersionWithMinor: "3.6",
-		VersionWithPatch: "3.6.2",
-		Os:               "linux",
-		Arch:             "amd64",
+		Version: "3.6.2",
+		Os:      "linux",
+		Arch:    "amd64",
 	}
 	binary, err := store.Get(context.Background(), jujuSpec)
 	c.Assert(err, qt.IsNil)
@@ -116,16 +113,15 @@ func TestStoreCache(t *testing.T) {
 	}))
 	defer server.Close()
 
-	store, err := NewJujuCLIStore(JujuCLIStoreConfig{
+	store, err := NewJujuCLIStore(Config{
 		BaseURL: server.URL,
 	})
 	c.Assert(err, qt.IsNil)
 
 	jujuSpec := JujuBinarySpec{
-		VersionWithMinor: "3.6",
-		VersionWithPatch: "3.6.2",
-		Os:               "linux",
-		Arch:             "amd64",
+		Version: "3.6.2",
+		Os:      "linux",
+		Arch:    "amd64",
 	}
 	binary, err := store.Get(context.Background(), jujuSpec)
 	c.Assert(err, qt.IsNil)
@@ -156,26 +152,24 @@ func TestStoreMaxEntriesCleanup(t *testing.T) {
 	}))
 	defer server.Close()
 
-	store, err := NewJujuCLIStore(JujuCLIStoreConfig{
+	store, err := NewJujuCLIStore(Config{
 		BaseURL:    server.URL,
 		MaxEntries: 2,
 	})
 	c.Assert(err, qt.IsNil)
 
 	jujuSpec1 := JujuBinarySpec{
-		VersionWithMinor: "3.6",
-		VersionWithPatch: "3.6.2",
-		Os:               "linux",
-		Arch:             "amd64",
+		Version: "3.6.2",
+		Os:      "linux",
+		Arch:    "amd64",
 	}
 	binary1, err := store.Get(context.Background(), jujuSpec1)
 	c.Assert(err, qt.IsNil)
 
 	jujuSpec2 := JujuBinarySpec{
-		VersionWithMinor: "3.7",
-		VersionWithPatch: "3.7.0",
-		Os:               "linux",
-		Arch:             "amd64",
+		Version: "3.7.0",
+		Os:      "linux",
+		Arch:    "amd64",
 	}
 	binary2, err := store.Get(context.Background(), jujuSpec2)
 	c.Assert(err, qt.IsNil)
@@ -183,10 +177,9 @@ func TestStoreMaxEntriesCleanup(t *testing.T) {
 	c.Assert(len(store.entries), qt.Equals, 2) // Ensure only two entries are kept
 
 	jujuSpec3 := JujuBinarySpec{
-		VersionWithMinor: "3.7",
-		VersionWithPatch: "3.7.1",
-		Os:               "linux",
-		Arch:             "amd64",
+		Version: "3.7.1",
+		Os:      "linux",
+		Arch:    "amd64",
 	}
 	_, err = store.Get(context.Background(), jujuSpec3)
 	c.Assert(err, qt.ErrorMatches, `no entries to delete, max entries limit reached: \d+`)
@@ -204,4 +197,61 @@ func TestStoreMaxEntriesCleanup(t *testing.T) {
 	defer binary3Again.Done()
 
 	c.Assert(binary3.FullPath, qt.Equals, binary3Again.FullPath) // Ensure the same binary is returned
+}
+
+func TestStoreReferenceCount(t *testing.T) {
+	c := qt.New(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, err := w.Write([]byte("test content"))
+		c.Assert(err, qt.IsNil)
+	}))
+	defer server.Close()
+
+	store, err := NewJujuCLIStore(Config{
+		BaseURL:    server.URL,
+		MaxEntries: 2,
+	})
+	c.Assert(err, qt.IsNil)
+
+	jujuSpec1 := JujuBinarySpec{
+		Version: "3.6.2",
+		Os:      "linux",
+		Arch:    "amd64",
+	}
+	binary1, err := store.Get(context.Background(), jujuSpec1)
+	c.Assert(err, qt.IsNil)
+
+	binary1Again, err := store.Get(context.Background(), jujuSpec1)
+	c.Assert(err, qt.IsNil)
+
+	c.Assert(binary1.FullPath, qt.Equals, binary1Again.FullPath) // Ensure the same binary is returned
+
+	jujuSpec2 := JujuBinarySpec{
+		Version: "3.7.0",
+		Os:      "linux",
+		Arch:    "amd64",
+	}
+	_, err = store.Get(context.Background(), jujuSpec2)
+	c.Assert(err, qt.IsNil)
+
+	// Cache is now full, the reference count for binary1 should be 2.
+	c.Assert(binary1.referenceCount.Load(), qt.Equals, int32(2))
+
+	binary1.Done()                                               // Mark the first binary as done
+	c.Assert(binary1.referenceCount.Load(), qt.Equals, int32(1)) // Reference count
+
+	err = store.freeEntry(context.Background()) // This should not delete binary1 since its reference count is 1
+	c.Assert(err, qt.ErrorMatches, `no entries to delete, max entries limit reached: \d+`)
+
+	c.Assert(len(store.entries), qt.Equals, 2) // Ensure two entries are still kept
+
+	binary1Again.Done()                                          // Mark the first binary as done again
+	c.Assert(binary1.referenceCount.Load(), qt.Equals, int32(0)) // Reference count
+
+	// Now the reference count is zero, so it can be deleted
+	err = store.freeEntry(context.Background()) // This should not delete binary1 since its reference count is 1
+	c.Assert(err, qt.IsNil)
+
+	c.Assert(len(store.entries), qt.Equals, 1) // Ensure two entries are still kept
 }
