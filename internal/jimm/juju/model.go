@@ -269,7 +269,7 @@ func (j *JujuManager) ModelInfo(ctx context.Context, user *openfga.User, mt name
 		// we delete the model from JIMM.
 		// Juju returns CodeAuthorized when the model is not found for this facade.
 		if errors.ErrorCode(err) == errors.CodeNotFound || errors.ErrorCode(err) == errors.CodeUnauthorized {
-			errDelete := j.Database.DeleteModel(ctx, &m)
+			errDelete := j.deleteModel(ctx, mt)
 			if errDelete != nil {
 				return nil, errors.E(op, errDelete)
 			}
@@ -449,12 +449,7 @@ func (j *JujuManager) ModelStatus(ctx context.Context, user *openfga.User, mt na
 			// If the model is not found on the backing controller then
 			// we delete the model from JIMM.
 			if errors.ErrorCode(err) == errors.CodeNotFound {
-				errDelete := j.Database.DeleteModel(ctx, &dbmodel.Model{
-					UUID: sql.NullString{
-						String: mt.Id(),
-						Valid:  true,
-					},
-				})
+				errDelete := j.deleteModel(ctx, mt)
 				if errDelete != nil {
 					return errDelete
 				}
@@ -467,6 +462,27 @@ func (j *JujuManager) ModelStatus(ctx context.Context, user *openfga.User, mt na
 		return nil, errors.E(op, err)
 	}
 	return &ms, nil
+}
+
+// deleteModel deletes the model with the given ModelTag from JIMM's database and
+// clean the openfga tuples related to the model.
+func (j *JujuManager) deleteModel(ctx context.Context, mt names.ModelTag) error {
+	err := j.Database.DeleteModel(ctx, &dbmodel.Model{
+		UUID: sql.NullString{
+			String: mt.Id(),
+			Valid:  true,
+		},
+	})
+	if err != nil {
+		zapctx.Error(ctx, "failed to delete model from database", zap.String("model", mt.Id()), zap.Error(err))
+		return err
+	}
+	err = j.OpenFGAClient.RemoveModel(ctx, mt)
+	if err != nil {
+		zapctx.Error(ctx, "failed to remove model from OpenFGA", zap.String("model", mt.Id()), zap.Error(err))
+		return err
+	}
+	return nil
 }
 
 // ForEachUserModel calls the given function once for each model that the
