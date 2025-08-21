@@ -58,13 +58,14 @@ func (j *JujuManager) PollModels(ctx context.Context) (err error) {
 				zap.String("model-name", m.Name),
 				zap.String("migration-mode", string(m.MigrationMode)),
 			)
+			modelInfo := &jujuparams.ModelInfo{UUID: m.UUID.String}
+			errFromAPI := api.ModelInfo(ctx, modelInfo)
 			var err error
-
 			switch m.MigrationMode {
 			case dbmodel.MigrationModeNone:
-				err = j.maybeCleanupModel(ctx, api, m)
+				err = j.maybeCleanupModel(ctx, errFromAPI, m)
 			case dbmodel.MigrationModeMigrateInternal:
-				err = j.checkModelMigratedInternal(ctx, api, m)
+				err = j.checkModelMigratedInternal(ctx, errFromAPI, m, errFromAPI == nil && modelInfo.Migration.End != nil)
 			}
 			if err != nil {
 				zapctx.Error(ctx, "error processing model", zap.Error(err))
@@ -77,17 +78,12 @@ func (j *JujuManager) PollModels(ctx context.Context) (err error) {
 
 // checkModelMigratedInternal checks if the model has been migrated from
 // one controller managed by JIMM to another controller managed by JIMM.
-func (j *JujuManager) checkModelMigratedInternal(ctx context.Context, api API, m *dbmodel.Model) error {
+func (j *JujuManager) checkModelMigratedInternal(ctx context.Context, errFromAPI error, m *dbmodel.Model, migrationEndSet bool) error {
 	const op = errors.Op("jimm.checkModelMigratedInternal")
-
-	// Check if the model has completed a migration.
-	// If modelInfo returns without an error, it definitely hasn't moved yet.
-	modelInfo := &jujuparams.ModelInfo{UUID: m.UUID.String}
-	err := api.ModelInfo(ctx, modelInfo)
-	if err == nil {
+	if errFromAPI == nil {
 		// If the migration end time is set, it means the model has
 		// failed to migrate otherwise we'd expect a redirect error.
-		if modelInfo.Migration.End != nil {
+		if migrationEndSet {
 			m.MigrationFailed()
 			if err := j.Database.UpdateModel(ctx, m); err != nil {
 				return errors.E(fmt.Errorf("failed to update model after failed migration: %w", err))
@@ -99,35 +95,35 @@ func (j *JujuManager) checkModelMigratedInternal(ctx context.Context, api API, m
 	// Expect a redirect error if the model successfully migrated.
 	// This is the error that Juju controllers return when a model has been migrated.
 
-	isRedirectErr := errors.ErrorCode(err) == params.CodeRedirect
+	isRedirectErr := errors.ErrorCode(errFromAPI) == params.CodeRedirect
 	if !isRedirectErr {
-		return errors.E(op, fmt.Errorf("failed to get model info: %w", err))
+		return errors.E(op, errFromAPI)
 	}
 
 	// Parse the redirect error to get the new controller details.
-	errInfo := errors.ErrorInfo(err)
+	errInfo := errors.ErrorInfo(errFromAPI)
 	if errInfo == nil {
-		return errors.E(op, fmt.Errorf("missing error info in redirect error: %w", err))
+		return errors.E(op, fmt.Errorf("missing error info in redirect error: %w", errFromAPI))
 	}
 
 	var redirectInfo params.RedirectErrorInfo
-	err = params.Error{Info: errInfo}.UnmarshalInfo(&redirectInfo)
-	if err != nil {
-		return errors.E(op, fmt.Errorf("cannot unmarshal redirect error info: %w", err))
+	errFromAPI = params.Error{Info: errInfo}.UnmarshalInfo(&redirectInfo)
+	if errFromAPI != nil {
+		return errors.E(op, fmt.Errorf("cannot unmarshal redirect error info: %w", errFromAPI))
 	}
 
 	// We expect this controller will be known to JIMM.
 	controller := dbmodel.Controller{Name: redirectInfo.ControllerAlias}
-	err = j.Database.GetController(ctx, &controller)
-	if err != nil {
-		return errors.E(op, fmt.Errorf("failed to get controller %q: %w", redirectInfo.ControllerAlias, err))
+	errFromAPI = j.Database.GetController(ctx, &controller)
+	if errFromAPI != nil {
+		return errors.E(op, fmt.Errorf("failed to get controller %q: %w", redirectInfo.ControllerAlias, errFromAPI))
 	}
 
 	m.InternalMigrationSuccess(controller.ID)
 
-	err = j.Database.UpdateModel(ctx, m)
-	if err != nil {
-		return errors.E(op, fmt.Errorf("failed to update model after migration: %w", err))
+	errFromAPI = j.Database.UpdateModel(ctx, m)
+	if errFromAPI != nil {
+		return errors.E(op, fmt.Errorf("failed to update model after migration: %w", errFromAPI))
 	}
 	zapctx.Info(ctx, "model successfully migrated to controller", zap.String("model", m.UUID.String), zap.String("controller_name", controller.Name))
 	return nil
@@ -137,22 +133,14 @@ func (j *JujuManager) checkModelMigratedInternal(ctx context.Context, api API, m
 // This performs eventual cleanup of models that have been deleted through
 // the API (since the deletion of a model is not immediate) and handles
 // cases where the model was deleted directly on the underlying controller.
-func (j *JujuManager) maybeCleanupModel(ctx context.Context, api API, m *dbmodel.Model) error {
+func (j *JujuManager) maybeCleanupModel(ctx context.Context, errFromAPI error, m *dbmodel.Model) error {
 	const op = errors.Op("jimm.maybeCleanupModel")
-
-	err := api.ModelInfo(ctx, &jujuparams.ModelInfo{UUID: m.UUID.String})
-	if err == nil {
-		// If the call succeeds, the model exists and we can return.
-		return nil
-	}
 	// Some versions of juju return unauthorized for models that cannot be found.
-	modelDeleted := (errors.ErrorCode(err) == errors.CodeNotFound || errors.ErrorCode(err) == errors.CodeUnauthorized)
+	modelDeleted := (errors.ErrorCode(errFromAPI) == errors.CodeNotFound || errors.ErrorCode(errFromAPI) == errors.CodeUnauthorized)
 	if modelDeleted {
 		if err := j.deleteModel(ctx, m.ResourceTag()); err != nil {
 			return errors.E(op, fmt.Errorf("failed to delete model: %w", err))
 		}
-	} else {
-		return errors.E(op, fmt.Errorf("failed to get model info: %w", err))
 	}
 	return nil
 }

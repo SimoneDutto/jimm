@@ -261,23 +261,49 @@ func (j *JujuManager) ModelInfo(ctx context.Context, user *openfga.User, mt name
 	}
 	defer api.Close()
 
-	mi := &jujuparams.ModelInfo{
-		UUID: mt.Id(),
-	}
-	if err := api.ModelInfo(ctx, mi); err != nil {
-		// If the model is not found or code not authorized on the backing controller then
-		// we delete the model from JIMM.
-		// Juju returns CodeAuthorized when the model is not found for this facade.
-		if errors.ErrorCode(err) == errors.CodeNotFound || errors.ErrorCode(err) == errors.CodeUnauthorized {
-			errDelete := j.deleteModel(ctx, mt)
-			if errDelete != nil {
-				return nil, errors.E(op, errDelete)
-			}
-		}
+	modelInfo, err := j.modelInfo(ctx, &m, api)
+	if err != nil {
 		return nil, errors.E(op, err)
 	}
 
-	return j.mergeModelInfo(ctx, user, mi, m)
+	return j.mergeModelInfo(ctx, user, modelInfo, m)
+}
+
+// modelInfo retrieves the model information from the controller and reacts
+// to the error to update JIMM's state.
+func (j *JujuManager) modelInfo(ctx context.Context, model *dbmodel.Model, api API) (*jujuparams.ModelInfo, error) {
+	modelInfo := &jujuparams.ModelInfo{UUID: model.UUID.String}
+	errFromAPI := api.ModelInfo(ctx, modelInfo)
+	var err error
+	switch model.MigrationMode {
+	case dbmodel.MigrationModeNone:
+		err = j.maybeCleanupModel(ctx, errFromAPI, model)
+		if err != nil {
+			return nil, err
+		}
+		// we need to return both the modelInfo and the error, because
+		// the error from the API must be propagated to the caller.
+		return modelInfo, errFromAPI
+	case dbmodel.MigrationModeMigrateInternal:
+		err = j.checkModelMigratedInternal(ctx, errFromAPI, model, errFromAPI == nil && modelInfo.Migration.End != nil)
+		if err != nil {
+			return nil, err
+		}
+		// If the model has been migrated internally, we call api.ModelInfo again
+		// to get the updated model information from the new controller.
+		if err := j.Database.GetModel(ctx, model); err != nil {
+			return nil, err
+		}
+		api, err := j.dial(ctx, &model.Controller, names.ModelTag{}, nil)
+		if err != nil {
+			return nil, err
+		}
+		defer api.Close()
+		errFromAPI := api.ModelInfo(ctx, modelInfo)
+		return modelInfo, errFromAPI
+	default:
+		return nil, errors.E("unknown migration mode: " + string(model.MigrationMode))
+	}
 }
 
 // modelSummariesMap is a safe map to add records concurrently because the access is guarded by a Mutex.
