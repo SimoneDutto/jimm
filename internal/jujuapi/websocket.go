@@ -130,9 +130,13 @@ func (r *controllerRoot) mapError(ctx context.Context, err error) *jujuparams.Er
 	if errors.ErrorCode(err) == errors.CodeUnauthorized {
 		// Here we log the unauthorized access attempt.
 		// We use the error as a best effort description of what went wrong.
+		username := "unknown"
+		if r.user != nil {
+			username = r.user.Name
+		}
 		logger.LogUnauthorizedAccess(
 			ctx,
-			r.user.Name,
+			username,
 			fmt.Sprintf("unauthorized access attempt, error: %v", err),
 		)
 	}

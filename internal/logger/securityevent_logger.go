@@ -4,6 +4,7 @@ package logger
 
 import (
 	"context"
+	"strings"
 
 	"github.com/juju/zaputil/zapctx"
 	"go.uber.org/zap"
@@ -70,10 +71,11 @@ func LogUnauthorizedAccess(ctx context.Context, identityId string, description s
 	})
 }
 
-// LogGrantJimmAdmin logs the granting of JIMM admin role to the given identityId.
-func LogGrantJimmAdmin(ctx context.Context, identityId string) {
+// LogGrantJimmAdmins logs the granting of JIMM admin role to the given identityIds.
+func LogGrantJimmAdmins(ctx context.Context, identityIds []string) {
+	identities := strings.Join(identityIds, ", ")
 	logSecurityEvent(ctx, securityEvent{
-		Event:       "authz_admin:" + identityId,
+		Event:       "authz_admin:" + identities,
 		Description: "JIMM admin role was granted.",
 		Severity:    warning,
 	})

@@ -6,7 +6,6 @@ package service
 
 import (
 	"context"
-	goerr "errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -747,7 +746,7 @@ func newOpenFGAClient(ctx context.Context, p OpenFGAParams) (*openfga.OFGAClient
 // controller.
 func ensureControllerAdministrators(ctx context.Context, client *openfga.OFGAClient, controllerUUID string, admins []string) error {
 	controller := names.NewControllerTag(controllerUUID)
-	errs := make([]error, 0, len(admins))
+	tuples := []openfga.Tuple{}
 	for _, username := range admins {
 		userTag := names.NewUserTag(username)
 		i, err := dbmodel.NewIdentity(userTag.Id())
@@ -760,21 +759,20 @@ func ensureControllerAdministrators(ctx context.Context, client *openfga.OFGACli
 			return errors.E(err)
 		}
 		if !isAdmin {
-			tuple := openfga.Tuple{
+			tuples = append(tuples, openfga.Tuple{
 				Object:   ofganames.ConvertTag(userTag),
 				Relation: ofganames.AdministratorRelation,
 				Target:   ofganames.ConvertTag(controller),
-			}
-			err := client.AddRelation(ctx, tuple)
-			if err != nil {
-				errs = append(errs, err)
-				continue
-			}
-			logger.LogGrantJimmAdmin(ctx, username)
+			})
 		}
 	}
-	if len(errs) > 0 {
-		return goerr.Join(errs...)
+	if len(tuples) == 0 {
+		return nil
 	}
+	err := client.AddRelation(ctx, tuples...)
+	if err != nil {
+		return err
+	}
+	logger.LogGrantJimmAdmins(ctx, admins)
 	return nil
 }
