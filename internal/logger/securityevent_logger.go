@@ -25,7 +25,7 @@ type securityEvent struct {
 	Severity    eventLevel
 }
 
-func (s securityEvent) ToZapFields() []zapcore.Field {
+func (s securityEvent) toZapFields() []zapcore.Field {
 	return []zapcore.Field{
 		zap.String("event", s.Event),
 		zap.String("description", s.Description),
@@ -36,11 +36,11 @@ func (s securityEvent) ToZapFields() []zapcore.Field {
 func logSecurityEvent(ctx context.Context, event securityEvent) {
 	switch event.Severity {
 	case info:
-		zapctx.Info(ctx, event.Event, event.ToZapFields()...)
+		zapctx.Info(ctx, event.Event, event.toZapFields()...)
 	case warning:
-		zapctx.Warn(ctx, event.Event, event.ToZapFields()...)
+		zapctx.Warn(ctx, event.Event, event.toZapFields()...)
 	case critical:
-		zapctx.Error(ctx, event.Event, event.ToZapFields()...)
+		zapctx.Error(ctx, event.Event, event.toZapFields()...)
 	}
 }
 
