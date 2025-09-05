@@ -4,6 +4,7 @@ package logger
 
 import (
 	"context"
+	"strings"
 
 	"github.com/juju/zaputil/zapctx"
 	"go.uber.org/zap"
@@ -24,7 +25,7 @@ type securityEvent struct {
 	Severity    eventLevel
 }
 
-func (s securityEvent) ToZapFields() []zapcore.Field {
+func (s securityEvent) toZapFields() []zapcore.Field {
 	return []zapcore.Field{
 		zap.String("event", s.Event),
 		zap.String("description", s.Description),
@@ -35,11 +36,11 @@ func (s securityEvent) ToZapFields() []zapcore.Field {
 func logSecurityEvent(ctx context.Context, event securityEvent) {
 	switch event.Severity {
 	case info:
-		zapctx.Info(ctx, event.Event, event.ToZapFields()...)
+		zapctx.Info(ctx, event.Event, event.toZapFields()...)
 	case warning:
-		zapctx.Warn(ctx, event.Event, event.ToZapFields()...)
+		zapctx.Warn(ctx, event.Event, event.toZapFields()...)
 	case critical:
-		zapctx.Error(ctx, event.Event, event.ToZapFields()...)
+		zapctx.Error(ctx, event.Event, event.toZapFields()...)
 	}
 }
 
@@ -70,10 +71,11 @@ func LogUnauthorizedAccess(ctx context.Context, identityId string, description s
 	})
 }
 
-// LogGrantJimmAdmin logs the granting of JIMM admin role to the given identityId.
-func LogGrantJimmAdmin(ctx context.Context, identityId string) {
+// LogGrantJimmAdmins logs the granting of JIMM admin role to the given identityIds.
+func LogGrantJimmAdmins(ctx context.Context, identityIds []string) {
+	identities := strings.Join(identityIds, ", ")
 	logSecurityEvent(ctx, securityEvent{
-		Event:       "authz_admin:" + identityId,
+		Event:       "authz_admin:" + identities,
 		Description: "JIMM admin role was granted.",
 		Severity:    warning,
 	})

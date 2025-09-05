@@ -317,7 +317,7 @@ func (p *modelProxy) sendError(ctx context.Context, socket *writeLockConn, req *
 		logger.LogUnauthorizedAccess(
 			ctx,
 			p.tokenGen.GetUser().String(),
-			fmt.Sprintf("unauthorized access to model proxy for model %s", p.modelUUID),
+			fmt.Sprintf("unauthorized access in model proxy for model %s", p.modelUUID),
 		)
 	}
 	msg := createErrResponse(err, req)

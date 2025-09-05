@@ -179,7 +179,7 @@ func (j *loginManager) LoginWithSessionToken(ctx context.Context, sessionToken s
 	const op = errors.Op("jimm.LoginWithSessionToken")
 	jwtToken, err := j.oAuthAuthenticator.VerifySessionToken(sessionToken)
 	if err != nil {
-		logger.LogFailedLogin(ctx, "unkown session token")
+		logger.LogFailedLogin(ctx, "unknown session token")
 		return nil, errors.E(op, err)
 	}
 
