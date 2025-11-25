@@ -236,6 +236,20 @@ type SetControllerDeprecatedRequest struct {
 	Deprecated bool `json:"deprecated"`
 }
 
+// UpgradeToRequest is the request that is sent in an UpgradeTo method.
+type UpgradeToRequest struct {
+	// TargetVersion is the target controller version to upgrade to.
+	TargetVersion string `json:"target-version"`
+
+	// ModelUUID is the UUID of the model to upgrade.
+	ModelUUID string `json:"model-uuid"`
+}
+
+// UpgradeToResponse is the response that is sent in an UpgradeTo method.
+type UpgradeToResponse struct {
+	Logs string `json:"logs"`
+}
+
 // FullModelStatusRequest is the request that is sent in a FullModelStatus method.
 type FullModelStatusRequest struct {
 	ModelTag string
