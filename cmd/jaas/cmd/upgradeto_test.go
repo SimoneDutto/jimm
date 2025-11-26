@@ -44,23 +44,18 @@ func (s *upgradeToSuite) TestUpgradeTo(c *gc.C) {
 	defer s.SetupMocks(c).Finish()
 
 	testModelUUID := "93608db4-f1cb-4da5-9926-8233981aef0a"
+	testModelTag := "model-93608db4-f1cb-4da5-9926-8233981aef0a"
 	testTargetVersion := "3.5.0"
-	testLogs := "Upgrade initiated successfully\nController is being upgraded to version 3.5.0"
 
 	upgradeToParams := &apiparams.UpgradeToRequest{
-		TargetVersion: testTargetVersion,
-		ModelUUID:     testModelUUID,
+		TargetControllerVersion: testTargetVersion,
+		ModelTag:                testModelTag,
 	}
 
 	s.jimmClient.EXPECT().UpgradeTo(upgradeToParams).Return(apiparams.UpgradeToResponse{
-		Logs: testLogs,
+		Success: true,
 	}, nil)
 	s.jimmClient.EXPECT().Close().Return(nil)
-
-	s.writer.EXPECT().Write(gomock.Any()).DoAndReturn(func(b []byte) (int, error) {
-		c.Check(strings.Contains(string(b), "Upgrade initiated successfully"), gc.Equals, true)
-		return len(b), nil
-	})
 
 	upgradeToCmd := &upgradeToCommand{
 		jimmAPIFunc: func() (JIMMAPI, error) {
@@ -84,15 +79,61 @@ func (s *upgradeToSuite) TestUpgradeTo(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 }
 
+func (s *upgradeToSuite) TestUpgradeToWithFailureResponse(c *gc.C) {
+	defer s.SetupMocks(c).Finish()
+
+	testModelUUID := "93608db4-f1cb-4da5-9926-8233981aef0a"
+	testModelTag := "model-93608db4-f1cb-4da5-9926-8233981aef0a"
+	testTargetVersion := "3.5.0"
+	testErrorMessage := "upgrade failed: controller not ready"
+
+	upgradeToParams := &apiparams.UpgradeToRequest{
+		TargetControllerVersion: testTargetVersion,
+		ModelTag:                testModelTag,
+	}
+
+	s.jimmClient.EXPECT().UpgradeTo(upgradeToParams).Return(apiparams.UpgradeToResponse{
+		Success: false,
+		Error:   testErrorMessage,
+	}, nil)
+	s.jimmClient.EXPECT().Close().Return(nil)
+
+	s.writer.EXPECT().Write(gomock.Any()).DoAndReturn(func(b []byte) (int, error) {
+		c.Check(strings.Contains(string(b), testErrorMessage), gc.Equals, true)
+		return len(b), nil
+	})
+
+	upgradeToCmd := &upgradeToCommand{
+		jimmAPIFunc: func() (JIMMAPI, error) {
+			return s.jimmClient, nil
+		},
+		store: s.store,
+	}
+	f := gnuflag.NewFlagSet("test", gnuflag.ExitOnError)
+	f.SetOutput(s.writer)
+	upgradeToCmd.SetFlags(f)
+
+	upgradeToCmd.version = testTargetVersion
+	upgradeToCmd.modelUUID = testModelUUID
+
+	ctx := &cmd.Context{
+		Context: context.Background(),
+		Stdout:  s.writer,
+	}
+	err := upgradeToCmd.Run(ctx)
+	c.Assert(err, gc.IsNil)
+}
+
 func (s *upgradeToSuite) TestUpgradeToWithError(c *gc.C) {
 	defer s.SetupMocks(c).Finish()
 
 	testModelUUID := "93608db4-f1cb-4da5-9926-8233981aef0a"
+	testModelTag := "model-93608db4-f1cb-4da5-9926-8233981aef0a"
 	testTargetVersion := "3.5.0"
 
 	upgradeToParams := &apiparams.UpgradeToRequest{
-		TargetVersion: testTargetVersion,
-		ModelUUID:     testModelUUID,
+		TargetControllerVersion: testTargetVersion,
+		ModelTag:                testModelTag,
 	}
 	errorToReturn := errors.New("failed to initiate upgrade")
 	s.jimmClient.EXPECT().UpgradeTo(upgradeToParams).Return(apiparams.UpgradeToResponse{}, errorToReturn)
@@ -122,31 +163,40 @@ func (s *upgradeToSuite) TestUpgradeToWithError(c *gc.C) {
 
 func (s *upgradeToSuite) TestCommandsFailsWithMissingArgs(c *gc.C) {
 	_, err := cmdtesting.RunCommand(c, NewUpgradeToCommandForTesting(jjclient.NewMemStore(), nil))
-	c.Assert(err, gc.ErrorMatches, "missing required arguments: model UUID and version")
+	c.Assert(err, gc.ErrorMatches, "missing required arguments: version and model UUID")
 }
 
 func (s *upgradeToSuite) TestCommandsFailsWithOnlyOneArg(c *gc.C) {
-	_, err := cmdtesting.RunCommand(c, NewUpgradeToCommandForTesting(jjclient.NewMemStore(), nil), "93608db4-f1cb-4da5-9926-8233981aef0a")
-	c.Assert(err, gc.ErrorMatches, "missing required arguments: model UUID and version")
+	_, err := cmdtesting.RunCommand(c, NewUpgradeToCommandForTesting(jjclient.NewMemStore(), nil), "3.5.0")
+	c.Assert(err, gc.ErrorMatches, "missing required arguments: version and model UUID")
+}
+
+func (s *upgradeToSuite) TestCommandsFailsWithInvalidVersion(c *gc.C) {
+	_, err := cmdtesting.RunCommand(c, NewUpgradeToCommandForTesting(jjclient.NewMemStore(), nil), "invalid-version", "93608db4-f1cb-4da5-9926-8233981aef0a")
+	c.Assert(err, gc.ErrorMatches, "invalid version format: invalid-version")
+}
+
+func (s *upgradeToSuite) TestCommandsFailsWithInvalidModelUUID(c *gc.C) {
+	_, err := cmdtesting.RunCommand(c, NewUpgradeToCommandForTesting(jjclient.NewMemStore(), nil), "3.5.0", "invalid-uuid")
+	c.Assert(err, gc.ErrorMatches, "invalid model UUID: invalid-uuid")
 }
 
 func (s *upgradeToSuite) TestCommandWithPositionalArgs(c *gc.C) {
 	defer s.SetupMocks(c).Finish()
 
 	testModelUUID := "93608db4-f1cb-4da5-9926-8233981aef0a"
+	testModelTag := "model-93608db4-f1cb-4da5-9926-8233981aef0a"
 	testTargetVersion := "3.5.0"
 
 	upgradeToParams := &apiparams.UpgradeToRequest{
-		TargetVersion: testTargetVersion,
-		ModelUUID:     testModelUUID,
+		TargetControllerVersion: testTargetVersion,
+		ModelTag:                testModelTag,
 	}
 
 	s.jimmClient.EXPECT().UpgradeTo(upgradeToParams).Return(apiparams.UpgradeToResponse{
-		Logs: "success",
+		Success: true,
 	}, nil)
 	s.jimmClient.EXPECT().Close().Return(nil)
-
-	s.writer.EXPECT().Write(gomock.Any()).Return(0, nil)
 
 	upgradeToCmd := &upgradeToCommand{
 		jimmAPIFunc: func() (JIMMAPI, error) {
@@ -158,7 +208,7 @@ func (s *upgradeToSuite) TestCommandWithPositionalArgs(c *gc.C) {
 	f.SetOutput(s.writer)
 	upgradeToCmd.SetFlags(f)
 
-	err := upgradeToCmd.Init([]string{testModelUUID, testTargetVersion})
+	err := upgradeToCmd.Init([]string{testTargetVersion, testModelUUID})
 	c.Assert(err, gc.IsNil)
 
 	ctx := &cmd.Context{
