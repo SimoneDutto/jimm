@@ -158,6 +158,12 @@ runs:
         sudo snap install yq
       shell: bash
 
+    - name: Put client id and client secret in Github env
+      run: |
+        echo "JIMM_CLIENT_ID=test-client-id" >> $GITHUB_ENV
+        echo "JIMM_CLIENT_SECRET=2M2blFbO4GX4zfggQpivQSxwWX1XGgNf" >> $GITHUB_ENV
+      shell: bash
+
     - name: Authenticate Juju CLI
       run: chmod -R 666 ~/.local/share/juju/*.yaml && ./local/jimm/setup-cli-auth.sh
       working-directory: ${{ github.action_path }}/../../..
