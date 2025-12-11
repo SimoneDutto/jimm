@@ -9,6 +9,7 @@ import (
 
 	petname "github.com/dustinkirkland/golang-petname"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/juju/juju/api/client/modelconfig"
 	"github.com/juju/juju/api/client/modelmanager"
 	"github.com/juju/juju/cloud"
 	"github.com/juju/juju/core/network"
@@ -25,6 +26,7 @@ import (
 	ofganames "github.com/canonical/jimm/v3/internal/openfga/names"
 	"github.com/canonical/jimm/v3/internal/testutils/jimmtest"
 	"github.com/canonical/jimm/v3/pkg/api"
+	jimmversion "github.com/canonical/jimm/v3/version"
 
 	apiparams "github.com/canonical/jimm/v3/pkg/api/params"
 )
@@ -155,6 +157,22 @@ func (s *jimmSuite) TestListControllersOrdinaryUser(c *gc.C) {
 			},
 		},
 	})
+}
+
+func (s *jimmSuite) TestModelGet(c *gc.C) {
+	conn := s.Open(c, nil, "alice", nil)
+	defer conn.Close()
+
+	client := modelconfig.NewClient(conn)
+
+	jimmCfg, err := client.ModelGet()
+	c.Assert(err, gc.IsNil)
+
+	v, ok := jimmCfg["agent-version"]
+	c.Assert(ok, gc.Equals, true)
+	vers, ok := v.(string)
+	c.Assert(ok, gc.Equals, true)
+	c.Assert(vers, gc.Equals, jimmversion.ControllerVersion)
 }
 
 func (s *jimmSuite) TestListControllersUnauthorized(c *gc.C) {
