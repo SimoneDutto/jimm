@@ -485,44 +485,6 @@ func (s *JujuSuite) TearDownTest(c *gc.C) {
 	s.JIMMSuite.TearDownTest(c)
 }
 
-type BootstrapSuite struct {
-	JujuSuite
-
-	CloudCredential *dbmodel.CloudCredential
-	Model           *dbmodel.Model
-}
-
-func (s *BootstrapSuite) SetUpTest(c *gc.C) {
-	s.JujuSuite.SetUpTest(c)
-
-	cct := names.NewCloudCredentialTag(TestCloudName + "/bob@canonical.com/cred")
-	s.UpdateCloudCredential(c, cct, jujuparams.CloudCredential{
-		AuthType: "empty",
-	})
-	ctx := context.Background()
-	s.CloudCredential = new(dbmodel.CloudCredential)
-	s.CloudCredential.SetTag(cct)
-	err := s.JIMM.Database.GetCloudCredential(ctx, s.CloudCredential)
-	c.Assert(err, gc.Equals, nil)
-
-	// Grant bob add-model access to controller-1
-	controller := dbmodel.Controller{Name: "controller-1"}
-	err = s.JIMM.Database.GetController(ctx, &controller)
-	c.Assert(err, gc.Equals, nil)
-	err = s.OFGAClient.AddRelation(ctx, cofga.Tuple{
-		Object:   ofganames.ConvertTag(names.NewUserTag("bob@canonical.com")),
-		Relation: ofganames.CanAddModelRelation,
-		Target:   ofganames.ConvertTag(controller.ResourceTag()),
-	})
-	c.Assert(err, gc.Equals, nil)
-
-	mt := s.AddModel(c, names.NewUserTag("bob@canonical.com"), "model-1", names.NewCloudTag(TestCloudName), TestCloudRegionName, cct)
-	s.Model = new(dbmodel.Model)
-	s.Model.SetTag(mt)
-	err = s.JIMM.Database.GetModel(ctx, s.Model)
-	c.Assert(err, gc.Equals, nil)
-}
-
 type mockMigrationTokenGenerator struct{}
 
 func (m mockMigrationTokenGenerator) NewMigrationToken(ctx context.Context, username string) (string, error) {
