@@ -20,5 +20,6 @@ func (cs *controllerSuite) TestControllerConfig(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	c.Assert(controllerConfig, gc.NotNil)
 	c.Assert(controllerConfig.Config, gc.NotNil)
-	c.Assert(controllerConfig.Config["controller-uuid"], gc.Equals, cs.ControllerConfig.ControllerUUID())
+	_, conf := cs.GetOneControllerConfig(c)
+	c.Assert(controllerConfig.Config["controller-uuid"], gc.Equals, conf.UUID)
 }

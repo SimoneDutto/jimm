@@ -36,11 +36,11 @@ func (s *clientSuite) TestStatus(c *gc.C) {
 			},
 		},
 	}
-
-	info := s.APIInfo(c)
+	controllerName, conf := s.GetOneControllerConfig(c)
+	info := conf.ToAPIInfo()
 	ctl := dbmodel.Controller{
 		UUID:          info.ControllerUUID,
-		Name:          s.ControllerConfig.ControllerName(),
+		Name:          controllerName,
 		CACertificate: info.CACert,
 		PublicAddress: info.Addrs[0],
 	}

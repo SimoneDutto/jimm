@@ -79,7 +79,9 @@ func (s *modelmanagerSuite) TestGrantJIMMModelAdmin(c *gc.C) {
 
 	var access jujuparams.UserAccessPermission
 	for _, u := range info.Users {
-		if u.UserName == s.APIInfo(c).Tag.Id() {
+		_, conf := s.GetOneControllerConfig(c)
+		info := conf.ToAPIInfo()
+		if u.UserName == info.Tag.Id() {
 			access = u.Access
 		}
 	}
@@ -194,7 +196,7 @@ func (s *modelmanagerSuite) TestListModelSummaries(c *gc.C) {
 	res, err := s.API.ListModelSummaries(ctx, jujuparams.ModelSummariesRequest{})
 	c.Assert(err, gc.Equals, nil)
 	c.Assert(len(res.Results), gc.Equals, 1)
-	c.Assert(res.Results[0].Result.Name, gc.Equals, s.Model.Name())
+	c.Assert(res.Results[0].Result.Name, gc.Equals, s.Model.Name)
 }
 
 func (s *modelmanagerSuite) TestModelStatusError(c *gc.C) {

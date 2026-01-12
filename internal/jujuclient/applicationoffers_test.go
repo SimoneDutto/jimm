@@ -10,7 +10,6 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/juju/juju/core/crossmodel"
 	jujuparams "github.com/juju/juju/rpc/params"
-	"github.com/juju/juju/testing/factory"
 	"github.com/juju/names/v5"
 	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
@@ -20,56 +19,31 @@ import (
 
 type applicationoffersSuite struct {
 	jujuclientSuite
-
-	modelInfo jujuparams.ModelInfo
 }
 
 var _ = gc.Suite(&applicationoffersSuite{})
 
-func (s *applicationoffersSuite) SetUpTest(c *gc.C) {
-	s.jujuclientSuite.SetUpTest(c)
-
-	ctx := context.Background()
-	err := s.API.CreateModel(ctx, &jujuparams.ModelCreateArgs{
-		Name:     "test-model",
-		OwnerTag: names.NewUserTag("test-user@canonical.com").String(),
-	}, &s.modelInfo)
-	c.Assert(err, gc.Equals, nil)
-}
-
 func (s *applicationoffersSuite) TestOffer(c *gc.C) {
-	modelState, err := s.StatePool.Get(s.modelInfo.UUID)
-	c.Assert(err, gc.Equals, nil)
-	defer modelState.Release()
-	f := factory.NewFactory(modelState.State, s.StatePool)
-	app := f.MakeApplication(c, &factory.ApplicationParams{
-		Name: "test-app",
-		Charm: f.MakeCharm(c, &factory.CharmParams{
-			Name: "wordpress",
-		}),
+	s.DeployApplication(c, s.AdminUser, s.Model.Tag(), jimmtest.DeployApplicationParams{
+		App:   "test-app",
+		Charm: "juju-qa-dummy-sink",
 	})
-	f.MakeUnit(c, &factory.UnitParams{
-		Application: app,
-	})
-	ep, err := app.Endpoint("url")
-	c.Assert(err, gc.Equals, nil)
-
 	offerURL := crossmodel.OfferURL{
 		User:            "test-user@canonical.com",
-		ModelName:       s.modelInfo.Name,
+		ModelName:       s.Model.Name,
 		ApplicationName: "test-offer",
 	}
 
 	ctx := context.Background()
-	err = s.API.Offer(
+	err := s.API.Offer(
 		ctx,
 		offerURL,
 		jujuparams.AddApplicationOffer{
-			ModelTag:        names.NewModelTag(s.modelInfo.UUID).String(),
+			ModelTag:        names.NewModelTag(s.Model.UUID.String).String(),
 			OfferName:       "test-offer",
 			ApplicationName: "test-app",
 			Endpoints: map[string]string{
-				ep.Name: ep.Name,
+				"test-app": "source",
 			},
 		})
 	c.Assert(err, gc.Equals, nil)
@@ -78,11 +52,11 @@ func (s *applicationoffersSuite) TestOffer(c *gc.C) {
 		ctx,
 		offerURL,
 		jujuparams.AddApplicationOffer{
-			ModelTag:        names.NewModelTag(s.modelInfo.UUID).String(),
+			ModelTag:        names.NewModelTag(s.Model.UUID.String).String(),
 			OfferName:       "test-offer",
 			ApplicationName: "test-app",
 			Endpoints: map[string]string{
-				ep.Name: ep.Name,
+				"test-app": "source",
 			},
 		},
 	)
@@ -92,7 +66,7 @@ func (s *applicationoffersSuite) TestOffer(c *gc.C) {
 func (s *applicationoffersSuite) TestOfferError(c *gc.C) {
 	offerURL := crossmodel.OfferURL{
 		User:            "test-user@canonical.com",
-		ModelName:       s.modelInfo.Name,
+		ModelName:       s.Model.Name,
 		ApplicationName: "test-offer",
 	}
 
@@ -100,7 +74,7 @@ func (s *applicationoffersSuite) TestOfferError(c *gc.C) {
 		context.Background(),
 		offerURL,
 		jujuparams.AddApplicationOffer{
-			ModelTag:        names.NewModelTag(s.modelInfo.UUID).String(),
+			ModelTag:        names.NewModelTag(s.Model.UUID.String).String(),
 			OfferName:       "test-offer",
 			ApplicationName: "test-app",
 			Endpoints: map[string]string{
@@ -117,48 +91,37 @@ func (s *applicationoffersSuite) TestListApplicationOffersError(c *gc.C) {
 }
 
 func (s *applicationoffersSuite) TestListApplicationOffersNoOffers(c *gc.C) {
-	owner, err := names.ParseUserTag(s.modelInfo.OwnerTag)
+	owner, err := names.ParseUserTag(s.Model.Owner.ResourceTag().String())
 	c.Assert(err, gc.Equals, nil)
 	offers, err := s.API.ListApplicationOffers(context.Background(), []jujuparams.OfferFilter{{
 		OwnerName: owner.Id(),
-		ModelName: s.modelInfo.Name,
+		ModelName: s.Model.Name,
 	}})
 	c.Assert(err, gc.Equals, nil)
 	c.Assert(offers, gc.HasLen, 0)
 }
 
 func (s *applicationoffersSuite) TestListApplicationOffersMatching(c *gc.C) {
-	modelState, err := s.StatePool.Get(s.modelInfo.UUID)
-	c.Assert(err, gc.Equals, nil)
-	defer modelState.Release()
-	f := factory.NewFactory(modelState.State, s.StatePool)
-	app := f.MakeApplication(c, &factory.ApplicationParams{
-		Name: "test-app",
-		Charm: f.MakeCharm(c, &factory.CharmParams{
-			Name: "wordpress",
-		}),
+	s.DeployApplication(c, s.AdminUser, s.Model.Tag(), jimmtest.DeployApplicationParams{
+		App:   "test-app",
+		Charm: "juju-qa-dummy-sink",
 	})
-	f.MakeUnit(c, &factory.UnitParams{
-		Application: app,
-	})
-	ep, err := app.Endpoint("url")
-	c.Assert(err, gc.Equals, nil)
 
 	ctx := context.Background()
 	offerURL := crossmodel.OfferURL{
 		User:            "test-user@canonical.com",
-		ModelName:       s.modelInfo.Name,
+		ModelName:       s.Model.Name,
 		ApplicationName: "test-offer",
 	}
-	err = s.API.Offer(
+	err := s.API.Offer(
 		ctx,
 		offerURL,
 		jujuparams.AddApplicationOffer{
-			ModelTag:        names.NewModelTag(s.modelInfo.UUID).String(),
+			ModelTag:        names.NewModelTag(s.Model.UUID.String).String(),
 			OfferName:       "test-offer",
 			ApplicationName: "test-app",
 			Endpoints: map[string]string{
-				ep.Name: ep.Name,
+				"test-app": "source",
 			},
 		},
 	)
@@ -169,58 +132,47 @@ func (s *applicationoffersSuite) TestListApplicationOffersMatching(c *gc.C) {
 	err = s.API.GetApplicationOffer(ctx, &info)
 	c.Assert(err, gc.Equals, nil)
 
-	owner, err := names.ParseUserTag(s.modelInfo.OwnerTag)
+	owner, err := names.ParseUserTag(s.Model.Owner.ResourceTag().String())
 	c.Assert(err, gc.Equals, nil)
 	offers, err := s.API.ListApplicationOffers(ctx, []jujuparams.OfferFilter{{
 		OwnerName: owner.Id(),
-		ModelName: s.modelInfo.Name,
+		ModelName: s.Model.Name,
 	}})
 	c.Assert(err, gc.Equals, nil)
 	c.Check(offers, gc.DeepEquals, []jujuparams.ApplicationOfferAdminDetailsV5{info})
 }
 
 func (s *applicationoffersSuite) TestListApplicationOffersNoMatch(c *gc.C) {
-	modelState, err := s.StatePool.Get(s.modelInfo.UUID)
-	c.Assert(err, gc.Equals, nil)
-	defer modelState.Release()
-	f := factory.NewFactory(modelState.State, s.StatePool)
-	app := f.MakeApplication(c, &factory.ApplicationParams{
-		Name: "test-app",
-		Charm: f.MakeCharm(c, &factory.CharmParams{
-			Name: "wordpress",
-		}),
+	s.DeployApplication(c, s.AdminUser, s.Model.Tag(), jimmtest.DeployApplicationParams{
+		App:   "test-app",
+		Charm: "juju-qa-dummy-sink",
 	})
-	f.MakeUnit(c, &factory.UnitParams{
-		Application: app,
-	})
-	ep, err := app.Endpoint("url")
-	c.Assert(err, gc.Equals, nil)
 
 	ctx := context.Background()
 	offerURL := crossmodel.OfferURL{
 		User:            "test-user@canonical.com",
-		ModelName:       s.modelInfo.Name,
+		ModelName:       s.Model.Name,
 		ApplicationName: "test-offer",
 	}
-	err = s.API.Offer(
+	err := s.API.Offer(
 		ctx,
 		offerURL,
 		jujuparams.AddApplicationOffer{
-			ModelTag:        names.NewModelTag(s.modelInfo.UUID).String(),
+			ModelTag:        names.NewModelTag(s.Model.UUID.String).String(),
 			OfferName:       "test-offer",
 			ApplicationName: "test-app",
 			Endpoints: map[string]string{
-				ep.Name: ep.Name,
+				"test-app": "source",
 			},
 		},
 	)
 	c.Assert(err, gc.Equals, nil)
 
-	owner, err := names.ParseUserTag(s.modelInfo.OwnerTag)
+	owner, err := names.ParseUserTag(s.Model.Owner.ResourceTag().String())
 	c.Assert(err, gc.Equals, nil)
 	offers, err := s.API.ListApplicationOffers(ctx, []jujuparams.OfferFilter{{
 		OwnerName:       owner.Id(),
-		ModelName:       s.modelInfo.Name,
+		ModelName:       s.Model.Name,
 		ApplicationName: "no-such-app",
 	}})
 	c.Assert(err, gc.Equals, nil)
@@ -233,48 +185,37 @@ func (s *applicationoffersSuite) TestFindApplicationOffersError(c *gc.C) {
 }
 
 func (s *applicationoffersSuite) TestFindApplicationOffersNoOffers(c *gc.C) {
-	owner, err := names.ParseUserTag(s.modelInfo.OwnerTag)
+	owner, err := names.ParseUserTag(s.Model.Owner.ResourceTag().String())
 	c.Assert(err, gc.Equals, nil)
 	offers, err := s.API.FindApplicationOffers(context.Background(), []jujuparams.OfferFilter{{
 		OwnerName: owner.Id(),
-		ModelName: s.modelInfo.Name,
+		ModelName: s.Model.Name,
 	}})
 	c.Assert(err, gc.Equals, nil)
 	c.Assert(offers, gc.HasLen, 0)
 }
 
 func (s *applicationoffersSuite) TestFindApplicationOffersMatching(c *gc.C) {
-	modelState, err := s.StatePool.Get(s.modelInfo.UUID)
-	c.Assert(err, gc.Equals, nil)
-	defer modelState.Release()
-	f := factory.NewFactory(modelState.State, s.StatePool)
-	app := f.MakeApplication(c, &factory.ApplicationParams{
-		Name: "test-app",
-		Charm: f.MakeCharm(c, &factory.CharmParams{
-			Name: "wordpress",
-		}),
+	s.DeployApplication(c, s.AdminUser, s.Model.Tag(), jimmtest.DeployApplicationParams{
+		App:   "test-app",
+		Charm: "juju-qa-dummy-sink",
 	})
-	f.MakeUnit(c, &factory.UnitParams{
-		Application: app,
-	})
-	ep, err := app.Endpoint("url")
-	c.Assert(err, gc.Equals, nil)
 
 	ctx := context.Background()
 	offerURL := crossmodel.OfferURL{
 		User:            "test-user@canonical.com",
-		ModelName:       s.modelInfo.Name,
+		ModelName:       s.Model.Name,
 		ApplicationName: "test-offer",
 	}
-	err = s.API.Offer(
+	err := s.API.Offer(
 		ctx,
 		offerURL,
 		jujuparams.AddApplicationOffer{
-			ModelTag:        names.NewModelTag(s.modelInfo.UUID).String(),
+			ModelTag:        names.NewModelTag(s.Model.UUID.String).String(),
 			OfferName:       "test-offer",
 			ApplicationName: "test-app",
 			Endpoints: map[string]string{
-				ep.Name: ep.Name,
+				"test-app": "source",
 			},
 		},
 	)
@@ -285,58 +226,47 @@ func (s *applicationoffersSuite) TestFindApplicationOffersMatching(c *gc.C) {
 	err = s.API.GetApplicationOffer(ctx, &info)
 	c.Assert(err, gc.Equals, nil)
 
-	owner, err := names.ParseUserTag(s.modelInfo.OwnerTag)
+	owner, err := names.ParseUserTag(s.Model.Owner.ResourceTag().String())
 	c.Assert(err, gc.Equals, nil)
 	offers, err := s.API.FindApplicationOffers(ctx, []jujuparams.OfferFilter{{
 		OwnerName: owner.Id(),
-		ModelName: s.modelInfo.Name,
+		ModelName: s.Model.Name,
 	}})
 	c.Assert(err, gc.Equals, nil)
 	c.Check(offers, gc.DeepEquals, []jujuparams.ApplicationOfferAdminDetailsV5{info})
 }
 
 func (s *applicationoffersSuite) TestFindApplicationOffersNoMatch(c *gc.C) {
-	modelState, err := s.StatePool.Get(s.modelInfo.UUID)
-	c.Assert(err, gc.Equals, nil)
-	defer modelState.Release()
-	f := factory.NewFactory(modelState.State, s.StatePool)
-	app := f.MakeApplication(c, &factory.ApplicationParams{
-		Name: "test-app",
-		Charm: f.MakeCharm(c, &factory.CharmParams{
-			Name: "wordpress",
-		}),
+	s.DeployApplication(c, s.AdminUser, s.Model.Tag(), jimmtest.DeployApplicationParams{
+		App:   "test-app",
+		Charm: "juju-qa-dummy-sink",
 	})
-	f.MakeUnit(c, &factory.UnitParams{
-		Application: app,
-	})
-	ep, err := app.Endpoint("url")
-	c.Assert(err, gc.Equals, nil)
 
 	ctx := context.Background()
 	offerURL := crossmodel.OfferURL{
 		User:            "test-user@canonical.com",
-		ModelName:       s.modelInfo.Name,
+		ModelName:       s.Model.Name,
 		ApplicationName: "test-offer",
 	}
-	err = s.API.Offer(
+	err := s.API.Offer(
 		ctx,
 		offerURL,
 		jujuparams.AddApplicationOffer{
-			ModelTag:        names.NewModelTag(s.modelInfo.UUID).String(),
+			ModelTag:        names.NewModelTag(s.Model.UUID.String).String(),
 			OfferName:       "test-offer",
 			ApplicationName: "test-app",
 			Endpoints: map[string]string{
-				ep.Name: ep.Name,
+				"test-app": "source",
 			},
 		},
 	)
 	c.Assert(err, gc.Equals, nil)
 
-	owner, err := names.ParseUserTag(s.modelInfo.OwnerTag)
+	owner, err := names.ParseUserTag(s.Model.Owner.ResourceTag().String())
 	c.Assert(err, gc.Equals, nil)
 	offers, err := s.API.FindApplicationOffers(ctx, []jujuparams.OfferFilter{{
 		OwnerName:       owner.Id(),
-		ModelName:       s.modelInfo.Name,
+		ModelName:       s.Model.Name,
 		ApplicationName: "no-such-app",
 	}})
 	c.Assert(err, gc.Equals, nil)
@@ -344,37 +274,26 @@ func (s *applicationoffersSuite) TestFindApplicationOffersNoMatch(c *gc.C) {
 }
 
 func (s *applicationoffersSuite) TestGetApplicationOffer(c *gc.C) {
-	modelState, err := s.StatePool.Get(s.modelInfo.UUID)
-	c.Assert(err, gc.Equals, nil)
-	defer modelState.Release()
-	f := factory.NewFactory(modelState.State, s.StatePool)
-	app := f.MakeApplication(c, &factory.ApplicationParams{
-		Name: "test-app",
-		Charm: f.MakeCharm(c, &factory.CharmParams{
-			Name: "wordpress",
-		}),
+	s.DeployApplication(c, s.AdminUser, s.Model.Tag(), jimmtest.DeployApplicationParams{
+		App:   "test-app",
+		Charm: "juju-qa-dummy-sink",
 	})
-	f.MakeUnit(c, &factory.UnitParams{
-		Application: app,
-	})
-	ep, err := app.Endpoint("url")
-	c.Assert(err, gc.Equals, nil)
 
 	ctx := context.Background()
 	offerURL := crossmodel.OfferURL{
 		User:            "test-user@canonical.com",
-		ModelName:       s.modelInfo.Name,
+		ModelName:       s.Model.Name,
 		ApplicationName: "test-offer",
 	}
-	err = s.API.Offer(
+	err := s.API.Offer(
 		ctx,
 		offerURL,
 		jujuparams.AddApplicationOffer{
-			ModelTag:        names.NewModelTag(s.modelInfo.UUID).String(),
+			ModelTag:        names.NewModelTag(s.Model.UUID.String).String(),
 			OfferName:       "test-offer",
 			ApplicationName: "test-app",
 			Endpoints: map[string]string{
-				ep.Name: ep.Name,
+				"test-app": "source",
 			},
 		},
 	)
@@ -394,7 +313,7 @@ func (s *applicationoffersSuite) TestGetApplicationOffer(c *gc.C) {
 	info.CharmURL = ""
 	c.Check(info, jc.DeepEquals, jujuparams.ApplicationOfferAdminDetailsV5{
 		ApplicationOfferDetailsV5: jujuparams.ApplicationOfferDetailsV5{
-			SourceModelTag:         names.NewModelTag(s.modelInfo.UUID).String(),
+			SourceModelTag:         names.NewModelTag(s.Model.UUID.String).String(),
 			OfferURL:               offerURL.String(),
 			OfferName:              "test-offer",
 			ApplicationDescription: "A pretty popular blog engine",
@@ -427,37 +346,26 @@ func (s *applicationoffersSuite) TestGetApplicationOfferNotFound(c *gc.C) {
 }
 
 func (s *applicationoffersSuite) TestGrantApplicationOfferAccess(c *gc.C) {
-	modelState, err := s.StatePool.Get(s.modelInfo.UUID)
-	c.Assert(err, gc.Equals, nil)
-	defer modelState.Release()
-	f := factory.NewFactory(modelState.State, s.StatePool)
-	app := f.MakeApplication(c, &factory.ApplicationParams{
-		Name: "test-app",
-		Charm: f.MakeCharm(c, &factory.CharmParams{
-			Name: "wordpress",
-		}),
+	s.DeployApplication(c, s.AdminUser, s.Model.Tag(), jimmtest.DeployApplicationParams{
+		App:   "test-app",
+		Charm: "juju-qa-dummy-sink",
 	})
-	f.MakeUnit(c, &factory.UnitParams{
-		Application: app,
-	})
-	ep, err := app.Endpoint("url")
-	c.Assert(err, gc.Equals, nil)
 
 	ctx := context.Background()
 	offerURL := crossmodel.OfferURL{
 		User:            "test-user@canonical.com",
-		ModelName:       s.modelInfo.Name,
+		ModelName:       s.Model.Name,
 		ApplicationName: "test-offer",
 	}
-	err = s.API.Offer(
+	err := s.API.Offer(
 		ctx,
 		offerURL,
 		jujuparams.AddApplicationOffer{
-			ModelTag:        names.NewModelTag(s.modelInfo.UUID).String(),
+			ModelTag:        names.NewModelTag(s.Model.UUID.String).String(),
 			OfferName:       "test-offer",
 			ApplicationName: "test-app",
 			Endpoints: map[string]string{
-				ep.Name: ep.Name,
+				"test-app": "source",
 			},
 		},
 	)
@@ -479,7 +387,7 @@ func (s *applicationoffersSuite) TestGrantApplicationOfferAccess(c *gc.C) {
 	info.CharmURL = ""
 	c.Check(info, jc.DeepEquals, jujuparams.ApplicationOfferAdminDetailsV5{
 		ApplicationOfferDetailsV5: jujuparams.ApplicationOfferDetailsV5{
-			SourceModelTag:         names.NewModelTag(s.modelInfo.UUID).String(),
+			SourceModelTag:         names.NewModelTag(s.Model.UUID.String).String(),
 			OfferURL:               offerURL.String(),
 			OfferName:              "test-offer",
 			ApplicationDescription: "A pretty popular blog engine",
@@ -514,37 +422,26 @@ func (s *applicationoffersSuite) TestGrantApplicationOfferAccessNotFound(c *gc.C
 }
 
 func (s *applicationoffersSuite) TestRevokeApplicationOfferAccess(c *gc.C) {
-	modelState, err := s.StatePool.Get(s.modelInfo.UUID)
-	c.Assert(err, gc.Equals, nil)
-	defer modelState.Release()
-	f := factory.NewFactory(modelState.State, s.StatePool)
-	app := f.MakeApplication(c, &factory.ApplicationParams{
-		Name: "test-app",
-		Charm: f.MakeCharm(c, &factory.CharmParams{
-			Name: "wordpress",
-		}),
+	s.DeployApplication(c, s.AdminUser, s.Model.Tag(), jimmtest.DeployApplicationParams{
+		App:   "test-app",
+		Charm: "juju-qa-dummy-sink",
 	})
-	f.MakeUnit(c, &factory.UnitParams{
-		Application: app,
-	})
-	ep, err := app.Endpoint("url")
-	c.Assert(err, gc.Equals, nil)
 
 	ctx := context.Background()
 	offerURL := crossmodel.OfferURL{
 		User:            "test-user@canonical.com",
-		ModelName:       s.modelInfo.Name,
+		ModelName:       s.Model.Name,
 		ApplicationName: "test-offer",
 	}
-	err = s.API.Offer(
+	err := s.API.Offer(
 		ctx,
 		offerURL,
 		jujuparams.AddApplicationOffer{
-			ModelTag:        names.NewModelTag(s.modelInfo.UUID).String(),
+			ModelTag:        names.NewModelTag(s.Model.UUID.String).String(),
 			OfferName:       "test-offer",
 			ApplicationName: "test-app",
 			Endpoints: map[string]string{
-				ep.Name: ep.Name,
+				"test-app": "source",
 			},
 		},
 	)
@@ -567,7 +464,7 @@ func (s *applicationoffersSuite) TestRevokeApplicationOfferAccess(c *gc.C) {
 	info.CharmURL = ""
 	c.Check(info, jc.DeepEquals, jujuparams.ApplicationOfferAdminDetailsV5{
 		ApplicationOfferDetailsV5: jujuparams.ApplicationOfferDetailsV5{
-			SourceModelTag:         names.NewModelTag(s.modelInfo.UUID).String(),
+			SourceModelTag:         names.NewModelTag(s.Model.UUID.String).String(),
 			OfferURL:               "test-user@canonical.com/test-model.test-offer",
 			OfferName:              "test-offer",
 			ApplicationDescription: "A pretty popular blog engine",
@@ -606,7 +503,7 @@ func (s *applicationoffersSuite) TestRevokeApplicationOfferAccess(c *gc.C) {
 	info.CharmURL = ""
 	c.Check(info, jc.DeepEquals, jujuparams.ApplicationOfferAdminDetailsV5{
 		ApplicationOfferDetailsV5: jujuparams.ApplicationOfferDetailsV5{
-			SourceModelTag:         names.NewModelTag(s.modelInfo.UUID).String(),
+			SourceModelTag:         names.NewModelTag(s.Model.UUID.String).String(),
 			OfferURL:               offerURL.String(),
 			OfferName:              "test-offer",
 			ApplicationDescription: "A pretty popular blog engine",
@@ -641,47 +538,36 @@ func (s *applicationoffersSuite) TestRevokeApplicationOfferAccessNotFound(c *gc.
 }
 
 func (s *applicationoffersSuite) TestDestroyApplicationOffer(c *gc.C) {
-	modelState, err := s.StatePool.Get(s.modelInfo.UUID)
-	c.Assert(err, gc.Equals, nil)
-	defer modelState.Release()
-	f := factory.NewFactory(modelState.State, s.StatePool)
-	app := f.MakeApplication(c, &factory.ApplicationParams{
-		Name: "test-app",
-		Charm: f.MakeCharm(c, &factory.CharmParams{
-			Name: "wordpress",
-		}),
+	s.DeployApplication(c, s.AdminUser, s.Model.Tag(), jimmtest.DeployApplicationParams{
+		App:   "test-app",
+		Charm: "juju-qa-dummy-sink",
 	})
-	f.MakeUnit(c, &factory.UnitParams{
-		Application: app,
-	})
-	ep, err := app.Endpoint("url")
-	c.Assert(err, gc.Equals, nil)
 
 	ctx := context.Background()
 	offerURL := crossmodel.OfferURL{
 		User:            "test-user@canonical.com",
-		ModelName:       s.modelInfo.Name,
+		ModelName:       s.Model.Name,
 		ApplicationName: "test-offer",
 	}
-	err = s.API.Offer(
+	err := s.API.Offer(
 		ctx,
 		offerURL,
 		jujuparams.AddApplicationOffer{
-			ModelTag:        names.NewModelTag(s.modelInfo.UUID).String(),
+			ModelTag:        names.NewModelTag(s.Model.UUID.String).String(),
 			OfferName:       "test-offer",
 			ApplicationName: "test-app",
 			Endpoints: map[string]string{
-				ep.Name: ep.Name,
+				"test-app": "source",
 			},
 		},
 	)
 	c.Assert(err, gc.Equals, nil)
 
-	owner, err := names.ParseUserTag(s.modelInfo.OwnerTag)
+	owner, err := names.ParseUserTag(s.Model.Owner.ResourceTag().String())
 	c.Assert(err, gc.Equals, nil)
 	offers, err := s.API.ListApplicationOffers(ctx, []jujuparams.OfferFilter{{
 		OwnerName: owner.Id(),
-		ModelName: s.modelInfo.Name,
+		ModelName: s.Model.Name,
 	}})
 	c.Assert(err, gc.Equals, nil)
 	c.Assert(offers, gc.HasLen, 1)
@@ -691,44 +577,33 @@ func (s *applicationoffersSuite) TestDestroyApplicationOffer(c *gc.C) {
 
 	offers, err = s.API.ListApplicationOffers(ctx, []jujuparams.OfferFilter{{
 		OwnerName: owner.Id(),
-		ModelName: s.modelInfo.Name,
+		ModelName: s.Model.Name,
 	}})
 	c.Assert(err, gc.Equals, nil)
 	c.Assert(offers, gc.HasLen, 0)
 }
 
 func (s *applicationoffersSuite) TestGetApplicationOfferConsumeDetails(c *gc.C) {
-	modelState, err := s.StatePool.Get(s.modelInfo.UUID)
-	c.Assert(err, gc.Equals, nil)
-	defer modelState.Release()
-	f := factory.NewFactory(modelState.State, s.StatePool)
-	app := f.MakeApplication(c, &factory.ApplicationParams{
-		Name: "test-app",
-		Charm: f.MakeCharm(c, &factory.CharmParams{
-			Name: "wordpress",
-		}),
+	s.DeployApplication(c, s.AdminUser, s.Model.Tag(), jimmtest.DeployApplicationParams{
+		App:   "test-app",
+		Charm: "juju-qa-dummy-sink",
 	})
-	f.MakeUnit(c, &factory.UnitParams{
-		Application: app,
-	})
-	ep, err := app.Endpoint("url")
-	c.Assert(err, gc.Equals, nil)
 
 	ctx := context.Background()
 	offerURL := crossmodel.OfferURL{
 		User:            "test-user@canonical.com",
-		ModelName:       s.modelInfo.Name,
+		ModelName:       s.Model.Name,
 		ApplicationName: "test-offer",
 	}
-	err = s.API.Offer(
+	err := s.API.Offer(
 		ctx,
 		offerURL,
 		jujuparams.AddApplicationOffer{
-			ModelTag:        names.NewModelTag(s.modelInfo.UUID).String(),
+			ModelTag:        names.NewModelTag(s.Model.UUID.String).String(),
 			OfferName:       "test-offer",
 			ApplicationName: "test-app",
 			Endpoints: map[string]string{
-				ep.Name: ep.Name,
+				"test-app": "source",
 			},
 		},
 	)
@@ -747,9 +622,11 @@ func (s *applicationoffersSuite) TestGetApplicationOfferConsumeDetails(c *gc.C) 
 	lessF := func(a, b jujuparams.OfferUserDetails) bool {
 		return a.UserName < b.UserName
 	}
+	_, controllerConfig := s.GetOneControllerConfig(c)
+	apiInfo := controllerConfig.ToAPIInfo()
 	c.Check(info, jimmtest.CmpEquals(cmpopts.SortSlices(lessF)), jujuparams.ConsumeOfferDetails{
 		Offer: &jujuparams.ApplicationOfferDetailsV5{
-			SourceModelTag:         names.NewModelTag(s.modelInfo.UUID).String(),
+			SourceModelTag:         names.NewModelTag(s.Model.UUID.String).String(),
 			OfferURL:               "test-user@canonical.com/test-model.test-offer",
 			OfferName:              "test-offer",
 			ApplicationDescription: "A pretty popular blog engine",
@@ -770,9 +647,9 @@ func (s *applicationoffersSuite) TestGetApplicationOfferConsumeDetails(c *gc.C) 
 			}},
 		},
 		ControllerInfo: &jujuparams.ExternalControllerInfo{
-			ControllerTag: names.NewControllerTag(s.ControllerConfig.ControllerUUID()).String(),
-			Addrs:         s.APIInfo(c).Addrs,
-			CACert:        s.APIInfo(c).CACert,
+			ControllerTag: names.NewControllerTag(controllerConfig.UUID).String(),
+			Addrs:         apiInfo.Addrs,
+			CACert:        apiInfo.CACert,
 		},
 	})
 }

@@ -20,18 +20,19 @@ import (
 )
 
 type jujuclientSuite struct {
-	jimmtest.JujuSuite
+	jimmtest.WebsocketE2ESuite
 
 	Dialer juju.Dialer
 	API    juju.API
 }
 
 func (s *jujuclientSuite) SetUpTest(c *gc.C) {
-	s.JujuSuite.SetUpTest(c)
+	s.WebsocketE2ESuite.SetUpTest(c)
 
 	s.Dialer = s.JIMM.Dialer
 	var err error
-	info := s.APIInfo(c)
+	controllerName, conf := s.GetOneControllerConfig(c)
+	info := conf.ToAPIInfo()
 	hpss := make(dbmodel.HostPorts, 0, len(info.Addrs))
 	for _, addr := range info.Addrs {
 		hp, err := network.ParseMachineHostPort(addr)
@@ -44,8 +45,8 @@ func (s *jujuclientSuite) SetUpTest(c *gc.C) {
 		}})
 	}
 	ctl := dbmodel.Controller{
-		UUID:          s.ControllerConfig.ControllerUUID(),
-		Name:          s.ControllerConfig.ControllerName(),
+		UUID:          conf.UUID,
+		Name:          controllerName,
 		CACertificate: info.CACert,
 		Addresses:     hpss,
 	}
@@ -59,7 +60,7 @@ func (s *jujuclientSuite) TearDownTest(c *gc.C) {
 		s.API = nil
 		c.Assert(err, gc.Equals, nil)
 	}
-	s.JujuConnSuite.TearDownTest(c)
+	s.WebsocketE2ESuite.TearDownTest(c)
 }
 
 type dialSuite struct {
@@ -69,10 +70,11 @@ type dialSuite struct {
 var _ = gc.Suite(&dialSuite{})
 
 func (s *dialSuite) TestDial(c *gc.C) {
-	info := s.APIInfo(c)
+	controllerName, conf := s.GetOneControllerConfig(c)
+	info := conf.ToAPIInfo()
 	ctl := dbmodel.Controller{
-		UUID:          s.ControllerConfig.ControllerUUID(),
-		Name:          s.ControllerConfig.ControllerName(),
+		UUID:          conf.UUID,
+		Name:          controllerName,
 		CACertificate: info.CACert,
 		PublicAddress: info.Addrs[0],
 	}
@@ -91,10 +93,11 @@ func (s *dialSuite) TestDial(c *gc.C) {
 func (s *dialSuite) TestDialWithJWT(c *gc.C) {
 	ctx := context.Background()
 
-	info := s.APIInfo(c)
+	controllerName, conf := s.GetOneControllerConfig(c)
+	info := conf.ToAPIInfo()
 	ctl := dbmodel.Controller{
-		UUID:          info.ControllerUUID,
-		Name:          s.ControllerConfig.ControllerName(),
+		UUID:          conf.UUID,
+		Name:          controllerName,
 		CACertificate: info.CACert,
 		PublicAddress: info.Addrs[0],
 	}
@@ -122,12 +125,13 @@ func (s *dialSuite) TestDialWithJWT(c *gc.C) {
 // of our Juju dialer. It verifies that we can connect to valid endpoints
 // on a Juju controller, and that invalid endpoints return errors.
 func (s *dialSuite) TestConnectStreams(c *gc.C) {
+	_, conf := s.GetOneControllerConfig(c)
 	ctl := dbmodel.Controller{
-		UUID: s.ControllerConfig.ControllerUUID(),
+		UUID: conf.UUID,
 	}
 	err := s.JIMM.Database.GetController(context.Background(), &ctl)
 	c.Assert(err, gc.IsNil)
-	api, err := s.Dialer.Dial(context.Background(), &ctl, s.Model.ModelTag(), nil, nil)
+	api, err := s.Dialer.Dial(context.Background(), &ctl, s.Model.ResourceTag(), nil, nil)
 	c.Assert(err, gc.IsNil)
 	defer api.Close()
 

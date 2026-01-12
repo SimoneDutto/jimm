@@ -34,10 +34,11 @@ func (s *storageSuite) TestListFilesystems(c *gc.C) {
 		},
 	}
 
-	info := s.APIInfo(c)
+	controllerName, conf := s.GetOneControllerConfig(c)
+	info := conf.ToAPIInfo()
 	ctl := dbmodel.Controller{
-		UUID:          s.ControllerConfig.ControllerUUID(),
-		Name:          s.ControllerConfig.ControllerName(),
+		UUID:          conf.UUID,
+		Name:          controllerName,
 		CACertificate: info.CACert,
 		PublicAddress: info.Addrs[0],
 	}
@@ -78,10 +79,11 @@ func (s *storageSuite) TestListVolumes(c *gc.C) {
 		},
 	}
 
-	info := s.APIInfo(c)
+	controllerName, conf := s.GetOneControllerConfig(c)
+	info := conf.ToAPIInfo()
 	ctl := dbmodel.Controller{
-		UUID:          s.ControllerConfig.ControllerUUID(),
-		Name:          s.ControllerConfig.ControllerName(),
+		UUID:          conf.UUID,
+		Name:          controllerName,
 		CACertificate: info.CACert,
 		PublicAddress: info.Addrs[0],
 	}
@@ -122,10 +124,11 @@ func (s *storageSuite) TestListStorageDetails(c *gc.C) {
 		},
 	}
 
-	info := s.APIInfo(c)
+	controllerName, conf := s.GetOneControllerConfig(c)
+	info := conf.ToAPIInfo()
 	ctl := dbmodel.Controller{
-		UUID:          s.ControllerConfig.ControllerUUID(),
-		Name:          s.ControllerConfig.ControllerName(),
+		UUID:          conf.UUID,
+		Name:          controllerName,
 		CACertificate: info.CACert,
 		PublicAddress: info.Addrs[0],
 	}

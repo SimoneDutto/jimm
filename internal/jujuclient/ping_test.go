@@ -20,10 +20,11 @@ var _ = gc.Suite(&pingSuite{})
 func (s *pingSuite) TestPing(c *gc.C) {
 	ctx := context.Background()
 
-	info := s.APIInfo(c)
+	controllerName, conf := s.GetOneControllerConfig(c)
+	info := conf.ToAPIInfo()
 	ctl := dbmodel.Controller{
-		UUID:          s.ControllerConfig.ControllerUUID(),
-		Name:          s.ControllerConfig.ControllerName(),
+		UUID:          conf.UUID,
+		Name:          controllerName,
 		CACertificate: info.CACert,
 		PublicAddress: info.Addrs[0],
 	}
