@@ -410,7 +410,7 @@ func (as *AuthenticationService) VerifySessionToken(token string) (_ jwt.Token, 
 		if stderrors.Is(err, jwt.ErrTokenExpired()) {
 			return nil, errors.E(errors.CodeSessionTokenInvalid, "JIMM session token expired")
 		}
-		return nil, err
+		return nil, errors.E(errors.CodeSessionTokenInvalid, fmt.Errorf("failed to parse jwt: %v", err))
 	}
 
 	if _, err = mail.ParseAddress(parsedToken.Subject()); err != nil {
