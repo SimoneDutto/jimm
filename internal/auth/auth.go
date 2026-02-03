@@ -402,7 +402,7 @@ func (as *AuthenticationService) VerifySessionToken(token string) (_ jwt.Token, 
 
 	decodedToken, err := base64.StdEncoding.DecodeString(token)
 	if err != nil {
-		return nil, errors.E(err, "failed to decode token")
+		return nil, errors.E(errors.CodeSessionTokenInvalid, fmt.Errorf("failed to decode token; %v", err))
 	}
 
 	parsedToken, err := jwt.Parse(decodedToken, jwt.WithKey(as.signingAlg, []byte(as.jwtSessionKey)))

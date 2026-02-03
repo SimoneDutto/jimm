@@ -217,6 +217,25 @@ func TestSessionTokenRejectsExpiredToken(t *testing.T) {
 	c.Assert(errors.ErrorCode(err), qt.Equals, errors.CodeSessionTokenInvalid)
 }
 
+func TestSessionTokenRejectsBadlyDecoded(t *testing.T) {
+	c := qt.New(t)
+
+	ctx := context.Background()
+
+	noDuration := time.Duration(0)
+	authSvc, _, _, cleanup := setupTestAuthSvc(ctx, c, noDuration)
+	defer cleanup()
+
+	token, err := authSvc.MintSessionToken("jimm-test@canonical.com")
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(token) > 0, qt.IsTrue)
+
+	token += "invalidstuff"
+	_, err = authSvc.VerifySessionToken(token)
+	c.Assert(err, qt.ErrorMatches, `failed to decode token; illegal base64 data at input byte 200`)
+	c.Assert(errors.ErrorCode(err), qt.Equals, errors.CodeSessionTokenInvalid)
+}
+
 func TestSessionTokenRejectsEmptyToken(t *testing.T) {
 	c := qt.New(t)
 
