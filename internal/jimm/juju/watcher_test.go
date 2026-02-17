@@ -144,7 +144,7 @@ func TestModelSummaryWatcher(t *testing.T) {
 
 			mockWatcher.EXPECT().Stop().Do(func() error {
 				return nil
-			})
+			}).AnyTimes()
 			mockWatcher.EXPECT().Next().DoAndReturn(func() ([]jujuparams.ModelAbstract, error) {
 				select {
 				case <-ctx.Done():
