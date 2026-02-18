@@ -326,7 +326,6 @@ func (s *applicationOffersSuite) TestListApplicationOffers(c *gc.C) {
 			UserName: ofganames.EveryoneUser,
 			Access:   "read",
 		}},
-		OfferUUID: offers[0].OfferUUID,
 	}})
 }
 
@@ -529,7 +528,6 @@ func (s *applicationOffersSuite) TestFindApplicationOffers(c *gc.C) {
 			UserName: ofganames.EveryoneUser,
 			Access:   "read",
 		}},
-		OfferUUID: offers[0].OfferUUID,
 	}})
 
 	// by default each offer is publicly readable -> charlie should be
@@ -612,7 +610,6 @@ func (s *applicationOffersSuite) TestApplicationOffers(c *gc.C) {
 			UserName: ofganames.EveryoneUser,
 			Access:   "read",
 		}},
-		OfferUUID: offer.OfferUUID,
 	})
 
 	_, err = client.ApplicationOffer("charlie@canonical.com/" + s.Model.Name + ".test-offer2")

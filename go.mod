@@ -10,7 +10,7 @@ require (
 	github.com/juju/errors v1.0.0
 	github.com/juju/gnuflag v1.0.0
 	github.com/juju/http/v2 v2.0.1
-	github.com/juju/juju v0.0.0-20260218083301-8829b2da5a21 // hash 8829b2da5a214abb6264ba09cc78912a506d38ba
+	github.com/juju/juju v0.0.0-20260217162653-f9a4fb1f13b0 // hash f9a4fb1f13b0c31d9b8fe9c0c6dfa58f048d898a
 	github.com/juju/loggo v1.0.0 // indirect
 	github.com/juju/names/v4 v4.0.0
 	github.com/juju/names/v5 v5.0.0
