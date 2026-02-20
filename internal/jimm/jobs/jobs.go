@@ -9,6 +9,8 @@ import (
 	"github.com/riverqueue/river/rivertype"
 
 	"github.com/canonical/jimm/v3/internal/errors"
+	"github.com/canonical/jimm/v3/internal/rivertypes"
+	apiparams "github.com/canonical/jimm/v3/pkg/api/params"
 )
 
 // JobQuerier defines the interface for querying and managing jobs in JIMM.
@@ -54,4 +56,133 @@ func (j *JobManager) GetJobInfo(ctx context.Context, jobID int64) (JobInfo, erro
 		FinishedAt:     jobRow.FinalizedAt,
 		Errors:         jobErrors,
 	}, nil
+}
+
+// ListJobs returns a list of jobs based on the provided parameters. It converts the API parameters to the internal river job query parameters and retrieves the job list from the job querier.
+func (j *JobManager) ListJobs(ctx context.Context, req apiparams.ListJobsRequest) (apiparams.ListJobsResponse, error) {
+	riverStates, err := convertJobStates(req.Statuses)
+	if err != nil {
+		return apiparams.ListJobsResponse{}, err
+	}
+	kinds, err := convertKinds(req.Kinds)
+	if err != nil {
+		return apiparams.ListJobsResponse{}, err
+	}
+
+	// Set default count if not provided
+	count := req.Count
+	if count <= 0 {
+		count = 100
+	}
+	if count > 10000 {
+		return apiparams.ListJobsResponse{}, errors.E("Count must be between 1 and 10_000.")
+	}
+
+	p := river.NewJobListParams().First(count)
+
+	// Only add filters if they are specified
+	if len(kinds) > 0 {
+		p = p.Kinds(kinds...)
+	}
+	if len(riverStates) > 0 {
+		p = p.States(riverStates...)
+	}
+
+	// Handle pagination cursor
+	if req.Cursor != "" {
+		cursor := &river.JobListCursor{}
+		if err := cursor.UnmarshalText([]byte(req.Cursor)); err != nil {
+			return apiparams.ListJobsResponse{}, errors.E("invalid cursor: %w", err)
+		}
+		p = p.After(cursor)
+	}
+
+	jobListResult, err := j.jobQuerier.ListJobs(ctx, p)
+	if err != nil {
+		return apiparams.ListJobsResponse{}, errors.E(err)
+	}
+
+	jobs := make([]apiparams.ListJobInfo, len(jobListResult.Jobs))
+	for i, job := range jobListResult.Jobs {
+		jobs[i] = apiparams.ListJobInfo{
+			ID:          job.ID,
+			Status:      string(job.State),
+			Kind:        job.Kind,
+			MaxAttempts: job.MaxAttempts,
+			Attempt:     job.Attempt,
+		}
+	}
+
+	// Get next cursor if available
+	var nextCursor string
+	if jobListResult.LastCursor != nil {
+		cursorBytes, err := jobListResult.LastCursor.MarshalText()
+		if err != nil {
+			return apiparams.ListJobsResponse{}, errors.E("failed to marshal cursor: %w", err)
+		}
+		nextCursor = string(cursorBytes)
+	}
+
+	return apiparams.ListJobsResponse{
+		Jobs:       jobs,
+		NextCursor: nextCursor,
+	}, nil
+}
+
+func convertJobStates(statuses []apiparams.JobStatus) ([]rivertype.JobState, error) {
+	// If statuses is empty, return empty slice to get all statuses
+	if len(statuses) == 0 {
+		return []rivertype.JobState{}, nil
+	}
+
+	var riverStates []rivertype.JobState
+	for _, status := range statuses {
+		// Skip unknown/empty statuses
+		if status == "" || status == apiparams.StatusUnknown {
+			continue
+		}
+
+		switch status {
+		case apiparams.StatusRunning:
+			riverStates = append(riverStates, rivertype.JobStateRunning)
+		case apiparams.StatusFailed:
+			riverStates = append(riverStates, rivertype.JobStateCancelled)
+		case apiparams.StatusSuccessful:
+			riverStates = append(riverStates, rivertype.JobStateCompleted)
+		case apiparams.StatusPending:
+			riverStates = append(riverStates, rivertype.JobStateAvailable, rivertype.JobStateScheduled)
+		default:
+			return nil, errors.E("invalid job status: %s", status)
+		}
+	}
+
+	return riverStates, nil
+}
+
+func convertKinds(kinds []string) ([]string, error) {
+	// If kinds is empty, return empty slice to get all kinds
+	if len(kinds) == 0 {
+		return []string{}, nil
+	}
+
+	var validKinds []string
+	for _, kind := range kinds {
+		// Skip empty kinds
+		if kind == "" {
+			continue
+		}
+
+		switch kind {
+		case string(rivertypes.BootstrapJobKind):
+			validKinds = append(validKinds, rivertypes.BootstrapJobKind)
+		case string(rivertypes.DestroyControllerJobKind):
+			validKinds = append(validKinds, rivertypes.DestroyControllerJobKind)
+		case string(rivertypes.UpgradeToJobKind):
+			validKinds = append(validKinds, rivertypes.UpgradeToJobKind)
+		default:
+			return nil, errors.E("invalid job kind: %s, must be one of [%s, %s, %s]", kind, rivertypes.BootstrapJobKind, rivertypes.DestroyControllerJobKind, rivertypes.UpgradeToJobKind)
+		}
+	}
+
+	return validKinds, nil
 }

@@ -15,8 +15,10 @@ type UpgradeToArgs struct {
 	TargetControllerName string         `json:"target_controller_name"`
 }
 
+const UpgradeToJobKind = "upgrade-to"
+
 // Kind implements the [river.JobArgs] interface.
-func (UpgradeToArgs) Kind() string { return "upgrade-to" }
+func (UpgradeToArgs) Kind() string { return UpgradeToJobKind }
 
 // InsertOpts implements the [river.JobArgsWithInsertOpts] interface.
 func (UpgradeToArgs) InsertOpts() river.InsertOpts {
@@ -58,8 +60,10 @@ type BootstrapArgs struct {
 	UserConfig map[string]string `json:"user-config"`
 }
 
+const BootstrapJobKind = "bootstrap-controller"
+
 // Kind implements the [river.JobArgs] interface.
-func (BootstrapArgs) Kind() string { return "bootstrap-controller" }
+func (BootstrapArgs) Kind() string { return BootstrapJobKind }
 
 // InsertOpts implements the [river.JobArgsWithInsertOpts] interface.
 func (BootstrapArgs) InsertOpts() river.InsertOpts {
@@ -94,8 +98,10 @@ type DestroyControllerArgs struct {
 	CACertificate  string   `json:"ca-certificate"`
 }
 
+const DestroyControllerJobKind = "destroy-controller"
+
 // Kind implements the [river.JobArgs] interface.
-func (DestroyControllerArgs) Kind() string { return "destroy-controller" }
+func (DestroyControllerArgs) Kind() string { return DestroyControllerJobKind }
 
 // InsertOpts implements the [river.JobArgsWithInsertOpts] interface.
 func (DestroyControllerArgs) InsertOpts() river.InsertOpts {
