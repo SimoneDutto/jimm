@@ -9,7 +9,6 @@ import (
 	"github.com/riverqueue/river/rivertype"
 
 	"github.com/canonical/jimm/v3/internal/errors"
-	"github.com/canonical/jimm/v3/internal/rivertypes"
 	apiparams "github.com/canonical/jimm/v3/pkg/api/params"
 )
 
@@ -64,11 +63,6 @@ func (j *JobManager) ListJobs(ctx context.Context, req apiparams.ListJobsRequest
 	if err != nil {
 		return apiparams.ListJobsResponse{}, err
 	}
-	kinds, err := convertKinds(req.Kinds)
-	if err != nil {
-		return apiparams.ListJobsResponse{}, err
-	}
-
 	// Set default count if not provided
 	count := req.Count
 	if count <= 0 {
@@ -81,8 +75,8 @@ func (j *JobManager) ListJobs(ctx context.Context, req apiparams.ListJobsRequest
 	p := river.NewJobListParams().First(count)
 
 	// Only add filters if they are specified
-	if len(kinds) > 0 {
-		p = p.Kinds(kinds...)
+	if len(req.Kinds) > 0 {
+		p = p.Kinds(req.Kinds...)
 	}
 	if len(riverStates) > 0 {
 		p = p.States(riverStates...)
@@ -157,34 +151,6 @@ func convertJobStates(statuses []apiparams.JobStatus) ([]rivertype.JobState, err
 	}
 
 	return riverStates, nil
-}
-
-func convertKinds(kinds []string) ([]string, error) {
-	// If kinds is empty, return empty slice to get all kinds
-	if len(kinds) == 0 {
-		return []string{}, nil
-	}
-
-	var validKinds []string
-	for _, kind := range kinds {
-		// Skip empty kinds
-		if kind == "" {
-			continue
-		}
-
-		switch kind {
-		case string(rivertypes.BootstrapJobKind):
-			validKinds = append(validKinds, rivertypes.BootstrapJobKind)
-		case string(rivertypes.DestroyControllerJobKind):
-			validKinds = append(validKinds, rivertypes.DestroyControllerJobKind)
-		case string(rivertypes.UpgradeToJobKind):
-			validKinds = append(validKinds, rivertypes.UpgradeToJobKind)
-		default:
-			return nil, errors.E("invalid job kind: %s, must be one of [%s, %s, %s]", kind, rivertypes.BootstrapJobKind, rivertypes.DestroyControllerJobKind, rivertypes.UpgradeToJobKind)
-		}
-	}
-
-	return validKinds, nil
 }
 
 // toJobStatus converts a rivertype.JobState to a params.JobStatus.

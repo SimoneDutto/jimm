@@ -26,6 +26,10 @@ type successJobArgs struct {
 // Kind returns the job kind.
 func (successJobArgs) Kind() string { return "test-success-job" }
 
+func (successJobArgs) InsertOpts() river.InsertOpts {
+	return river.InsertOpts{MaxAttempts: 1}
+}
+
 // successJobWorker is a worker that always succeeds.
 type successJobWorker struct {
 	river.WorkerDefaults[successJobArgs]
@@ -42,6 +46,10 @@ type failureJobArgs struct {
 
 // Kind returns the job kind.
 func (failureJobArgs) Kind() string { return "test-failure-job" }
+
+func (failureJobArgs) InsertOpts() river.InsertOpts {
+	return river.InsertOpts{MaxAttempts: 1}
+}
 
 // failureJobWorker is a worker that always fails with cancelled state.
 type failureJobWorker struct {
