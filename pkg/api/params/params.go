@@ -709,7 +709,7 @@ type JobError struct {
 // JobInfoResponse holds information about a job.
 type JobInfoResponse struct {
 	ID             int64      `json:"id" yaml:"id"`
-	Status         string     `json:"status" yaml:"status"`
+	Status         JobStatus  `json:"status" yaml:"status"`
 	Kind           string     `json:"kind" yaml:"kind"`
 	CurrentAttempt int        `json:"current_attempt" yaml:"current_attempt"`
 	MaxAttempts    int        `json:"max_attempts" yaml:"max_attempts"`
@@ -734,7 +734,7 @@ type ListJobInfo struct {
 	// ID is the unique identifier for the job.
 	ID int64 `json:"id" yaml:"id"`
 	// Status is the current status of the job.
-	Status string `json:"status" yaml:"status"`
+	Status JobStatus `json:"status" yaml:"status"`
 	// Kind is the type of job.
 	Kind string `json:"kind" yaml:"kind"`
 	// MaxAttempts is the maximum number of attempts for this job.

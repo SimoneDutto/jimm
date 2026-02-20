@@ -49,7 +49,7 @@ func (j *JobManager) GetJobInfo(ctx context.Context, jobID int64) (JobInfo, erro
 	}
 	return JobInfo{
 		ID:             jobRow.ID,
-		Status:         string(jobRow.State),
+		Status:         toJobStatus(jobRow.State),
 		Kind:           jobRow.Kind,
 		CurrentAttempt: jobRow.Attempt,
 		MaxAttempts:    jobRow.MaxAttempts,
@@ -106,7 +106,7 @@ func (j *JobManager) ListJobs(ctx context.Context, req apiparams.ListJobsRequest
 	for i, job := range jobListResult.Jobs {
 		jobs[i] = apiparams.ListJobInfo{
 			ID:          job.ID,
-			Status:      string(job.State),
+			Status:      toJobStatus(job.State),
 			Kind:        job.Kind,
 			MaxAttempts: job.MaxAttempts,
 			Attempt:     job.Attempt,
@@ -185,4 +185,20 @@ func convertKinds(kinds []string) ([]string, error) {
 	}
 
 	return validKinds, nil
+}
+
+// toJobStatus converts a rivertype.JobState to a params.JobStatus.
+func toJobStatus(state rivertype.JobState) apiparams.JobStatus {
+	switch state {
+	case rivertype.JobStateCompleted:
+		return apiparams.StatusSuccessful
+	case rivertype.JobStateRunning:
+		return apiparams.StatusRunning
+	case rivertype.JobStateCancelled, rivertype.JobStateDiscarded:
+		return apiparams.StatusFailed
+	case rivertype.JobStateAvailable, rivertype.JobStatePending, rivertype.JobStateScheduled, rivertype.JobStateRetryable:
+		return apiparams.StatusPending
+	default:
+		return apiparams.StatusUnknown
+	}
 }

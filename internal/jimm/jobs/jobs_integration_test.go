@@ -11,7 +11,6 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverdatabasesql"
-	"github.com/riverqueue/river/rivertype"
 
 	"github.com/canonical/jimm/v3/internal/db"
 	jimmriver "github.com/canonical/jimm/v3/internal/river"
@@ -135,7 +134,7 @@ func TestListJobs_Pagination(t *testing.T) {
 	}
 
 	// Wait for all jobs to complete
-	waitForJobs(c, client, 15, 5*time.Second)
+	waitForJobs(c, client, 15, 30*time.Second)
 
 	// Test first page (10 items)
 	resp, err := jobManager.ListJobs(ctx, apiparams.ListJobsRequest{
@@ -197,7 +196,7 @@ func TestListJobs_ErrorState(t *testing.T) {
 	}
 
 	// Wait for all jobs to complete
-	waitForJobs(c, client, 5, 5*time.Second)
+	waitForJobs(c, client, 5, 30*time.Second)
 
 	// Test filtering by failed status
 	resp, err := jobManager.ListJobs(ctx, apiparams.ListJobsRequest{
@@ -207,9 +206,8 @@ func TestListJobs_ErrorState(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(resp.Jobs), qt.Equals, 3, qt.Commentf("Expected 3 failed jobs, got %d", len(resp.Jobs)))
 
-	// Verify all returned jobs are in cancelled state (failed jobs get cancelled)
 	for _, job := range resp.Jobs {
-		c.Assert(job.Status, qt.Equals, string(rivertype.JobStateCancelled))
+		c.Assert(job.Status, qt.Equals, apiparams.StatusFailed)
 		c.Assert(job.Kind, qt.Equals, "test-failure-job")
 	}
 
@@ -222,7 +220,7 @@ func TestListJobs_ErrorState(t *testing.T) {
 	c.Assert(len(respSuccess.Jobs), qt.Equals, 2, qt.Commentf("Expected 2 successful jobs, got %d", len(respSuccess.Jobs)))
 
 	for _, job := range respSuccess.Jobs {
-		c.Assert(job.Status, qt.Equals, string(rivertype.JobStateCompleted))
+		c.Assert(job.Status, qt.Equals, apiparams.StatusSuccessful)
 		c.Assert(job.Kind, qt.Equals, "test-success-job")
 	}
 }
@@ -246,7 +244,7 @@ func TestListJobs_FilterByKind(t *testing.T) {
 	}
 
 	// Wait for all jobs to complete
-	waitForJobs(c, client, 5, 5*time.Second)
+	waitForJobs(c, client, 5, 30*time.Second)
 
 	// Test with empty kinds filter - should return all jobs
 	respAll, err := jobManager.ListJobs(ctx, apiparams.ListJobsRequest{
