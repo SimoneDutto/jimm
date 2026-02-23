@@ -578,6 +578,47 @@ The --owner command is necessary when importing a model created by a
 local user and it will switch the model owner to the desired external user.
 
 
+(command-jaas-jobs)=
+# jaas jobs
+
+**Aliases:** list-jobs
+
+## Summary
+Lists all jobs known to JIMM.
+
+## Usage
+```jaas jobs [options] ```
+
+### Options
+| Flag | Default | Usage |
+| --- | --- | --- |
+| `-B`, `--no-browser-login` | false | Do not use web browser for authentication |
+| `--count` | 100 | Maximum number of jobs to return (max 10000) |
+| `--format` | yaml | Specify output format (json&#x7c;yaml) |
+| `--kinds` |  | Filter jobs by kinds (comma-separated) |
+| `-o`, `--output` |  | Specify an output file |
+| `--statuses` |  | Filter jobs by statuses (comma-separated) |
+
+## Examples
+
+    juju jobs
+    juju jobs --format json
+    juju jobs --count 500
+    juju jobs --kinds bootstrap-controller,upgrade-to
+    juju jobs --statuses running,pending
+    juju jobs --count 1000 --statuses failed --kinds bootstrap-controller,upgrade-to
+
+
+## Details
+
+Displays controller information for all jobs known to JIMM.
+
+The command supports filtering by job kinds and statuses, and allows you to
+limit the number of results returned (up to 10,000 jobs).
+
+Valid job statuses are: running, successful, pending, failed, unknown
+
+
 (command-jaas-list-audit-events)=
 # jaas list-audit-events
 
