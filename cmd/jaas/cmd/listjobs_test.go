@@ -38,7 +38,7 @@ func TestListJobsRun_FlagsArePassedToAPICorrectly(t *testing.T) {
 	command := &listjobsCommand{}
 	command.setJIMMAPI(cmdMocks.client)
 
-	initCommand(c, command, "--count=500", "--kinds=backup,restore", "--statuses=running,pending")
+	initCommand(c, command, "--count=500", "--kind=backup", "--kind=restore", "--status=running", "--status=pending")
 
 	err := command.Run(newTestContext(c))
 	c.Assert(err, qt.IsNil)
@@ -67,7 +67,7 @@ func TestListJobsRun_StatusValidation(t *testing.T) {
 	command := &listjobsCommand{}
 	command.setJIMMAPI(cmdMocks.client)
 
-	initCommand(c, command, "--statuses=invalid")
+	initCommand(c, command, "--status=invalid")
 
 	err := command.Run(newTestContext(c))
 	c.Assert(err, qt.ErrorMatches, `invalid status "invalid", must be one of: running, successful, pending, failed, unknown`)

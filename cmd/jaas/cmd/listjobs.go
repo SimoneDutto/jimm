@@ -14,11 +14,26 @@ import (
 	"github.com/juju/juju/jujuclient"
 )
 
+// stringSliceFlag is a custom flag type that allows multiple flag invocations.
+type stringSliceFlag []string
+
+func (s *stringSliceFlag) Set(value string) error {
+	*s = append(*s, value)
+	return nil
+}
+
+func (s *stringSliceFlag) String() string {
+	if s == nil {
+		return ""
+	}
+	return strings.Join(*s, ",")
+}
+
 const (
 	listjobsCommandDoc = `
-Displays controller information for all jobs known to JIMM.
+Displays information on long-running jobs.
 
-The command supports filtering by job kinds and statuses, and allows you to
+The command supports filtering by job kind and status, and allows you to
 limit the number of results returned (up to 10,000 jobs).
 
 Valid job statuses are: running, successful, pending, failed, unknown
@@ -27,9 +42,9 @@ Valid job statuses are: running, successful, pending, failed, unknown
     juju jobs
     juju jobs --format json
     juju jobs --count 500
-    juju jobs --kinds bootstrap-controller,upgrade-to
-    juju jobs --statuses running,pending
-    juju jobs --count 1000 --statuses failed --kinds bootstrap-controller,upgrade-to
+    juju jobs --kind backup --kind restore
+    juju jobs --status running --status pending
+    juju jobs --count 1000 --status failed --kind backup
 `
 )
 
@@ -47,8 +62,8 @@ type listjobsCommand struct {
 	jaasCommandBase
 	out      cmd.Output
 	count    int
-	kinds    string
-	statuses string
+	kinds    stringSliceFlag
+	statuses stringSliceFlag
 }
 
 func (c *listjobsCommand) Info() *cmd.Info {
@@ -69,8 +84,8 @@ func (c *listjobsCommand) SetFlags(f *gnuflag.FlagSet) {
 		"json": cmd.FormatJson,
 	})
 	f.IntVar(&c.count, "count", 100, "Maximum number of jobs to return (max 10000)")
-	f.StringVar(&c.kinds, "kinds", "", "Filter jobs by kinds (comma-separated)")
-	f.StringVar(&c.statuses, "statuses", "", "Filter jobs by statuses (comma-separated)")
+	f.Var(&c.kinds, "kind", "Filter jobs by kind (can be specified multiple times)")
+	f.Var(&c.statuses, "status", "Filter jobs by status (can be specified multiple times)")
 }
 
 // Run implements Command.Run.
@@ -88,8 +103,9 @@ func (c *listjobsCommand) Run(ctxt *cmd.Context) error {
 	}
 	defer client.Close()
 
+	// Validate and convert statuses
 	var statuses []params.JobStatus
-	if c.statuses != "" {
+	if len(c.statuses) > 0 {
 		validStatuses := map[string]params.JobStatus{
 			"running":    params.StatusRunning,
 			"successful": params.StatusSuccessful,
@@ -98,8 +114,8 @@ func (c *listjobsCommand) Run(ctxt *cmd.Context) error {
 			"unknown":    params.StatusUnknown,
 		}
 
-		statusStrs := strings.SplitSeq(c.statuses, ",")
-		for s := range statusStrs {
+		for _, s := range c.statuses {
+			s = strings.TrimSpace(s)
 			status, ok := validStatuses[s]
 			if !ok {
 				return fmt.Errorf("invalid status %q, must be one of: running, successful, pending, failed, unknown", s)
@@ -107,9 +123,11 @@ func (c *listjobsCommand) Run(ctxt *cmd.Context) error {
 			statuses = append(statuses, status)
 		}
 	}
-	kinds := []string{}
-	if c.kinds != "" {
-		kinds = strings.Split(c.kinds, ",")
+
+	// Trim kinds
+	kinds := make([]string, len(c.kinds))
+	for i, k := range c.kinds {
+		kinds[i] = strings.TrimSpace(k)
 	}
 
 	resp, err := client.ListJobs(&params.ListJobsRequest{
