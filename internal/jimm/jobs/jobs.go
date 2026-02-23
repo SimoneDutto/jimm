@@ -4,6 +4,7 @@ package jobs
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
@@ -11,6 +12,9 @@ import (
 	"github.com/canonical/jimm/v3/internal/errors"
 	apiparams "github.com/canonical/jimm/v3/pkg/api/params"
 )
+
+const defaultListJobsCount = 100
+const maxListJobsCount = 10_000
 
 // JobQuerier defines the interface for querying and managing jobs in JIMM.
 type JobQuerier interface {
@@ -66,10 +70,10 @@ func (j *JobManager) ListJobs(ctx context.Context, req apiparams.ListJobsRequest
 	// Set default count if not provided
 	count := req.Count
 	if count <= 0 {
-		count = 100
+		count = defaultListJobsCount
 	}
-	if count > 10000 {
-		return apiparams.ListJobsResponse{}, errors.E("Count must be between 1 and 10_000.")
+	if count > maxListJobsCount {
+		return apiparams.ListJobsResponse{}, errors.E(errors.CodeBadRequest, fmt.Sprintf("count must be between 1 and %d.", maxListJobsCount))
 	}
 
 	p := river.NewJobListParams().First(count)
@@ -146,7 +150,7 @@ func convertJobStates(statuses []apiparams.JobStatus) ([]rivertype.JobState, err
 		case apiparams.StatusPending:
 			riverStates = append(riverStates, rivertype.JobStateAvailable, rivertype.JobStateScheduled)
 		default:
-			return nil, errors.E("invalid job status: %s", status)
+			return nil, errors.E(errors.CodeBadRequest, fmt.Sprintf("invalid job status: %s", status))
 		}
 	}
 

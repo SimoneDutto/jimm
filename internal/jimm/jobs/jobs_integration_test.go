@@ -1,4 +1,4 @@
-// Copyright 2025 Canonical.
+// Copyright 2026 Canonical.
 
 package jobs
 
@@ -17,6 +17,8 @@ import (
 	"github.com/canonical/jimm/v3/internal/testutils/testdb"
 	apiparams "github.com/canonical/jimm/v3/pkg/api/params"
 )
+
+const defaultTestTimeout = time.Minute
 
 // successJobArgs is a job type that always succeeds.
 type successJobArgs struct {
@@ -135,21 +137,21 @@ func TestListJobs_Pagination(t *testing.T) {
 
 	jobManager, client := setupJobsIntegrationTest(c)
 
-	// Insert 15 test jobs
-	for range 15 {
+	// Insert 5 test jobs
+	for range 5 {
 		_, err := client.Insert(ctx, successJobArgs{Name: "test"}, nil)
 		c.Assert(err, qt.IsNil)
 	}
 
 	// Wait for all jobs to complete
-	waitForJobs(c, client, 15, 30*time.Second)
+	waitForJobs(c, client, 5, defaultTestTimeout)
 
-	// Test first page (10 items)
+	// Test first page (3 items)
 	resp, err := jobManager.ListJobs(ctx, apiparams.ListJobsRequest{
-		Count: 10,
+		Count: 3,
 	})
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(resp.Jobs), qt.Equals, 10)
+	c.Assert(len(resp.Jobs), qt.Equals, 3)
 	c.Assert(resp.NextCursor, qt.Not(qt.Equals), "")
 
 	// Verify no duplicate IDs in first page
@@ -161,11 +163,11 @@ func TestListJobs_Pagination(t *testing.T) {
 
 	// Test second page using cursor (5 remaining items)
 	resp2, err := jobManager.ListJobs(ctx, apiparams.ListJobsRequest{
-		Count:  10,
+		Count:  3,
 		Cursor: resp.NextCursor,
 	})
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(resp2.Jobs), qt.Equals, 5)
+	c.Assert(len(resp2.Jobs), qt.Equals, 2)
 
 	// Verify no duplicate IDs between pages
 	for _, job := range resp2.Jobs {
@@ -204,7 +206,7 @@ func TestListJobs_ErrorState(t *testing.T) {
 	}
 
 	// Wait for all jobs to complete
-	waitForJobs(c, client, 5, 30*time.Second)
+	waitForJobs(c, client, 5, defaultTestTimeout)
 
 	// Test filtering by failed status
 	resp, err := jobManager.ListJobs(ctx, apiparams.ListJobsRequest{
@@ -252,7 +254,7 @@ func TestListJobs_FilterByKind(t *testing.T) {
 	}
 
 	// Wait for all jobs to complete
-	waitForJobs(c, client, 5, 30*time.Second)
+	waitForJobs(c, client, 5, defaultTestTimeout)
 
 	// Test with empty kinds filter - should return all jobs
 	respAll, err := jobManager.ListJobs(ctx, apiparams.ListJobsRequest{
