@@ -595,25 +595,25 @@ Lists all jobs known to JIMM.
 | `-B`, `--no-browser-login` | false | Do not use web browser for authentication |
 | `--count` | 100 | Maximum number of jobs to return (max 10000) |
 | `--format` | yaml | Specify output format (json&#x7c;yaml) |
-| `--kinds` |  | Filter jobs by kinds (comma-separated) |
+| `--kind` |  | Filter jobs by kind (can be specified multiple times) |
 | `-o`, `--output` |  | Specify an output file |
-| `--statuses` |  | Filter jobs by statuses (comma-separated) |
+| `--status` |  | Filter jobs by status (can be specified multiple times) |
 
 ## Examples
 
     juju jobs
     juju jobs --format json
     juju jobs --count 500
-    juju jobs --kinds bootstrap-controller,upgrade-to
-    juju jobs --statuses running,pending
-    juju jobs --count 1000 --statuses failed --kinds bootstrap-controller,upgrade-to
+    juju jobs --kind backup --kind restore
+    juju jobs --status running --status pending
+    juju jobs --count 1000 --status failed --kind backup
 
 
 ## Details
 
-Displays controller information for all jobs known to JIMM.
+Displays information on long-running jobs.
 
-The command supports filtering by job kinds and statuses, and allows you to
+The command supports filtering by job kind and status, and allows you to
 limit the number of results returned (up to 10,000 jobs).
 
 Valid job statuses are: running, successful, pending, failed, unknown
