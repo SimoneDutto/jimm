@@ -649,7 +649,7 @@ func NewServiceFromDependencies(ctx context.Context, deps *ServiceDependencies) 
 	return s, nil
 }
 
-// NewInternalService builds the internal-only HTTP server serving /metrics and /debug.
+// NewInternalService builds the internal-only HTTP server.
 func NewInternalService(addr string, corsAllowedOrigins []string) *http.Server {
 	mux := chi.NewRouter()
 	corsOpts := cors.New(cors.Options{
