@@ -252,7 +252,7 @@ func start(ctx context.Context, s *service.Service) error {
 	httpsrv := &http.Server{
 		Addr:              addr,
 		Handler:           jimmsvc,
-		ReadHeaderTimeout: time.Second * 5,
+		ReadHeaderTimeout: time.Second * 30,
 	}
 
 	sshServer, err := ssh.NewJumpServer(ctx, ssh.Config{
