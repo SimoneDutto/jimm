@@ -117,3 +117,7 @@ services:
       traefik.http.routers.jimm.rule: Host(`jimm.localhost`)
       traefik.http.routers.jimm.entrypoints: websecure
       traefik.http.routers.jimm.tls: true
+      traefik.http.routers.jimm-internal.rule: Host(`jimm-internal.localhost`)
+      traefik.http.routers.jimm-internal.entrypoints: websecure
+      traefik.http.routers.jimm-internal.tls: true
+      traefik.http.services.jimm-internal.loadbalancer.server.port: 9090
