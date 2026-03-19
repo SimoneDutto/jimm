@@ -751,3 +751,25 @@ type ListJobsResponse struct {
 	// If empty, there are no more results.
 	NextCursor string `json:"next_cursor,omitempty" yaml:"next_cursor,omitempty"`
 }
+
+// SupportedJujuVersionsResponse holds the response for a SupportedJujuVersions call.
+type SupportedJujuVersionsRequest struct {
+	// ContextualVersion is an optional version string that can be used to provide context
+	// for the supported versions response.
+	// For example, this could be used to indicate the version of the client making the request,
+	// allowing the server to tailor the supported versions response accordingly.
+	ContextualVersion *string `json:"contextual-version,omitempty"`
+}
+
+// VersionElem represents a single supported Juju version.
+type VersionElem struct {
+	// Version is the "x.x.x" version string.
+	Version       string `json:"version"`
+	Date          string `json:"date"`
+	LinkToRelease string `json:"link-to-release"`
+}
+
+// SupportedJujuVersionsResponse holds the response for a SupportedJujuVersions call.
+type SupportedJujuVersionsResponse struct {
+	Versions []VersionElem `json:"versions"`
+}
