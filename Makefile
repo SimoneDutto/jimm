@@ -14,16 +14,13 @@ ARCH := $(shell dpkg --print-architecture)
 default: build
 
 # Run all generators that update committed artefacts.
-generate: generate-go generate-jaas-plugin-docs generate-juju-releases
+generate: generate-go generate-jaas-plugin-docs
 
 generate-go:
 	go generate ./...
 
 generate-jaas-plugin-docs:
 	./scripts/generate_jaas_plugin_reference.sh
-
-generate-juju-releases:
-	go run ./tools/versioner
 
 build: version/commit.txt version/version.txt
 	go build -tags version $(PROJECT)/...
@@ -191,4 +188,4 @@ help:
 
 .PHONY: build check install release clean format server simplify sys-deps help
 
-.PHONY: generate generate-go generate-jaas-plugin-docs generate-juju-releases
+.PHONY: generate generate-go generate-jaas-plugin-docs

@@ -4,60 +4,126 @@ package juju
 
 import (
 	"context"
-	_ "embed"
-	"encoding/json"
 	"fmt"
+	"slices"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/google/go-github/v69/github"
+	"github.com/juju/version/v2"
 
 	"github.com/canonical/jimm/v3/internal/errors"
 	"github.com/canonical/jimm/v3/pkg/api/params"
-	"github.com/juju/version/v2"
 )
 
-//go:embed juju-releases.json
-var jujuReleasesData []byte
+const minSupportedVersion = "3.6.5"
 
-// SupportedVersions returns a list of supported Juju versions. The contextualVersion parameter can be used
-// to filter.
+// blacklistedVersions lists specific releases that should be excluded even if they
+// otherwise meet the stable release criteria.
+var blacklistedVersions = []version.Number{
+	version.MustParse("4.0.0"),
+	version.MustParse("4.0.1"),
+	version.MustParse("4.0.2"),
+}
+
+// SupportedVersions returns a list of supported Juju versions. The contextualVersion parameter
+// can be used to filter, returning only versions strictly greater than it.
 func (j *JujuManager) SupportedVersions(ctx context.Context, contextualVersion *string) (params.SupportedJujuVersionsResponse, error) {
-	var parsedContextualVersion version.Number
-	var err error
+	var parsedContextualVersion *version.Number
 	if contextualVersion != nil {
-		parsedContextualVersion, err = version.Parse(*contextualVersion)
+		v, err := version.Parse(*contextualVersion)
 		if err != nil {
 			return params.SupportedJujuVersionsResponse{}, fmt.Errorf("invalid contextual version %q: %w", *contextualVersion, err)
 		}
+		parsedContextualVersion = &v
 	}
 
-	releases, err := loadReleases()
+	releases, err := fetchReleasesFromGitHub(ctx, parsedContextualVersion)
 	if err != nil {
 		return params.SupportedJujuVersionsResponse{}, errors.E(err)
 	}
-	versionElems := make([]params.VersionElem, 0)
-	for _, release := range releases {
-		parsedVersion, err := version.Parse(release.Version)
-		if err != nil {
-			return params.SupportedJujuVersionsResponse{}, errors.E(fmt.Errorf("invalid release version %q in embedded juju releases: %w", release.Version, err))
-		}
-		if contextualVersion != nil {
-			// if the release version is less than or equal to the contextual version, skip it
-			if parsedVersion.Compare(parsedContextualVersion) != 1 {
-				continue
-			}
-		}
-		versionElems = append(versionElems, params.VersionElem{
-			Version:       release.Version,
-			Date:          release.Date,
-			LinkToRelease: release.LinkToRelease,
-		})
-	}
-
-	return params.SupportedJujuVersionsResponse{Versions: versionElems}, nil
+	return params.SupportedJujuVersionsResponse{Versions: releases}, nil
 }
 
-func loadReleases() ([]params.VersionElem, error) {
-	var releases []params.VersionElem
-	if err := json.Unmarshal(jujuReleasesData, &releases); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal embedded juju releases: %w", err)
+// fetchReleasesFromGitHub queries the GitHub API for juju/juju releases and returns
+// a filtered, sorted slice of stable releases >= minSupportedVersion.
+// If contextualVersion is non-nil, only releases strictly greater than it are included.
+func fetchReleasesFromGitHub(ctx context.Context, contextualVersion *version.Number) ([]params.VersionElem, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	client := github.NewClient(nil)
+	minVersion := version.MustParse(minSupportedVersion)
+
+	type keyedRelease struct {
+		v    version.Number
+		elem params.VersionElem
 	}
-	return releases, nil
+
+	var keyed []keyedRelease
+	opts := &github.ListOptions{PerPage: 100, Page: 1}
+
+	for {
+		repoReleases, resp, err := client.Repositories.ListReleases(ctx, "juju", "juju", opts)
+		if err != nil {
+			return nil, fmt.Errorf("fetching juju releases from GitHub: %w", err)
+		}
+
+		for _, release := range repoReleases {
+			if release == nil || release.GetDraft() || release.GetPrerelease() {
+				continue
+			}
+			v, ok := stableVersion(release.GetTagName())
+			if !ok {
+				continue
+			}
+			if v.Compare(minVersion) < 0 {
+				continue
+			}
+			if slices.Contains(blacklistedVersions, v) {
+				continue
+			}
+			if contextualVersion != nil && v.Compare(*contextualVersion) != 1 {
+				continue
+			}
+			keyed = append(keyed, keyedRelease{
+				v: v,
+				elem: params.VersionElem{
+					Version:       v.String(),
+					Date:          release.GetPublishedAt().UTC().Format("2006-01-02"),
+					LinkToRelease: release.GetHTMLURL(),
+				},
+			})
+		}
+
+		if resp == nil || resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+
+	sort.Slice(keyed, func(i, j int) bool {
+		return keyed[i].v.Compare(keyed[j].v) > 0
+	})
+
+	result := make([]params.VersionElem, len(keyed))
+	for i, k := range keyed {
+		result[i] = k.elem
+	}
+	return result, nil
+}
+
+// stableVersion parses a git tag and returns the version number if it represents
+// a stable (non-pre-release) release.
+func stableVersion(tag string) (version.Number, bool) {
+	tag = strings.TrimPrefix(strings.TrimSpace(tag), "v")
+	v, err := version.Parse(tag)
+	if err != nil {
+		return version.Number{}, false
+	}
+	if v.Tag != "" {
+		return version.Number{}, false
+	}
+	return v, true
 }

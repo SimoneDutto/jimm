@@ -30,7 +30,7 @@ func TestSupportedVersions_WithContextualVersion(t *testing.T) {
 	c := qt.New(t)
 
 	manager := &juju.JujuManager{}
-	contextualVersion := "3.6.19"
+	contextualVersion := "3.6.5"
 	contextualVersionParsed := version.MustParse(contextualVersion)
 
 	resp, err := manager.SupportedVersions(context.Background(), &contextualVersion)
