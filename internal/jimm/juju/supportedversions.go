@@ -17,6 +17,11 @@ import (
 	"github.com/canonical/jimm/v3/pkg/api/params"
 )
 
+// GitHubClient is the interface used to list GitHub releases for a repository.
+type GitHubClient interface {
+	ListReleases(ctx context.Context, owner, repo string, opts *github.ListOptions) ([]*github.RepositoryRelease, *github.Response, error)
+}
+
 const minSupportedVersion = "3.6.5"
 
 // blacklistedVersions lists specific releases that should be excluded even if they
@@ -39,7 +44,12 @@ func (j *JujuManager) SupportedVersions(ctx context.Context, contextualVersion *
 		parsedContextualVersion = &v
 	}
 
-	releases, err := fetchReleasesFromGitHub(ctx, parsedContextualVersion)
+	client := j.GitHubClient
+	if client == nil {
+		client = github.NewClient(nil).Repositories
+	}
+
+	releases, err := fetchReleasesFromGitHub(ctx, client, parsedContextualVersion)
 	if err != nil {
 		return params.SupportedJujuVersionsResponse{}, errors.E(err)
 	}
@@ -48,13 +58,12 @@ func (j *JujuManager) SupportedVersions(ctx context.Context, contextualVersion *
 
 // fetchReleasesFromGitHub queries the GitHub API for juju/juju releases and returns
 // a filtered, sorted slice of stable releases >= minSupportedVersion.
-// If contextualVersion is non-nil, only releases strictly greater than it are included.
-func fetchReleasesFromGitHub(ctx context.Context, contextualVersion *version.Number) ([]params.VersionElem, error) {
+// If minVersion is non-nil, only releases strictly greater than it are included.
+func fetchReleasesFromGitHub(ctx context.Context, client GitHubClient, minVersion *version.Number) ([]params.VersionElem, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	client := github.NewClient(nil)
-	minVersion := version.MustParse(minSupportedVersion)
+	minV := version.MustParse(minSupportedVersion)
 
 	type keyedRelease struct {
 		v    version.Number
@@ -65,7 +74,7 @@ func fetchReleasesFromGitHub(ctx context.Context, contextualVersion *version.Num
 	opts := &github.ListOptions{PerPage: 100, Page: 1}
 
 	for {
-		repoReleases, resp, err := client.Repositories.ListReleases(ctx, "juju", "juju", opts)
+		repoReleases, resp, err := client.ListReleases(ctx, "juju", "juju", opts)
 		if err != nil {
 			return nil, fmt.Errorf("fetching juju releases from GitHub: %w", err)
 		}
@@ -78,13 +87,13 @@ func fetchReleasesFromGitHub(ctx context.Context, contextualVersion *version.Num
 			if !ok {
 				continue
 			}
-			if v.Compare(minVersion) < 0 {
+			if v.Compare(minV) < 0 {
 				continue
 			}
 			if slices.Contains(blacklistedVersions, v) {
 				continue
 			}
-			if contextualVersion != nil && v.Compare(*contextualVersion) != 1 {
+			if minVersion != nil && v.Compare(*minVersion) != 1 {
 				continue
 			}
 			keyed = append(keyed, keyedRelease{

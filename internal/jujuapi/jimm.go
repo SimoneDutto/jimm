@@ -844,6 +844,7 @@ func (r *controllerRoot) ListJobs(ctx context.Context, req apiparams.ListJobsReq
 	return r.jimm.JobManager().ListJobs(ctx, req)
 }
 
+// SupportedJujuVersions returns the list of Juju versions supported by JIMM for bootstrapping new controllers and upgrading existing ones.
 func (r *controllerRoot) SupportedJujuVersions(ctx context.Context, req apiparams.SupportedJujuVersionsRequest) (apiparams.SupportedJujuVersionsResponse, error) {
 	return r.jimm.JujuManager().SupportedVersions(ctx, req.ContextualVersion)
 }
