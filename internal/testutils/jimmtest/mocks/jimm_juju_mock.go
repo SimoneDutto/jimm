@@ -60,7 +60,7 @@ type JujuManager struct {
 	RemoveCloudFromController_         func(ctx context.Context, u *openfga.User, controllerName string, ct names.CloudTag) error
 	RevokeCloudCredential_             func(ctx context.Context, user *dbmodel.Identity, tag names.CloudCredentialTag) error
 	RevokeOfferAccessOnController_     func(ctx context.Context, user *openfga.User, ut names.UserTag, offerURL string, access jujuparams.OfferAccessPermission) error
-	SupportedVersions_                 func(ctx context.Context, contextualVersion *string) (params.SupportedJujuVersionsResponse, error)
+	SupportedVersions_                 func(ctx context.Context, minVersion *string) (params.SupportedJujuVersionsResponse, error)
 	UpdateApplicationOffer_            func(ctx context.Context, controller *dbmodel.Controller, offerUUID string, removed bool) error
 	UpdateCloud_                       func(ctx context.Context, u *openfga.User, ct names.CloudTag, cloud jujucloud.Cloud) error
 	UpdateCloudCredential_             func(ctx context.Context, u *openfga.User, args juju.UpdateCloudCredentialArgs) ([]jujuparams.UpdateCredentialModelResult, error)
@@ -295,9 +295,9 @@ func (j *JujuManager) ModelControllerInfo(ctx context.Context, user *openfga.Use
 	return j.ModelControllerInfo_(ctx, user, qualifier)
 }
 
-func (j *JujuManager) SupportedVersions(ctx context.Context, contextualVersion *string) (params.SupportedJujuVersionsResponse, error) {
+func (j *JujuManager) SupportedVersions(ctx context.Context, minVersion *string) (params.SupportedJujuVersionsResponse, error) {
 	if j.SupportedVersions_ == nil {
 		return params.SupportedJujuVersionsResponse{}, errors.E(errors.CodeNotImplemented)
 	}
-	return j.SupportedVersions_(ctx, contextualVersion)
+	return j.SupportedVersions_(ctx, minVersion)
 }

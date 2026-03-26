@@ -74,13 +74,10 @@ func TestSupportedVersions_HappyPath(t *testing.T) {
 	}
 }
 
-// TestSupportedVersions_ContextualVersion checks that only versions strictly
-// greater than the contextual version are returned, and that an invalid
-// contextual version is rejected before any API call is made.
-func TestSupportedVersions_ContextualVersion(t *testing.T) {
+func TestSupportedVersions_MinVersion(t *testing.T) {
 	c := qt.New(t)
 
-	t.Run("filters to versions strictly greater than contextual", func(t *testing.T) {
+	t.Run("filters to versions strictly greater than minVersion", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		published := time.Date(2025, 2, 1, 0, 0, 0, 0, time.UTC)
 		releases := []*github.RepositoryRelease{
@@ -93,20 +90,20 @@ func TestSupportedVersions_ContextualVersion(t *testing.T) {
 			ListReleases(gomock.Any(), "juju", "juju", gomock.Any()).
 			Return(releases, noNextPage(), nil)
 
-		contextualVersion := "3.6.7"
+		minVersion := "3.6.7"
 		j := &juju.JujuManager{GitHubClient: mockGH}
-		resp, err := j.SupportedVersions(context.Background(), &contextualVersion)
+		resp, err := j.SupportedVersions(context.Background(), &minVersion)
 		c.Assert(err, qt.IsNil)
 		c.Assert(len(resp.Versions), qt.Equals, 1)
 		parsed := version.MustParse(resp.Versions[0].Version)
-		c.Assert(parsed.Compare(version.MustParse(contextualVersion)) > 0, qt.IsTrue)
+		c.Assert(parsed.Compare(version.MustParse(minVersion)) > 0, qt.IsTrue)
 	})
 
-	t.Run("invalid contextual version returns error", func(t *testing.T) {
-		contextualVersion := "not-a-version"
+	t.Run("invalid min version returns error", func(t *testing.T) {
+		minVersion := "not-a-version"
 		j := &juju.JujuManager{}
-		_, err := j.SupportedVersions(context.Background(), &contextualVersion)
-		c.Assert(err, qt.ErrorMatches, `invalid contextual version.*`)
+		_, err := j.SupportedVersions(context.Background(), &minVersion)
+		c.Assert(err, qt.ErrorMatches, `invalid min version.*`)
 	})
 }
 

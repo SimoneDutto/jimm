@@ -754,11 +754,10 @@ type ListJobsResponse struct {
 
 // SupportedJujuVersionsResponse holds the response for a SupportedJujuVersions call.
 type SupportedJujuVersionsRequest struct {
-	// ContextualVersion is an optional version string that can be used to provide context
-	// for the supported versions response.
-	// For example, this could be used to indicate the version of the client making the request,
-	// allowing the server to tailor the supported versions response accordingly.
-	ContextualVersion *string `json:"contextual-version,omitempty"`
+	// MinVersion is an optional lower-bound version filter.
+	// When set, only versions strictly greater than MinVersion are included in the response.
+	// Versions equal to or below MinVersion are excluded.
+	MinVersion *string `json:"min-version,omitempty"`
 }
 
 // VersionElem represents a single supported Juju version.

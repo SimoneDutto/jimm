@@ -32,16 +32,17 @@ var blacklistedVersions = []version.Number{
 	version.MustParse("4.0.2"),
 }
 
-// SupportedVersions returns a list of supported Juju versions. The contextualVersion parameter
-// can be used to filter, returning only versions strictly greater than it.
-func (j *JujuManager) SupportedVersions(ctx context.Context, contextualVersion *string) (params.SupportedJujuVersionsResponse, error) {
-	var parsedContextualVersion *version.Number
-	if contextualVersion != nil {
-		v, err := version.Parse(*contextualVersion)
+// SupportedVersions returns a list of supported Juju versions.
+// When minVersion is non-nil, only versions strictly greater than minVersion are returned;
+// versions equal to or below minVersion are excluded.
+func (j *JujuManager) SupportedVersions(ctx context.Context, minVersion *string) (params.SupportedJujuVersionsResponse, error) {
+	var parsedMinVersion *version.Number
+	if minVersion != nil {
+		v, err := version.Parse(*minVersion)
 		if err != nil {
-			return params.SupportedJujuVersionsResponse{}, fmt.Errorf("invalid contextual version %q: %w", *contextualVersion, err)
+			return params.SupportedJujuVersionsResponse{}, fmt.Errorf("invalid min version %q: %w", *minVersion, err)
 		}
-		parsedContextualVersion = &v
+		parsedMinVersion = &v
 	}
 
 	client := j.GitHubClient
@@ -49,7 +50,7 @@ func (j *JujuManager) SupportedVersions(ctx context.Context, contextualVersion *
 		client = github.NewClient(nil).Repositories
 	}
 
-	releases, err := fetchReleasesFromGitHub(ctx, client, parsedContextualVersion)
+	releases, err := fetchReleasesFromGitHub(ctx, client, parsedMinVersion)
 	if err != nil {
 		return params.SupportedJujuVersionsResponse{}, errors.E(err)
 	}
