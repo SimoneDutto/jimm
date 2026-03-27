@@ -56,7 +56,7 @@ type Dialer struct {
 }
 
 // Dialer implements juju.Dialer.
-func (d *Dialer) Dial(_ context.Context, ctl *dbmodel.Controller, _ names.ModelTag, _ *openfga.User, _ map[string]string) (juju.API, error) {
+func (d *Dialer) Dial(_ context.Context, ctl *dbmodel.Controller, _ names.ModelTag, _ *openfga.User) (juju.API, error) {
 	if d.Err != nil {
 		return nil, d.Err
 	}
@@ -101,9 +101,9 @@ func (w apiWrapper) Close() error {
 type ModelDialerMap map[string]juju.Dialer
 
 // Dial implements juju.Dialer.
-func (m ModelDialerMap) Dial(ctx context.Context, ctl *dbmodel.Controller, mt names.ModelTag, _ *openfga.User, _ map[string]string) (juju.API, error) {
+func (m ModelDialerMap) Dial(ctx context.Context, ctl *dbmodel.Controller, mt names.ModelTag, u *openfga.User) (juju.API, error) {
 	if d, ok := m[mt.Id()]; ok {
-		return d.Dial(ctx, ctl, mt, nil, nil)
+		return d.Dial(ctx, ctl, mt, u)
 	}
 	return nil, errors.E(fmt.Sprintf("dialer not configured for controller %s", ctl.Name))
 }
@@ -113,9 +113,9 @@ func (m ModelDialerMap) Dial(ctx context.Context, ctl *dbmodel.Controller, mt na
 type DialerMap map[string]juju.Dialer
 
 // Dial implements juju.Dialer.
-func (m DialerMap) Dial(ctx context.Context, ctl *dbmodel.Controller, mt names.ModelTag, _ *openfga.User, _ map[string]string) (juju.API, error) {
+func (m DialerMap) Dial(ctx context.Context, ctl *dbmodel.Controller, mt names.ModelTag, u *openfga.User) (juju.API, error) {
 	if d, ok := m[ctl.Name]; ok {
-		return d.Dial(ctx, ctl, mt, nil, nil)
+		return d.Dial(ctx, ctl, mt, u)
 	}
 	return nil, errors.E(fmt.Sprintf("dialer not configured for controller %s", ctl.Name))
 }
@@ -135,7 +135,7 @@ type API struct {
 	CheckCredentialModels_             func(context.Context, jujuparams.TaggedCredential) ([]jujuparams.UpdateCredentialModelResult, error)
 	CheckMachines_                     func(context.Context, string) ([]error, error)
 	Close_                             func() error
-	Cloud_                             func(context.Context, names.CloudTag, *jujucloud.Cloud) error
+	Cloud_                             func(context.Context, names.CloudTag) (jujucloud.Cloud, error)
 	Clouds_                            func(context.Context) (map[names.CloudTag]jujucloud.Cloud, error)
 	CloudSpec_                         func(context.Context) (cloudspec.CloudSpec, error)
 	ControllerConfig_                  func(context.Context) (jujucontroller.Config, error)
@@ -163,7 +163,7 @@ type API struct {
 	SupportsModelSummaryWatcher_       bool
 	Status_                            func(context.Context, []string) (*jujuparams.FullStatus, error)
 	UpdateCloud_                       func(context.Context, names.CloudTag, jujucloud.Cloud) error
-	UpdateCredential_                  func(context.Context, jujuparams.TaggedCredential) ([]jujuparams.UpdateCredentialModelResult, error)
+	UpdateCloudsCredentialForce_       func(context.Context, jujuparams.TaggedCredential) ([]jujuparams.UpdateCredentialResult, error)
 	ValidateModelUpgrade_              func(context.Context, names.ModelTag, bool) error
 	WatchAllModelSummaries_            func(context.Context) (jujuclient.SummaryWatcher, error)
 	ListFilesystems_                   func(ctx context.Context, machines []string) ([]jujuparams.FilesystemDetailsListResult, error)
@@ -203,7 +203,7 @@ func (a *API) AdoptResources(ctx context.Context, modelUUID string, controllerVe
 	return a.AdoptResources_(ctx, modelUUID, controllerVersion)
 }
 
-func (a *API) CheckCredentialModels(ctx context.Context, cred jujuparams.TaggedCredential) ([]jujuparams.UpdateCredentialModelResult, error) {
+func (a *API) CheckCredentialModels(ctx context.Context, cred jujuparams.TaggedCredential) ([]jujuparams.UpdateCredentialResult, error) {
 	if a.CheckCredentialModels_ == nil {
 		return nil, errors.E(errors.CodeNotImplemented)
 	}
@@ -224,11 +224,11 @@ func (a *API) Close() error {
 	return a.Close_()
 }
 
-func (a *API) Cloud(ctx context.Context, tag names.CloudTag, ci *jujucloud.Cloud) error {
+func (a *API) Cloud(ctx context.Context, tag names.CloudTag) (jujucloud.Cloud, error) {
 	if a.Cloud_ == nil {
-		return errors.E(errors.CodeNotImplemented)
+		return jujucloud.Cloud{}, errors.E(errors.CodeNotImplemented)
 	}
-	return a.Cloud_(ctx, tag, ci)
+	return a.Cloud_(ctx, tag)
 }
 
 func (a *API) Clouds(ctx context.Context) (map[names.CloudTag]jujucloud.Cloud, error) {
@@ -407,11 +407,11 @@ func (a *API) UpdateCloud(ctx context.Context, tag names.CloudTag, cloud jujuclo
 	return a.UpdateCloud_(ctx, tag, cloud)
 }
 
-func (a *API) UpdateCredential(ctx context.Context, cred jujuparams.TaggedCredential) ([]jujuparams.UpdateCredentialModelResult, error) {
-	if a.UpdateCredential_ == nil {
+func (a *API) UpdateCloudsCredentialForce(ctx context.Context, cred jujuparams.TaggedCredential) ([]jujuparams.UpdateCredentialResult, error) {
+	if a.UpdateCloudsCredentialForce_ == nil {
 		return nil, errors.E(errors.CodeNotImplemented)
 	}
-	return a.UpdateCredential_(ctx, cred)
+	return a.UpdateCloudsCredentialForce_(ctx, cred)
 }
 
 func (a *API) ValidateModelUpgrade(ctx context.Context, model names.ModelTag, force bool) error {

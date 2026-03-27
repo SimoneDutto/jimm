@@ -62,7 +62,7 @@ func (j *JujuManager) ControllerInfo(ctx context.Context, name string) (*dbmodel
 		Name: name,
 	}
 	if err := j.Database.GetController(ctx, &ctl); err != nil {
-		return nil, errors.E(err)
+		return nil, err
 	}
 	return &ctl, nil
 }
@@ -83,7 +83,7 @@ func (j *JujuManager) ListControllers(ctx context.Context, user *openfga.User) (
 		return nil
 	})
 	if err != nil {
-		return nil, errors.E(err)
+		return nil, err
 	}
 
 	return controllers, nil
@@ -111,7 +111,7 @@ func (j *JujuManager) SetControllerDeprecated(ctx context.Context, user *openfga
 		return db.UpdateController(ctx, &c)
 	})
 	if err != nil {
-		return errors.E(err)
+		return err
 	}
 
 	return nil
@@ -130,18 +130,16 @@ func (j *JujuManager) RemoveController(ctx context.Context, user *openfga.User, 
 			return err
 		}
 
-		// if c.UnavailableSince is valid, then we can delete is
-		// if c.UnavailableSince is no valid, then we can't delete is
-		// if force is true, we can always delete is
-		if !force && !c.UnavailableSince.Valid {
-			return errors.E(errors.CodeStillAlive, "controller is still alive")
-		}
-
 		models, err := db.GetModelsByController(ctx, c)
 		if err != nil {
 			return err
 		}
-		// Delete its models first.
+		if len(models) > 0 && !force {
+			return errors.E(errors.CodeStillAlive, "controller still has models")
+		}
+
+		// Remove all models associated with the controller. If force is false,
+		// we can only reach here with an empty list of models.
 		for _, model := range models {
 			err := db.DeleteModel(ctx, &model)
 			if err != nil {
@@ -153,7 +151,7 @@ func (j *JujuManager) RemoveController(ctx context.Context, user *openfga.User, 
 		return db.DeleteController(ctx, &c)
 	})
 	if err != nil {
-		return errors.E(err)
+		return err
 	}
 
 	return nil
@@ -173,17 +171,17 @@ func (j *JujuManager) FullModelStatus(ctx context.Context, user *openfga.User, m
 	}
 	err := j.Database.GetModel(ctx, &model)
 	if err != nil {
-		return nil, errors.E(err)
+		return nil, err
 	}
 
 	api, err := j.dial(ctx, &model.Controller, modelTag, nil)
 	if err != nil {
-		return nil, errors.E(err)
+		return nil, err
 	}
 
 	status, err := api.Status(ctx, patterns)
 	if err != nil {
-		return nil, errors.E(err)
+		return nil, err
 	}
 
 	return status, nil
@@ -208,7 +206,7 @@ func fillMigrationTarget(db *db.Database, credStore credentials.CredentialStore,
 		return jujuparams.MigrationTargetInfo{}, 0, err
 	}
 	if adminUser == "" || adminPass == "" {
-		return jujuparams.MigrationTargetInfo{}, 0, errors.E("missing target controller credentials")
+		return jujuparams.MigrationTargetInfo{}, 0, errors.New("missing target controller credentials")
 	}
 	// Should we verify controller can access the cloud where the model is currently hosted?
 	apiControllerInfo := dbController.ToAPIControllerInfo()
@@ -229,7 +227,7 @@ func (j *JujuManager) InitiateInternalMigration(ctx context.Context, user *openf
 
 	migrationTarget, _, err := fillMigrationTarget(j.Database, j.CredentialStore, targetController)
 	if err != nil {
-		return jujuparams.InitiateMigrationResult{}, errors.E(err)
+		return jujuparams.InitiateMigrationResult{}, err
 	}
 
 	model := dbmodel.Model{}
@@ -238,15 +236,15 @@ func (j *JujuManager) InitiateInternalMigration(ctx context.Context, user *openf
 	if err != nil {
 		s := strings.Split(modelNameOrUUID, "/")
 		if len(s) != 2 {
-			return jujuparams.InitiateMigrationResult{}, errors.E("invalid model target")
+			return jujuparams.InitiateMigrationResult{}, errors.New("invalid model target")
 		}
 
 		owner, name := s[0], s[1]
 		if !names.IsValidUser(owner) {
-			return jujuparams.InitiateMigrationResult{}, errors.E("invalid user name")
+			return jujuparams.InitiateMigrationResult{}, errors.New("invalid user name")
 		}
 		if !names.IsValidModelName(name) {
-			return jujuparams.InitiateMigrationResult{}, errors.E("invalid model name")
+			return jujuparams.InitiateMigrationResult{}, errors.New("invalid model name")
 		}
 
 		model.Name = name
@@ -260,12 +258,12 @@ func (j *JujuManager) InitiateInternalMigration(ctx context.Context, user *openf
 
 	err = j.Database.GetModel(ctx, &model)
 	if err != nil {
-		return jujuparams.InitiateMigrationResult{}, errors.E(err)
+		return jujuparams.InitiateMigrationResult{}, err
 	}
 	spec := jujuparams.MigrationSpec{ModelTag: model.ResourceTag().String(), TargetInfo: migrationTarget}
 	result, err := initiateInternalMigration(ctx, j, user, spec)
 	if err != nil {
-		return result, errors.E(err)
+		return result, err
 	}
 	return result, nil
 }
@@ -294,7 +292,7 @@ func (j *JujuManager) PrepareModelMigration(
 		}
 		err := d.GetModel(ctx, model)
 		if err == nil {
-			return errors.E("model migration for the specified model is already in progress/completed")
+			return errors.New("model migration for the specified model is already in progress/completed")
 		} else if errors.ErrorCode(err) != errors.CodeNotFound {
 			return err
 		}
@@ -310,12 +308,12 @@ func (j *JujuManager) PrepareModelMigration(
 		return nil
 	})
 	if err != nil {
-		return "", errors.E(fmt.Errorf("failed to add incoming model migration details: %w", err))
+		return "", fmt.Errorf("failed to add incoming model migration details: %w", err)
 	}
 
 	migrationToken, err := j.migrationTokenGenerator.NewMigrationToken(ctx, user.Name)
 	if err != nil {
-		return "", errors.E(fmt.Errorf("failed to generate migration token: %w", err))
+		return "", fmt.Errorf("failed to generate migration token: %w", err)
 	}
 
 	return migrationToken, nil
@@ -328,24 +326,24 @@ func (j *JujuManager) ListMigrationTargets(ctx context.Context, user *openfga.Us
 	var model dbmodel.Model
 	model.SetTag(modelTag)
 	if err := j.Database.GetModel(ctx, &model); err != nil {
-		return nil, errors.E(err)
+		return nil, err
 	}
 
 	currentVersion, err := version.Parse(model.Controller.AgentVersion)
 	if err != nil {
-		return nil, errors.E(err)
+		return nil, err
 	}
 
 	cloudRegion, err := j.Database.FindRegionByCloudName(ctx, model.CloudRegion.CloudName, model.CloudRegion.Name)
 	if err != nil {
-		return nil, errors.E(err)
+		return nil, err
 	}
 
 	var controllers []dbmodel.Controller
 	for _, ctl := range cloudRegion.Controllers {
 		candidateVersion, err := version.Parse(ctl.Controller.AgentVersion)
 		if err != nil {
-			return nil, errors.E(err)
+			return nil, err
 		}
 
 		if model.Controller.ID != ctl.Controller.ID &&
@@ -396,7 +394,7 @@ func (j *JujuManager) ModelControllerInfo(ctx context.Context, user *openfga.Use
 
 	err := j.Database.GetModel(ctx, &model)
 	if err != nil {
-		return nil, errors.E(err)
+		return nil, err
 	}
 
 	return &apiparams.ModelControllerInfo{

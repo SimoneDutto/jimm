@@ -58,7 +58,7 @@ func toAddModelArgs(args jujuparams.ModelCreateArgs, authenticatedUser names.Use
 	// FromJujuModelCreateArgs converts jujuparams.ModelCreateArgs into AddModelArgs.
 	var a juju.ModelCreateArgs
 	if args.Name == "" {
-		return nil, errors.E("name not specified")
+		return nil, errors.New("name not specified")
 	}
 	a.Name = args.Name
 	a.Config = args.Config
@@ -78,7 +78,7 @@ func toAddModelArgs(args jujuparams.ModelCreateArgs, authenticatedUser names.Use
 			return nil, errors.E(err, "invalid cloud credential tag")
 		}
 		if a.Cloud.Id() != "" && ct.Cloud().Id() != a.Cloud.Id() {
-			return nil, errors.E("cloud credential cloud mismatch")
+			return nil, errors.New("cloud credential cloud mismatch")
 		}
 
 		a.CloudCredential = ct
@@ -250,13 +250,9 @@ func toModelInfo(modelInfo base.ModelInfo) jujuparams.ModelInfo {
 		})
 	}
 	for _, machine := range modelInfo.Machines {
-		mi.Machines = append(mi.Machines, jujuparams.ModelMachineInfo{
-			Id:          machine.Id,
-			InstanceId:  machine.InstanceId,
-			DisplayName: machine.DisplayName,
-			Status:      machine.Status,
-			Message:     machine.Message,
-			Hardware: &jujuparams.MachineHardware{
+		hardwareInfo := &jujuparams.MachineHardware{}
+		if machine.Hardware != nil {
+			hardwareInfo = &jujuparams.MachineHardware{
 				Arch:             machine.Hardware.Arch,
 				Cores:            machine.Hardware.CpuCores,
 				Mem:              machine.Hardware.Mem,
@@ -265,7 +261,15 @@ func toModelInfo(modelInfo base.ModelInfo) jujuparams.ModelInfo {
 				Tags:             machine.Hardware.Tags,
 				AvailabilityZone: machine.Hardware.AvailabilityZone,
 				VirtType:         machine.Hardware.VirtType,
-			},
+			}
+		}
+		mi.Machines = append(mi.Machines, jujuparams.ModelMachineInfo{
+			Id:          machine.Id,
+			InstanceId:  machine.InstanceId,
+			DisplayName: machine.DisplayName,
+			Status:      machine.Status,
+			Message:     machine.Message,
+			Hardware:    hardwareInfo,
 		})
 	}
 	return mi
@@ -297,7 +301,7 @@ func toFullModelInfo(modelInfo jujuclient.ModelInfo) jujuparams.ModelInfo {
 
 	var secretBackendResults []jujuparams.SecretBackendResult
 	for _, sb := range modelInfo.SecretBackends {
-		secretBackendResults = append(secretBackendResults, jujuparams.SecretBackendResult{
+		res := jujuparams.SecretBackendResult{
 			Result: jujuparams.SecretBackend{
 				Name:                sb.Result.Name,
 				BackendType:         sb.Result.BackendType,
@@ -308,12 +312,15 @@ func toFullModelInfo(modelInfo jujuclient.ModelInfo) jujuparams.ModelInfo {
 			NumSecrets: sb.NumSecrets,
 			Status:     sb.Status,
 			Message:    sb.Message,
-			Error: &jujuparams.Error{
+		}
+		if sb.Error != nil {
+			res.Error = &jujuparams.Error{
 				Message: sb.Error.Error(),
 				Code:    string(errors.ErrorCode(sb.Error)),
 				Info:    errors.ErrorInfo(sb.Error),
-			},
-		})
+			}
+		}
+		secretBackendResults = append(secretBackendResults, res)
 	}
 	modelInfoParams.SecretBackends = secretBackendResults
 

@@ -266,7 +266,7 @@ func TestActivateValid(t *testing.T) {
 	activateCalled := false
 	jujuManager := mocks.JujuManager{
 		MigrationMocks: mocks.MigrationMocks{
-			Activate_: func(ctx context.Context, modelTag names.ModelTag, sourceControllerInfo migration.SourceControllerInfo, relatedModels []string) error {
+			Activate_: func(ctx context.Context, user *openfga.User, modelTag names.ModelTag, sourceControllerInfo migration.SourceControllerInfo, relatedModels []string) error {
 				activateCalled = true
 				c.Assert(modelTag.Id(), qt.Equals, "00000001-0000-0000-0000-000000000001")
 				c.Assert(sourceControllerInfo.ControllerAlias, qt.Equals, "controller-1")
@@ -369,7 +369,7 @@ func TestActivateMissingControllerTag(t *testing.T) {
 
 	jujuManager := mocks.JujuManager{
 		MigrationMocks: mocks.MigrationMocks{
-			Activate_: func(ctx context.Context, modelTag names.ModelTag, sourceControllerInfo migration.SourceControllerInfo, relatedModels []string) error {
+			Activate_: func(ctx context.Context, user *openfga.User, modelTag names.ModelTag, sourceControllerInfo migration.SourceControllerInfo, relatedModels []string) error {
 				// This function should not be called
 				return nil
 			},
@@ -406,7 +406,7 @@ func TestLatestLogTime(t *testing.T) {
 	latestLogTimeCalled := false
 	jujuManager := mocks.JujuManager{
 		MigrationMocks: mocks.MigrationMocks{
-			LatestLogTime_: func(ctx context.Context, modelUUID string) (time.Time, error) {
+			LatestLogTime_: func(ctx context.Context, user *openfga.User, modelUUID string) (time.Time, error) {
 				latestLogTimeCalled = true
 				c.Check(modelUUID, qt.Equals, "00000001-0000-0000-0000-000000000001")
 				return time.Now(), nil

@@ -368,11 +368,22 @@ func TestRemoveController(t *testing.T) {
 
 	name, conf := s.GetOneControllerConfig(c)
 
+	// Create a model on the controller we are going to remove
+	model := s.CreateModel(c, jimmtest.AddModelArgs{
+		Name:                 petname.Generate(2, "-"),
+		Owner:                names.NewUserTag("bob@canonical.com"),
+		Cloud:                names.NewCloudTag(jimmtest.TestE2ECloudName),
+		Region:               jimmtest.TestE2ECloudRegionName,
+		Cred:                 s.BobCredential.ResourceTag(),
+		TargetControllerName: name,
+	})
+
 	_, err := client.RemoveController(t.Context(), &apiparams.RemoveControllerRequest{
 		Name: name,
 	})
-	c.Check(err, qt.ErrorMatches, `controller is still alive \(still alive\)`)
+	c.Check(err, qt.ErrorMatches, `controller still has models.*`)
 	c.Check(jujuparams.ErrCode(err), qt.Equals, apiparams.CodeStillAlive)
+	s.DestroyModelAndDeleteFromDatabase(c, model.ResourceTag())
 
 	conn2 := s.Open(c, nil, "bob", nil)
 	defer conn2.Close()
@@ -385,8 +396,7 @@ func TestRemoveController(t *testing.T) {
 	c.Check(jujuparams.ErrCode(err), qt.Equals, jujuparams.CodeUnauthorized)
 
 	ci, err := client.RemoveController(t.Context(), &apiparams.RemoveControllerRequest{
-		Name:  name,
-		Force: true,
+		Name: name,
 	})
 	c.Assert(err, qt.Equals, nil)
 	ciExpected := apiparams.ControllerInfo{

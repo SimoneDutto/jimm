@@ -68,16 +68,16 @@ func NewUpgradeManager(
 	enqueuer UpgradeEnqueuer,
 ) (*UpgradeManager, error) {
 	if jujumanager == nil {
-		return nil, errors.E("juju manager cannot be nil")
+		return nil, errors.New("juju manager cannot be nil")
 	}
 	if store == nil {
-		return nil, errors.E("store cannot be nil")
+		return nil, errors.New("store cannot be nil")
 	}
 	if dialer == nil {
-		return nil, errors.E("dialer cannot be nil")
+		return nil, errors.New("dialer cannot be nil")
 	}
 	if enqueuer == nil {
-		return nil, errors.E("enqueuer cannot be nil")
+		return nil, errors.New("enqueuer cannot be nil")
 	}
 	return &UpgradeManager{
 		jujuManager: jujumanager,
@@ -103,9 +103,9 @@ func (u *UpgradeManager) UpgradeModel(ctx context.Context, modelUUID string, tar
 		return errors.E(errors.CodeNotFound, err, "model not found")
 	}
 
-	api, err := u.dialer.Dial(ctx, &model.Controller, names.ModelTag{}, nil, nil)
+	api, err := u.dialer.Dial(ctx, &model.Controller, names.ModelTag{}, nil)
 	if err != nil {
-		return errors.E(fmt.Errorf("failed to dial target controller: %w", err))
+		return fmt.Errorf("failed to dial target controller: %w", err)
 	}
 
 	if err := retry.Call(
@@ -129,17 +129,17 @@ func (u *UpgradeManager) UpgradeModel(ctx context.Context, modelUUID string, tar
 				// UpgradeModel is safe to call multiple times.
 				_, err = api.UpgradeModel(ctx, modelUUID, targetVersion, "", false, false)
 				if jujuparams.IsCodeUpgradeInProgress(err) {
-					err = errors.E("upgrade in progress")
+					err = errors.New("upgrade in progress")
 				}
 				if jujuerrors.Is(err, jujuerrors.AlreadyExists) {
 					// Model is already upgraded
 					return nil
 				}
 				if err != nil {
-					return errors.E(fmt.Errorf("failed to upgrade model: %w", err))
+					return fmt.Errorf("failed to upgrade model: %w", err)
 				}
 
-				return errors.E(fmt.Errorf("model upgrade started/in-progress"))
+				return fmt.Errorf("model upgrade started/in-progress")
 			},
 			NotifyFunc: func(lastError error, attempt int) {
 				zapctx.Debug(ctx, "model upgrade attempt", zap.Error(lastError), zap.Int("attempt", attempt))
@@ -147,7 +147,7 @@ func (u *UpgradeManager) UpgradeModel(ctx context.Context, modelUUID string, tar
 			Clock: clock.WallClock,
 		},
 	); err != nil {
-		return errors.E(fmt.Errorf("failed to complete upgrade: %w", err))
+		return fmt.Errorf("failed to complete upgrade: %w", err)
 	}
 	return nil
 }
@@ -193,7 +193,7 @@ func (u *UpgradeManager) UpgradeTo(ctx context.Context, user *openfga.User, mode
 		TargetControllerName: targetControllerName,
 	})
 	if err != nil {
-		return 0, errors.E(fmt.Errorf("failed to enqueue model migration and upgrade job: %w", err))
+		return 0, fmt.Errorf("failed to enqueue model migration and upgrade job: %w", err)
 	}
 
 	if job.UniqueSkippedAsDuplicate {
@@ -222,7 +222,7 @@ func (u *UpgradeManager) MigrateModel(ctx context.Context, user *openfga.User, m
 
 	m, err := u.jujuManager.GetModel(ctx, modelUUID)
 	if err != nil {
-		return errors.E(err)
+		return err
 	}
 	if m.Controller.Name == targetControllerName {
 		zapctx.Info(ctx, "model is already on target controller, skipping migration", zap.String("model-uuid", modelUUID), zap.String("controller-name", targetControllerName))
@@ -232,10 +232,10 @@ func (u *UpgradeManager) MigrateModel(ctx context.Context, user *openfga.User, m
 	zapctx.Debug(ctx, "Attempting to initiate internal migration")
 	_, err = u.jujuManager.InitiateInternalMigration(ctx, user, modelUUID, targetControllerName)
 	if err != nil {
-		return errors.E(fmt.Errorf("failed to initiate internal migration: %w", err))
+		return fmt.Errorf("failed to initiate internal migration: %w", err)
 	}
 
-	modelNotMigratedErr := errors.E("model has not yet migrated to target controller")
+	modelNotMigratedErr := errors.New("model has not yet migrated to target controller")
 
 	if err := retry.Call(
 		retry.CallArgs{
@@ -272,7 +272,7 @@ func (u *UpgradeManager) MigrateModel(ctx context.Context, user *openfga.User, m
 			Clock: clock.WallClock,
 		},
 	); err != nil {
-		return errors.E(fmt.Errorf("failed to confirm internal migration completed: %w", err))
+		return fmt.Errorf("failed to confirm internal migration completed: %w", err)
 	}
 
 	return nil

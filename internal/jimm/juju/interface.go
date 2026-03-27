@@ -29,7 +29,7 @@ type Dialer interface {
 	// dialing the controller the UUID, AgentVersion and HostPorts fields
 	// in the given controller should be updated to the values provided
 	// by the controller.
-	Dial(ctx context.Context, ctl *dbmodel.Controller, modelTag names.ModelTag, user *openfga.User, withPermissions map[string]string) (API, error)
+	Dial(ctx context.Context, ctl *dbmodel.Controller, modelTag names.ModelTag, user *openfga.User) (API, error)
 }
 
 // An API is the interface JIMM uses to access the API on a controller.
@@ -58,7 +58,7 @@ type API interface {
 
 	// CheckCredentialModels checks that an updated credential can be used
 	// with the associated models.
-	CheckCredentialModels(context.Context, jujuparams.TaggedCredential) ([]jujuparams.UpdateCredentialModelResult, error)
+	CheckCredentialModels(context.Context, jujuparams.TaggedCredential) ([]jujuparams.UpdateCredentialResult, error)
 
 	// CheckMachines compares the machines in state with the ones
 	// reported by the provider and reports any discrepancies.
@@ -71,7 +71,7 @@ type API interface {
 	Close() error
 
 	// Cloud fetches the cloud data for the given cloud.
-	Cloud(context.Context, names.CloudTag, *jujucloud.Cloud) error
+	Cloud(context.Context, names.CloudTag) (jujucloud.Cloud, error)
 
 	// Clouds returns the set of clouds supported by the controller.
 	Clouds(context.Context) (map[names.CloudTag]jujucloud.Cloud, error)
@@ -152,7 +152,7 @@ type API interface {
 	UpdateCloud(context.Context, names.CloudTag, jujucloud.Cloud) error
 
 	// UpdateCredential updates a credential.
-	UpdateCredential(context.Context, jujuparams.TaggedCredential) ([]jujuparams.UpdateCredentialModelResult, error)
+	UpdateCloudsCredentialForce(context.Context, jujuparams.TaggedCredential) ([]jujuparams.UpdateCredentialResult, error)
 
 	// ValidateModelUpgrade validates that a model can be upgraded.
 	ValidateModelUpgrade(ctx context.Context, model names.ModelTag, force bool) error

@@ -119,7 +119,7 @@ func (r *controllerRoot) ListModelSummaries(ctx context.Context, _ jujuparams.Mo
 	}
 	res, err := r.jimm.JujuManager().ListModelSummaries(ctx, r.user, maskingControllerUUID)
 	if err != nil {
-		return jujuparams.ModelSummaryResults{}, errors.E(err)
+		return jujuparams.ModelSummaryResults{}, err
 	}
 
 	return toModelSummariesParams(res), nil
@@ -194,12 +194,12 @@ func (r *controllerRoot) CreateModel(ctx context.Context, args jujuparams.ModelC
 
 	mca, err := toAddModelArgs(args, r.user.ResourceTag())
 	if err != nil {
-		return jujuparams.ModelInfo{}, errors.E(err)
+		return jujuparams.ModelInfo{}, err
 	}
 	info, err := r.jimm.JujuManager().AddModel(ctx, r.user, mca)
 	if err != nil {
 		servermon.ModelsCreatedFailCount.Inc()
-		return jujuparams.ModelInfo{}, errors.E(err)
+		return jujuparams.ModelInfo{}, err
 	}
 
 	servermon.ModelsCreatedCount.Inc()
@@ -326,7 +326,7 @@ func (r *controllerRoot) changeModelCredential(ctx context.Context, arg jujupara
 		return errors.E(err, errors.CodeBadRequest)
 	}
 	if err := r.jimm.JujuManager().ChangeModelCredential(ctx, r.user, mt, cct); err != nil {
-		return errors.E(err)
+		return err
 	}
 	return nil
 }

@@ -164,7 +164,7 @@ func TestUpdateCloudCredential(t *testing.T) {
 	}, {
 		about:                  "update credential error returned by controller",
 		jimmAdmin:              true,
-		updateCredentialErrors: []error{nil, errors.E("test error")},
+		updateCredentialErrors: []error{nil, errors.New("test error")},
 		createEnv: func(c *qt.C, j *juju.JujuManager) (*dbmodel.Identity, juju.UpdateCloudCredentialArgs, dbmodel.CloudCredential, string) {
 			u, err := dbmodel.NewIdentity("alice@canonical.com")
 			c.Assert(err, qt.IsNil)
@@ -260,7 +260,7 @@ func TestUpdateCloudCredential(t *testing.T) {
 	}, {
 		about:                  "check credential error returned by controller",
 		jimmAdmin:              true,
-		checkCredentialErrors:  []error{errors.E("test error")},
+		checkCredentialErrors:  []error{errors.New("test error")},
 		updateCredentialErrors: []error{nil},
 		createEnv: func(c *qt.C, j *juju.JujuManager) (*dbmodel.Identity, juju.UpdateCloudCredentialArgs, dbmodel.CloudCredential, string) {
 			u, err := dbmodel.NewIdentity("alice@canonical.com")
@@ -476,7 +476,7 @@ func TestUpdateCloudCredential(t *testing.T) {
 		},
 	}, {
 		about:                 "skip check, which would return an error",
-		checkCredentialErrors: []error{errors.E("test error")},
+		checkCredentialErrors: []error{errors.New("test error")},
 		jimmAdmin:             true,
 		createEnv: func(c *qt.C, j *juju.JujuManager) (*dbmodel.Identity, juju.UpdateCloudCredentialArgs, dbmodel.CloudCredential, string) {
 			u, err := dbmodel.NewIdentity("alice@canonical.com")
@@ -708,17 +708,17 @@ func TestUpdateCloudCredential(t *testing.T) {
 			checkErrors := test.checkCredentialErrors
 			updateErrors := test.updateCredentialErrors
 			api := &jimmtest.API{
-				CheckCredentialModels_: func(context.Context, jujuparams.TaggedCredential) ([]jujuparams.UpdateCredentialModelResult, error) {
+				CheckCredentialModels_: func(context.Context, jujuparams.TaggedCredential) ([]jujuparams.UpdateCredentialResult, error) {
 					if len(checkErrors) > 0 {
 						var err error
 						err, checkErrors = checkErrors[0], checkErrors[1:]
 						if err == nil {
-							return []jujuparams.UpdateCredentialModelResult{{
+							return []jujuparams.UpdateCredentialResult{{Models: []jujuparams.UpdateCredentialModelResult{{
 								ModelUUID: "00000001-0000-0000-0000-0000-000000000001",
 								ModelName: "test-model",
-							}}, nil
+							}}}}, nil
 						} else {
-							return []jujuparams.UpdateCredentialModelResult{{
+							return []jujuparams.UpdateCredentialResult{{Models: []jujuparams.UpdateCredentialModelResult{{
 								ModelUUID: "00000001-0000-0000-0000-0000-000000000001",
 								ModelName: "test-model",
 								Errors: []jujuparams.ErrorResult{{
@@ -727,26 +727,26 @@ func TestUpdateCloudCredential(t *testing.T) {
 										Code:    "test-error",
 									},
 								}},
-							}}, err
+							}}}}, err
 						}
 					} else {
-						return []jujuparams.UpdateCredentialModelResult{{
+						return []jujuparams.UpdateCredentialResult{{Models: []jujuparams.UpdateCredentialModelResult{{
 							ModelUUID: "00000001-0000-0000-0000-0000-000000000001",
 							ModelName: "test-model",
-						}}, nil
+						}}}}, nil
 					}
 				},
-				UpdateCredential_: func(context.Context, jujuparams.TaggedCredential) ([]jujuparams.UpdateCredentialModelResult, error) {
+				UpdateCloudsCredentialForce_: func(context.Context, jujuparams.TaggedCredential) ([]jujuparams.UpdateCredentialResult, error) {
 					if len(updateErrors) > 0 {
 						var err error
 						err, updateErrors = updateErrors[0], updateErrors[1:]
 						if err == nil {
-							return []jujuparams.UpdateCredentialModelResult{{
+							return []jujuparams.UpdateCredentialResult{{Models: []jujuparams.UpdateCredentialModelResult{{
 								ModelUUID: "00000001-0000-0000-0000-0000-000000000001",
 								ModelName: "test-model",
-							}}, nil
+							}}}}, nil
 						} else {
-							return []jujuparams.UpdateCredentialModelResult{{
+							return []jujuparams.UpdateCredentialResult{{Models: []jujuparams.UpdateCredentialModelResult{{
 								ModelUUID: "00000001-0000-0000-0000-0000-000000000001",
 								ModelName: "test-model",
 								Errors: []jujuparams.ErrorResult{{
@@ -755,13 +755,13 @@ func TestUpdateCloudCredential(t *testing.T) {
 										Code:    "test-error",
 									},
 								}},
-							}}, err
+							}}}}, err
 						}
 					} else {
-						return []jujuparams.UpdateCredentialModelResult{{
+						return []jujuparams.UpdateCredentialResult{{Models: []jujuparams.UpdateCredentialModelResult{{
 							ModelUUID: "00000001-0000-0000-0000-0000-000000000001",
 							ModelName: "test-model",
-						}}, nil
+						}}}}, nil
 					}
 				},
 				GrantJIMMModelAdmin_: func(ctx context.Context, mt names.ModelTag) error {
@@ -1137,7 +1137,7 @@ func TestRevokeCloudCredential(t *testing.T) {
 		},
 	}, {
 		about:                  "error revoking credential on controller",
-		revokeCredentialErrors: []error{errors.E("test error")},
+		revokeCredentialErrors: []error{errors.New("test error")},
 		createEnv: func(c *qt.C, j *juju.JujuManager, client *openfga.OFGAClient) (*dbmodel.Identity, names.CloudCredentialTag, string) {
 			u, err := dbmodel.NewIdentity("alice@canonical.com")
 			c.Assert(err, qt.IsNil)
@@ -1224,11 +1224,11 @@ func TestRevokeCloudCredential(t *testing.T) {
 					}
 					return nil
 				},
-				UpdateCredential_: func(context.Context, jujuparams.TaggedCredential) ([]jujuparams.UpdateCredentialModelResult, error) {
-					return []jujuparams.UpdateCredentialModelResult{{
+				UpdateCloudsCredentialForce_: func(context.Context, jujuparams.TaggedCredential) ([]jujuparams.UpdateCredentialResult, error) {
+					return []jujuparams.UpdateCredentialResult{{Models: []jujuparams.UpdateCredentialModelResult{{
 						ModelUUID: "00000001-0000-0000-0000-0000-000000000001",
 						ModelName: "test-model",
-					}}, nil
+					}}}}, nil
 				},
 				GrantJIMMModelAdmin_: func(ctx context.Context, mt names.ModelTag) error {
 					return nil
@@ -1789,11 +1789,11 @@ func TestCopyCredential(t *testing.T) {
 	ctx := context.Background()
 
 	api := &jimmtest.API{
-		CheckCredentialModels_: func(context.Context, jujuparams.TaggedCredential) ([]jujuparams.UpdateCredentialModelResult, error) {
-			return []jujuparams.UpdateCredentialModelResult{}, nil
+		CheckCredentialModels_: func(context.Context, jujuparams.TaggedCredential) ([]jujuparams.UpdateCredentialResult, error) {
+			return []jujuparams.UpdateCredentialResult{}, nil
 		},
-		UpdateCredential_: func(context.Context, jujuparams.TaggedCredential) ([]jujuparams.UpdateCredentialModelResult, error) {
-			return []jujuparams.UpdateCredentialModelResult{}, nil
+		UpdateCloudsCredentialForce_: func(context.Context, jujuparams.TaggedCredential) ([]jujuparams.UpdateCredentialResult, error) {
+			return []jujuparams.UpdateCredentialResult{}, nil
 		},
 	}
 
