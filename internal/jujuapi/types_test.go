@@ -8,7 +8,7 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/google/go-cmp/cmp"
 	jujuparams "github.com/juju/juju/rpc/params"
-	"github.com/juju/names/v5"
+	"github.com/juju/names/v6"
 
 	"github.com/canonical/jimm/v3/internal/jimm/juju"
 )
@@ -27,7 +27,7 @@ func TestModelCreateArgs(t *testing.T) {
 		about: "all ok",
 		args: jujuparams.ModelCreateArgs{
 			Name:               "test-model",
-			OwnerTag:           names.NewUserTag("alice@canonical.com").String(),
+			Qualifier:          "alice@canonical.com",
 			CloudTag:           names.NewCloudTag("test-cloud").String(),
 			CloudCredentialTag: names.NewCloudCredentialTag("test-cloud/alice@canonical.com/test-credential-1").String(),
 		},
@@ -40,7 +40,7 @@ func TestModelCreateArgs(t *testing.T) {
 	}, {
 		about: "name not specified",
 		args: jujuparams.ModelCreateArgs{
-			OwnerTag:           names.NewUserTag("alice@canonical.com").String(),
+			Qualifier:          "alice@canonical.com",
 			CloudTag:           names.NewCloudTag("test-cloud").String(),
 			CloudCredentialTag: names.NewCloudCredentialTag("test-cloud/alice/test-credential-1").String(),
 		},
@@ -49,7 +49,7 @@ func TestModelCreateArgs(t *testing.T) {
 		about: "invalid owner tag",
 		args: jujuparams.ModelCreateArgs{
 			Name:               "test-model",
-			OwnerTag:           "alice@canonical.com",
+			Qualifier:          "alice@canonical.com",
 			CloudTag:           names.NewCloudTag("test-cloud").String(),
 			CloudCredentialTag: names.NewCloudCredentialTag("test-cloud/alice/test-credential-1").String(),
 		},
@@ -58,7 +58,7 @@ func TestModelCreateArgs(t *testing.T) {
 		about: "invalid cloud tag",
 		args: jujuparams.ModelCreateArgs{
 			Name:               "test-model",
-			OwnerTag:           names.NewUserTag("alice@canonical.com").String(),
+			Qualifier:          "alice@canonical.com",
 			CloudTag:           "test-cloud",
 			CloudCredentialTag: names.NewCloudCredentialTag("test-cloud/alice/test-credential-1").String(),
 		},
@@ -67,7 +67,7 @@ func TestModelCreateArgs(t *testing.T) {
 		about: "invalid cloud credential tag",
 		args: jujuparams.ModelCreateArgs{
 			Name:               "test-model",
-			OwnerTag:           names.NewUserTag("alice@canonical.com").String(),
+			Qualifier:          "alice@canonical.com",
 			CloudTag:           names.NewCloudTag("test-cloud").String(),
 			CloudCredentialTag: "test-credential-1",
 		},
@@ -76,7 +76,7 @@ func TestModelCreateArgs(t *testing.T) {
 		about: "cloud does not match cloud credential cloud",
 		args: jujuparams.ModelCreateArgs{
 			Name:               "test-model",
-			OwnerTag:           names.NewUserTag("alice@canonical.com").String(),
+			Qualifier:          "alice@canonical.com",
 			CloudTag:           names.NewCloudTag("test-cloud").String(),
 			CloudCredentialTag: names.NewCloudCredentialTag("another-cloud/alice/test-credential-1").String(),
 		},

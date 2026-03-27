@@ -9,7 +9,7 @@ import (
 
 	"github.com/juju/juju/core/migration"
 	jujuparams "github.com/juju/juju/rpc/params"
-	"github.com/juju/names/v5"
+	"github.com/juju/names/v6"
 
 	"github.com/canonical/jimm/v3/internal/errors"
 	"github.com/canonical/jimm/v3/internal/jimm/juju"
@@ -154,20 +154,15 @@ func (r *controllerRoot) Prechecks(ctx context.Context, args jujuparams.Migratio
 		return errors.E(errors.CodeUnauthorized, "unauthorized")
 	}
 
-	ownerTag, err := names.ParseUserTag(args.OwnerTag)
-	if err != nil {
-		return errors.E(err)
-	}
-
 	model := juju.MigratingModelInfo{
 		UUID:                   args.UUID,
 		Name:                   args.Name,
-		Owner:                  ownerTag,
+		Owner:                  args.Qualifier,
 		AgentVersion:           args.AgentVersion,
 		ControllerAgentVersion: args.ControllerAgentVersion,
 		RawModelDescription:    args.ModelDescription,
 	}
-	err = r.jimm.JujuManager().Prechecks(ctx, r.user, model)
+	err := r.jimm.JujuManager().Prechecks(ctx, r.user, model)
 	if err != nil {
 		return errors.E(err)
 	}

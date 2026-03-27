@@ -7,9 +7,9 @@ import (
 	"fmt"
 
 	jujucontroller "github.com/juju/juju/controller"
+	"github.com/juju/juju/core/semversion"
 	jujuparams "github.com/juju/juju/rpc/params"
-	"github.com/juju/names/v5"
-	"github.com/juju/version/v2"
+	"github.com/juju/names/v6"
 
 	"github.com/canonical/jimm/v3/internal/dbmodel"
 	"github.com/canonical/jimm/v3/internal/errors"
@@ -65,7 +65,7 @@ func init() {
 type ControllerService interface {
 	AddController(ctx context.Context, user *openfga.User, ctl *dbmodel.Controller, creds juju.ControllerCreds) error
 	ControllerInfo(ctx context.Context, name string) (*dbmodel.Controller, error)
-	EarliestControllerVersion(ctx context.Context) (version.Number, error)
+	EarliestControllerVersion(ctx context.Context) (semversion.Number, error)
 	ListControllers(ctx context.Context, user *openfga.User) ([]dbmodel.Controller, error)
 	RemoveController(ctx context.Context, user *openfga.User, controllerName string, force bool) error
 	SetControllerDeprecated(ctx context.Context, user *openfga.User, controllerName string, deprecated bool) error

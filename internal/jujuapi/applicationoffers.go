@@ -8,9 +8,10 @@ import (
 
 	"github.com/go-macaroon-bakery/macaroon-bakery/v3/bakery"
 	"github.com/juju/juju/core/crossmodel"
+	coremodel "github.com/juju/juju/core/model"
 	jujustatus "github.com/juju/juju/core/status"
 	jujuparams "github.com/juju/juju/rpc/params"
-	"github.com/juju/names/v5"
+	"github.com/juju/names/v6"
 
 	"github.com/canonical/jimm/v3/internal/errors"
 	"github.com/canonical/jimm/v3/internal/jimm/juju"
@@ -107,9 +108,9 @@ func (r *controllerRoot) getConsumeDetails(ctx context.Context, user *openfga.Us
 	}
 
 	// Ensure the path is normalised.
-	if ourl.User == "" {
+	if ourl.ModelQualifier == "" {
 		// If the model owner is not specified use the specified user.
-		ourl.User = user.Name
+		ourl.ModelQualifier = user.Name
 	}
 
 	details := jujuparams.ConsumeOfferDetails{
@@ -224,7 +225,7 @@ func filtersToCrossmodel(filters []jujuparams.OfferFilter) []crossmodel.Applicat
 	result := make([]crossmodel.ApplicationOfferFilter, len(filters))
 	for i, f := range filters {
 		result[i] = crossmodel.ApplicationOfferFilter{
-			OwnerName:              f.OwnerName,
+			ModelQualifier:         coremodel.Qualifier(f.ModelQualifier),
 			ModelName:              f.ModelName,
 			OfferName:              f.OfferName,
 			ApplicationName:        f.ApplicationName,

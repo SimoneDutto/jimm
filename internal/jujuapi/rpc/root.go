@@ -8,7 +8,9 @@ import (
 	"reflect"
 	"sync"
 
-	"github.com/juju/rpcreflect"
+	"github.com/juju/juju/core/flightrecorder"
+	"github.com/juju/juju/core/trace"
+	"github.com/juju/juju/rpc/rpcreflect"
 	"github.com/juju/zaputil/zapctx"
 	"go.uber.org/zap"
 )
@@ -60,6 +62,16 @@ func (r *Root) FindMethod(rootName string, version int, methodName string) (rpcr
 		Version:    version,
 		Method:     methodName,
 	}
+}
+
+// FlightRecorder returns a no-op flight recorder.
+func (r *Root) FlightRecorder() flightrecorder.FlightRecorder {
+	return flightrecorder.NoopRecorder{}
+}
+
+// StartTrace returns the context unchanged with a no-op span.
+func (r *Root) StartTrace(ctx context.Context) (context.Context, trace.Span) {
+	return ctx, trace.NoopSpan{}
 }
 
 // Kill implements rpc.Root.
