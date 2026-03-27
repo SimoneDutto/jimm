@@ -29,15 +29,15 @@ func init() {
 		findOffersMethod := rpc.Method(r.FindApplicationOffers)
 		applicationOffersMethod := rpc.Method(r.ApplicationOffers)
 
-		r.AddMethod("ApplicationOffers", 5, "Offer", offerMethod)
-		r.AddMethod("ApplicationOffers", 5, "GetConsumeDetails", getConsumeDetailsMethod)
-		r.AddMethod("ApplicationOffers", 5, "ListApplicationOffers", listOffersMethod)
-		r.AddMethod("ApplicationOffers", 5, "ModifyOfferAccess", modifyOfferAccessMethod)
-		r.AddMethod("ApplicationOffers", 5, "DestroyOffers", destroyOffersMethod)
-		r.AddMethod("ApplicationOffers", 5, "FindApplicationOffers", findOffersMethod)
-		r.AddMethod("ApplicationOffers", 5, "ApplicationOffers", applicationOffersMethod)
+		r.AddMethod("ApplicationOffers", 6, "Offer", offerMethod)
+		r.AddMethod("ApplicationOffers", 6, "GetConsumeDetails", getConsumeDetailsMethod)
+		r.AddMethod("ApplicationOffers", 6, "ListApplicationOffers", listOffersMethod)
+		r.AddMethod("ApplicationOffers", 6, "ModifyOfferAccess", modifyOfferAccessMethod)
+		r.AddMethod("ApplicationOffers", 6, "DestroyOffers", destroyOffersMethod)
+		r.AddMethod("ApplicationOffers", 6, "FindApplicationOffers", findOffersMethod)
+		r.AddMethod("ApplicationOffers", 6, "ApplicationOffers", applicationOffersMethod)
 
-		return []int{5}
+		return []int{6}
 	}
 }
 
