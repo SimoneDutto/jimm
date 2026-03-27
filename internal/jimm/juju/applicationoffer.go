@@ -65,9 +65,7 @@ func (j *JujuManager) Offer(ctx context.Context, user *openfga.User, offer AddAp
 	offerURL := crossmodel.OfferURL{
 		ModelQualifier: model.OwnerIdentityName,
 		ModelName:      model.Name,
-		// Confusingly the application name in the offer URL is
-		// actually the offer name.
-		Name: offer.OfferName,
+		Name:           offer.OfferName,
 	}
 
 	// Verify offer URL doesn't already exist.

@@ -116,7 +116,7 @@ func TestAddModel(t *testing.T) {
 				Name:               test.modelName,
 				UUID:               "test-uuid",
 				Type:               "iaas",
-				Qualifier:          "alice-canonical-com",
+				Qualifier:          "alice@canonical.com",
 				CloudTag:           names.NewCloudTag("test-cloud").String(),
 				CloudRegion:        "test-region",
 				CloudCredentialTag: names.NewCloudCredentialTag("test-cloud/alice@canonical.com/credAlice").String(),

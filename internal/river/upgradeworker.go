@@ -63,12 +63,7 @@ type upgradeWorker struct {
 
 // Work performs the upgrade operation receiving the job with UpgradeArgs.
 func (w *upgradeWorker) Work(ctx context.Context, job *river.Job[upgradeWorkerArgs]) error {
-	targetVersion, err := semversion.Parse(job.Args.TargetVersion.String())
-	if err != nil {
-		return err
-	}
-
-	err = w.upgradeManager.UpgradeModel(ctx, job.Args.ModelUUID, targetVersion)
+	err := w.upgradeManager.UpgradeModel(ctx, job.Args.ModelUUID, job.Args.TargetVersion)
 	if err != nil {
 		return err
 	}

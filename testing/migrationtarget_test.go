@@ -65,8 +65,6 @@ func TestPrechecks(t *testing.T) {
 	}
 	modelUUID := "00000001-0000-0000-0000-000000000001"
 	modelDescription := description.NewModel(modelDescriptionArgs)
-	// TODO-juju4: SetStatus doesn't exist
-	// modelDescription.SetStatus(description.StatusArgs{Value: "available"})
 	modelDescription.SetCloudCredential(description.CloudCredentialArgs{
 		Name:  "cred",
 		Cloud: names.NewCloudTag(jimmtest.TestE2ECloudName).String(),
@@ -74,7 +72,7 @@ func TestPrechecks(t *testing.T) {
 	})
 	model := migration.ModelInfo{
 		UUID:                   modelUUID,
-		Qualifier:              coremodel.Qualifier(names.NewUserTag("alice").String()),
+		Qualifier:              coremodel.Qualifier("alice"),
 		Name:                   "test-model",
 		ControllerAgentVersion: semversion.MustParse("3.6.9"),
 		AgentVersion:           semversion.MustParse("3.6.9"),

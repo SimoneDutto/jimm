@@ -72,7 +72,7 @@ func TestCreateModelKubernetes(t *testing.T) {
 	c.Assert(mi.ProviderType, qt.Equals, "kubernetes")
 	c.Assert(mi.Cloud, qt.Equals, s.cloudName)
 	c.Assert(mi.CloudRegion, qt.Equals, "localhost")
-	c.Assert(mi.Qualifier, qt.Equals, "bob@canonical.com")
+	c.Assert(mi.Qualifier.String(), qt.Equals, "bob@canonical.com")
 }
 
 func TestListCAASModelSummaries(t *testing.T) {

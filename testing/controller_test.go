@@ -14,6 +14,7 @@ import (
 	controllerapi "github.com/juju/juju/api/controller/controller"
 	jujucontroller "github.com/juju/juju/controller"
 	"github.com/juju/juju/core/life"
+	coremodel "github.com/juju/juju/core/model"
 	jujuparams "github.com/juju/juju/rpc/params"
 	"github.com/juju/names/v6"
 
@@ -77,7 +78,7 @@ func TestModelStatus(t *testing.T) {
 			Applications:       []base.Application{},
 			UUID:               model.UUID.String,
 			Life:               life.Value(string(life.Alive)),
-			Qualifier:          "bob@canonical.com",
+			Qualifier:          coremodel.Qualifier("bob@canonical.com"),
 			TotalMachineCount:  0,
 			Volumes:            []base.Volume{},
 			Filesystems:        []base.Filesystem{},

@@ -146,7 +146,6 @@ func (j jujuLoggerShim) GetChildByName(name string) logger.Logger {
 }
 
 func (j jujuLoggerShim) Helper() {
-	// No-op for terraform logging
 }
 
 func (j jujuLoggerShim) Child(name string, tags ...string) logger.Logger {

@@ -154,8 +154,6 @@ func TestPreChecks(t *testing.T) {
 		Cloud:       jimmtest.TestCloudName,
 		CloudRegion: jimmtest.TestCloudRegionName,
 	})
-	// TODO-juju4: SetStatus doesn't exist on the description.Model
-	// modelDescription.SetStatus(description.StatusArgs{Value: "available"})
 
 	serialisedDescription, err := description.Serialize(modelDescription)
 	c.Assert(err, qt.IsNil)
