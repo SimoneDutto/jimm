@@ -330,7 +330,7 @@ func (j *JujuManager) GetCloudCredentialAttributes(ctx context.Context, user *op
 		return
 	}
 
-	// TODO Juju4: once we merge latest ales' pr in Juju 4, we can reinstatiate this.
+	// TODO-juju4: once we merge latest ales' pr in Juju 4, we can reinstatiate this.
 	// for k := range attrs {
 	// 	if !cloudcred.IsVisibleAttribute(cred.Cloud.Type, cred.AuthType, k) {
 	// 		delete(attrs, k)

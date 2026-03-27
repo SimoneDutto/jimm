@@ -352,7 +352,6 @@ func getDialWebsocketWithCustomCookieJar(jar *cookiejar.Jar) func(ctx context.Co
 				}
 				return netDialer.DialContext(ctx, netw, addr)
 			},
-			// TODO-juju4: proxy is in internal
 			Proxy:            nil,
 			HandshakeTimeout: 45 * time.Second,
 			TLSClientConfig:  tlsConfig,
