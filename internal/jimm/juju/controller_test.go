@@ -19,12 +19,11 @@ import (
 	jujucontroller "github.com/juju/juju/controller"
 	"github.com/juju/juju/core/crossmodel"
 	"github.com/juju/juju/core/life"
+	"github.com/juju/juju/core/semversion"
 	"github.com/juju/juju/core/status"
 	"github.com/juju/juju/environs/cloudspec"
 	jujuparams "github.com/juju/juju/rpc/params"
-	"github.com/juju/juju/state"
-	"github.com/juju/names/v5"
-	semversion "github.com/juju/version/v2"
+	"github.com/juju/names/v6"
 	"gopkg.in/macaroon.v2"
 
 	"github.com/canonical/jimm/v3/internal/dbmodel"
@@ -41,7 +40,7 @@ func TestAddController(t *testing.T) {
 	c := qt.New(t)
 
 	api := &jimmtest.API{
-		Clouds_: func() (map[names.CloudTag]jujucloud.Cloud, error) {
+		Clouds_: func(ctx context.Context) (map[names.CloudTag]jujucloud.Cloud, error) {
 			clouds := map[names.CloudTag]jujucloud.Cloud{
 				names.NewCloudTag("aws"): {
 					Type:             "ec2",
@@ -148,7 +147,7 @@ func TestAddControllerWithCloudWithoutRegions(t *testing.T) {
 	c := qt.New(t)
 
 	api := &jimmtest.API{
-		Clouds_: func() (map[names.CloudTag]jujucloud.Cloud, error) {
+		Clouds_: func(ctx context.Context) (map[names.CloudTag]jujucloud.Cloud, error) {
 			clouds := map[names.CloudTag]jujucloud.Cloud{
 				names.NewCloudTag("k8s"): {
 					Type:      "kubernetes",
@@ -227,7 +226,7 @@ func TestAddControllerWithVault(t *testing.T) {
 	}
 
 	api := &jimmtest.API{
-		Clouds_: func() (map[names.CloudTag]jujucloud.Cloud, error) {
+		Clouds_: func(ctx context.Context) (map[names.CloudTag]jujucloud.Cloud, error) {
 			clouds := map[names.CloudTag]jujucloud.Cloud{
 				names.NewCloudTag("aws"): {
 					Type:             "ec2",
@@ -514,11 +513,10 @@ func TestImportModel(t *testing.T) {
 			info.Type = "test-type"
 			info.UUID = "00000002-0000-0000-0000-000000000001"
 			info.ControllerUUID = "00000001-0000-0000-0000-000000000001"
-			info.DefaultSeries = "test-series"
 			info.Cloud = "test-cloud"
 			info.CloudRegion = "test-region"
 			info.CloudCredential = "test-cloud/alice@canonical.com/test-credential"
-			info.Owner = "alice@canonical.com"
+			info.Qualifier = "alice@canonical.com"
 			info.Life = life.Alive
 			info.Status = base.Status{
 				Status: status.Status("ok"),
@@ -568,7 +566,7 @@ func TestImportModel(t *testing.T) {
 			CloudCredential: dbmodel.CloudCredential{
 				Name: "test-credential",
 			},
-			Life: state.Alive.String(),
+			Life: string(life.Alive),
 		},
 	}, {
 		about:          "model with default region imported",
@@ -583,11 +581,10 @@ func TestImportModel(t *testing.T) {
 			info.Type = "test-type"
 			info.UUID = "00000002-0000-0000-0000-000000000001"
 			info.ControllerUUID = "00000001-0000-0000-0000-000000000001"
-			info.DefaultSeries = "test-series"
 			info.Cloud = "test-cloud"
 			// info.CloudRegion is not set to test default region handling
 			info.CloudCredential = "test-cloud/alice@canonical.com/test-credential"
-			info.Owner = "alice@canonical.com"
+			info.Qualifier = "alice@canonical.com"
 			info.Life = life.Alive
 			info.Status = base.Status{
 				Status: status.Status("ok"),
@@ -637,7 +634,7 @@ func TestImportModel(t *testing.T) {
 			CloudCredential: dbmodel.CloudCredential{
 				Name: "test-credential",
 			},
-			Life: state.Alive.String(),
+			Life: string(life.Alive),
 		},
 	}, {
 		about:          "model from local user imported",
@@ -652,11 +649,10 @@ func TestImportModel(t *testing.T) {
 			info.Type = "test-type"
 			info.UUID = "00000002-0000-0000-0000-000000000001"
 			info.ControllerUUID = "00000001-0000-0000-0000-000000000001"
-			info.DefaultSeries = "test-series"
 			info.Cloud = "test-cloud"
 			info.CloudRegion = "test-region"
 			info.CloudCredential = "test-cloud/local-user/test-credential"
-			info.Owner = "local-user"
+			info.Qualifier = "local-user"
 			info.Life = life.Alive
 			info.Status = base.Status{
 				Status: status.Status("available"),
@@ -706,7 +702,7 @@ func TestImportModel(t *testing.T) {
 			CloudCredential: dbmodel.CloudCredential{
 				Name: "test-credential",
 			},
-			Life: state.Alive.String(),
+			Life: string(life.Alive),
 		},
 	}, {
 		about:          "new model owner is local user",
@@ -722,11 +718,10 @@ func TestImportModel(t *testing.T) {
 			info.Type = "test-type"
 			info.UUID = "00000002-0000-0000-0000-000000000001"
 			info.ControllerUUID = "00000001-0000-0000-0000-000000000001"
-			info.DefaultSeries = "test-series"
 			info.Cloud = "test-cloud"
 			info.CloudRegion = "test-region"
 			info.CloudCredential = "test-cloud/local-user/test-credential"
-			info.Owner = "local-user"
+			info.Qualifier = "local-user"
 			info.Life = life.Alive
 			info.Status = base.Status{
 				Status: status.Status("available"),
@@ -773,11 +768,10 @@ func TestImportModel(t *testing.T) {
 			info.Type = "test-type"
 			info.UUID = "00000002-0000-0000-0000-000000000001"
 			info.ControllerUUID = "00000001-0000-0000-0000-000000000001"
-			info.DefaultSeries = "test-series"
 			info.Cloud = "test-cloud"
 			info.CloudRegion = "test-region"
 			info.CloudCredential = "test-cloud/alice@canonical.com/unknown-credential"
-			info.Owner = "local-user"
+			info.Qualifier = "local-user"
 			return info, nil
 		},
 		expectedError: `cannot import model from local user, try --owner to switch the model owner`,
@@ -794,11 +788,10 @@ func TestImportModel(t *testing.T) {
 			info.Type = "test-type"
 			info.UUID = "00000002-0000-0000-0000-000000000001"
 			info.ControllerUUID = "00000001-0000-0000-0000-000000000001"
-			info.DefaultSeries = "test-series"
 			info.Cloud = "invalid-cloud"
 			info.CloudRegion = "test-region"
 			info.CloudCredential = "invalid-cloud/alice@canonical.com/unknown-credential"
-			info.Owner = "alice@canonical.com"
+			info.Qualifier = "alice@canonical.com"
 			return info, nil
 		},
 		expectedError: `Failed to find cloud credential for user alice@canonical.com on cloud invalid-cloud`,
@@ -815,11 +808,10 @@ func TestImportModel(t *testing.T) {
 			info.Type = "test-type"
 			info.UUID = "00000002-0000-0000-0000-000000000001"
 			info.ControllerUUID = "00000001-0000-0000-0000-000000000001"
-			info.DefaultSeries = "test-series"
 			info.Cloud = "test-cloud"
 			info.CloudRegion = "unknown-region"
 			info.CloudCredential = "test-cloud/alice@canonical.com/test-credential"
-			info.Owner = "alice@canonical.com"
+			info.Qualifier = "alice@canonical.com"
 			return info, nil
 		},
 		expectedError: `cloud region not found`,
@@ -836,11 +828,10 @@ func TestImportModel(t *testing.T) {
 			info.Type = "test-type"
 			info.UUID = "00000002-0000-0000-0000-000000000001"
 			info.ControllerUUID = "00000001-0000-0000-0000-000000000001"
-			info.DefaultSeries = "test-series"
 			info.Cloud = "test-cloud"
 			info.CloudRegion = "test-region"
 			info.CloudCredential = "test-cloud/alice@canonical.com/test-credential"
-			info.Owner = "alice@canonical.com"
+			info.Qualifier = "alice@canonical.com"
 			return info, nil
 		},
 		expectedError: `unauthorized`,
@@ -857,11 +848,10 @@ func TestImportModel(t *testing.T) {
 			info.Type = "test-type"
 			info.UUID = "00000002-0000-0000-0000-000000000001"
 			info.ControllerUUID = "00000001-0000-0000-0000-000000000001"
-			info.DefaultSeries = "test-series"
 			info.Cloud = "test-cloud"
 			info.CloudRegion = "test-region"
 			info.CloudCredential = "test-cloud/alice@canonical.com/test-credential"
-			info.Owner = "alice@canonical.com"
+			info.Qualifier = "alice@canonical.com"
 			return info, nil
 		},
 		expectedError: `model (.*) already exists`,
@@ -878,11 +868,10 @@ func TestImportModel(t *testing.T) {
 			info.Type = "test-type"
 			info.UUID = "00000002-0000-0000-0000-000000000001"
 			info.ControllerUUID = "00000001-0000-0000-0000-000000000001"
-			info.DefaultSeries = "test-series"
 			info.Cloud = "test-cloud"
 			info.CloudRegion = "test-region"
 			info.CloudCredential = "test-cloud/alice@canonical.com/test-credential"
-			info.Owner = "alice@canonical.com"
+			info.Qualifier = "alice@canonical.com"
 			info.Life = life.Alive
 			info.Status = base.Status{
 				Status: status.Status("ok"),
@@ -919,7 +908,7 @@ func TestImportModel(t *testing.T) {
 			CloudCredential: dbmodel.CloudCredential{
 				Name: "test-credential",
 			},
-			Life: state.Alive.String(),
+			Life: string(life.Alive),
 			Offers: []dbmodel.ApplicationOffer{
 				{
 					URL:  "url1",
@@ -1508,7 +1497,7 @@ type testControllerClient struct {
 	initiateMigrationResults []result
 }
 
-func (c *testControllerClient) InitiateMigration(spec controller.MigrationSpec, dryRun bool) (string, error) {
+func (c *testControllerClient) InitiateMigration(ctx context.Context, spec controller.MigrationSpec, dryRun bool) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if len(c.initiateMigrationResults) == 0 {

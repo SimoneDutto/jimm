@@ -13,8 +13,9 @@ import (
 
 	"github.com/juju/clock"
 	jujuerrors "github.com/juju/errors"
+	"github.com/juju/juju/core/semversion"
 	jujuparams "github.com/juju/juju/rpc/params"
-	"github.com/juju/names/v5"
+	"github.com/juju/names/v6"
 	"github.com/juju/retry"
 	"github.com/juju/version/v2"
 	"github.com/juju/zaputil/zapctx"
@@ -87,12 +88,13 @@ func NewUpgradeManager(
 }
 
 // UpgradeModel upgrades the model to the provided agent version.
-func (u *UpgradeManager) UpgradeModel(ctx context.Context, modelUUID string, targetVersion version.Number) error {
+func (u *UpgradeManager) UpgradeModel(ctx context.Context, modelUUID string, targetVersion semversion.Number) error {
 	ctx = zapctx.WithFields(ctx, zap.String("model_uuid", modelUUID), zap.String("target_version", targetVersion.String()))
 
 	// Forbid a zero target version as this complicates checking for whether
 	// the upgrade was successful.
-	if targetVersion == version.Zero {
+	if targetVersion == semversion.Zero {
+
 		return errors.E(errors.CodeBadRequest, "target version cannot be zero")
 	}
 
@@ -125,7 +127,7 @@ func (u *UpgradeManager) UpgradeModel(ctx context.Context, modelUUID string, tar
 				}
 
 				// UpgradeModel is safe to call multiple times.
-				_, err = api.UpgradeModel(modelUUID, targetVersion, "", false, false)
+				_, err = api.UpgradeModel(ctx, modelUUID, targetVersion, "", false, false)
 				if jujuparams.IsCodeUpgradeInProgress(err) {
 					err = errors.E("upgrade in progress")
 				}

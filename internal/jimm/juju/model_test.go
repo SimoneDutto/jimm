@@ -16,11 +16,11 @@ import (
 	"github.com/juju/juju/core/instance"
 	"github.com/juju/juju/core/life"
 	"github.com/juju/juju/core/model"
+	coremodel "github.com/juju/juju/core/model"
+	"github.com/juju/juju/core/semversion"
 	jujurpc "github.com/juju/juju/rpc"
 	jujuparams "github.com/juju/juju/rpc/params"
-	"github.com/juju/juju/state"
-	"github.com/juju/names/v5"
-	"github.com/juju/version/v2"
+	"github.com/juju/names/v6"
 	"sigs.k8s.io/yaml"
 
 	"github.com/canonical/jimm/v3/internal/dbmodel"
@@ -153,7 +153,7 @@ users:
 			Name:     "test-credential-1",
 			AuthType: "empty",
 		},
-		Life: state.Alive.String(),
+		Life: string(life.Alive),
 	},
 }, {
 	name: "CreateModelWithoutCloudRegion",
@@ -264,7 +264,7 @@ users:
 			Name:     "test-credential-1",
 			AuthType: "empty",
 		},
-		Life: state.Alive.String(),
+		Life: string(life.Alive),
 	},
 }, {
 	name: "CreateModelWithCloud",
@@ -374,7 +374,7 @@ users:
 			Name:     "test-credential-1",
 			AuthType: "empty",
 		},
-		Life: state.Alive.String(),
+		Life: string(life.Alive),
 	},
 }, {
 	name: "CreateModelInOtherNamespaceAsSuperUser",
@@ -476,7 +476,7 @@ users:
 			Name:     "test-credential-1",
 			AuthType: "empty",
 		},
-		Life: state.Alive.String(),
+		Life: string(life.Alive),
 	},
 }, {
 	name: "CreateModelInOtherNamespace",
@@ -933,7 +933,7 @@ users:
 			Name:     "test-credential-1",
 			AuthType: "empty",
 		},
-		Life: state.Alive.String(),
+		Life: string(life.Alive),
 	},
 }, {
 	name: "CreateModelWithImplicitCloudAndMultipleClouds",
@@ -1125,7 +1125,7 @@ users:
 			Name:     "test-credential-1",
 			AuthType: "empty",
 		},
-		Life: state.Alive.String(),
+		Life: string(life.Alive),
 	},
 }, {
 	name: "CreateModelWithDeprecatedControllers",
@@ -1401,7 +1401,7 @@ users:
 			Name:     "test-credential-1",
 			AuthType: "empty",
 		},
-		Life: state.Alive.String(),
+		Life: string(life.Alive),
 	},
 }}
 
@@ -1494,24 +1494,16 @@ func convertParamsModelInfo(modelInfo jujuparams.ModelInfo) (base.ModelInfo, err
 		}
 		credential = credTag.Id()
 	}
-	var ownerTag names.UserTag
-	if modelInfo.OwnerTag != "" {
-		ownerTag, err = names.ParseUserTag(modelInfo.OwnerTag)
-		if err != nil {
-			return base.ModelInfo{}, err
-		}
-	}
 	result := base.ModelInfo{
 		Name:            modelInfo.Name,
 		UUID:            modelInfo.UUID,
 		ControllerUUID:  modelInfo.ControllerUUID,
 		IsController:    modelInfo.IsController,
 		ProviderType:    modelInfo.ProviderType,
-		DefaultSeries:   modelInfo.DefaultSeries,
 		Cloud:           cloudTag.Id(),
 		CloudRegion:     modelInfo.CloudRegion,
 		CloudCredential: credential,
-		Owner:           ownerTag.Id(),
+		Qualifier:       coremodel.Qualifier(modelInfo.Qualifier),
 		Life:            modelInfo.Life,
 		AgentVersion:    modelInfo.AgentVersion,
 	}
@@ -1544,10 +1536,7 @@ func convertParamsModelInfo(modelInfo jujuparams.ModelInfo) (base.ModelInfo, err
 			Id:          m.Id,
 			InstanceId:  m.InstanceId,
 			DisplayName: m.DisplayName,
-			HasVote:     m.HasVote,
-			WantsVote:   m.WantsVote,
 			Status:      m.Status,
-			HAPrimary:   m.HAPrimary,
 		}
 		if m.Hardware != nil {
 			machine.Hardware = &instance.HardwareCharacteristics{
@@ -1584,7 +1573,7 @@ func createModel(template string) func(context.Context, *jujuclient.CreateModelA
 		mi.Cloud = args.Cloud
 		mi.CloudCredential = args.CloudCredentialTag.Id()
 		mi.CloudRegion = args.CloudRegion
-		mi.Owner = args.Owner
+		mi.Qualifier = coremodel.Qualifier(args.Owner)
 		return mi, nil
 	}
 }
@@ -1724,12 +1713,11 @@ func modelInfoTestExpectedModelInfo(canReadMachineInfo bool, limitedExpectedUser
 		UUID:            "00000002-0000-0000-0000-000000000001",
 		ControllerUUID:  "00000001-0000-0000-0000-000000000001",
 		ProviderType:    "test-provider",
-		DefaultSeries:   "warty",
 		Cloud:           "test-cloud",
 		CloudRegion:     "test-cloud-region",
 		CloudCredential: "test-cloud/alice@canonical.com/cred-1",
-		Owner:           "alice@canonical.com",
-		Life:            life.Value(state.Alive.String()),
+		Qualifier:       "alice@canonical.com",
+		Life:            life.Value(string(life.Alive)),
 		Status: base.Status{
 			Status: "available",
 			Info:   "OK!",
@@ -1752,7 +1740,6 @@ func modelInfoTestExpectedModelInfo(canReadMachineInfo bool, limitedExpectedUser
 			DisplayName: "Machine 0",
 			Status:      "available",
 			Message:     "OK!",
-			HasVote:     true,
 		}, {
 			Id:          "1",
 			Hardware:    jimmtest.ParseMachineHardware("arch=amd64 mem=8096 root-disk=10240 cores=2"),
@@ -1760,7 +1747,6 @@ func modelInfoTestExpectedModelInfo(canReadMachineInfo bool, limitedExpectedUser
 			DisplayName: "Machine 1",
 			Status:      "available",
 			Message:     "OK!",
-			HasVote:     true,
 		}},
 		AgentVersion: newVersion("1.2.3"),
 	}
@@ -1855,12 +1841,11 @@ func TestModelInfo(t *testing.T) {
 							mi.ControllerUUID = "00000001-0000-0000-0000-000000000001"
 							mi.UUID = "00000002-0000-0000-0000-000000000001"
 							mi.ProviderType = "test-provider"
-							mi.DefaultSeries = "warty"
 							mi.Cloud = "test-cloud"
 							mi.CloudRegion = "test-cloud-region"
 							mi.CloudCredential = "test-cloud/alice@canonical.com/cred-1"
-							mi.Owner = test.originModelOwner
-							mi.Life = life.Value(state.Alive.String())
+							mi.Qualifier = coremodel.Qualifier(test.originModelOwner)
+							mi.Life = life.Value(string(life.Alive))
 							mi.Status = base.Status{
 								Status: "available",
 								Info:   "OK!",
@@ -1875,7 +1860,6 @@ func TestModelInfo(t *testing.T) {
 								DisplayName: "Machine 0",
 								Status:      "available",
 								Message:     "OK!",
-								HasVote:     true,
 							}, {
 								Id:          "1",
 								Hardware:    jimmtest.ParseMachineHardware("arch=amd64 mem=8096 root-disk=10240 cores=2"),
@@ -1883,7 +1867,6 @@ func TestModelInfo(t *testing.T) {
 								DisplayName: "Machine 1",
 								Status:      "available",
 								Message:     "OK!",
-								HasVote:     true,
 							}}
 							mi.AgentVersion = newVersion("1.2.3")
 							return mi, nil
@@ -2123,24 +2106,24 @@ var modelStatusTests = []struct {
 		}
 		ms := base.ModelStatus{}
 		ms.UUID = modelTag.Id()
-		ms.Life = life.Value(state.Alive.String())
+		ms.Life = life.Value(string(life.Alive))
 		ms.ModelType = "iaas"
 		ms.HostedMachineCount = 10
 		ms.ApplicationCount = 3
 		ms.UnitCount = 20
-		ms.Owner = "alice@canonical.com"
+		ms.Qualifier = coremodel.Qualifier("alice@canonical.com")
 		return ms, nil
 	},
 	username: "alice@canonical.com",
 	uuid:     "00000002-0000-0000-0000-000000000001",
 	expectModelStatus: base.ModelStatus{
 		UUID:               "00000002-0000-0000-0000-000000000001",
-		Life:               life.Value(state.Alive.String()),
+		Life:               life.Value(string(life.Alive)),
 		ModelType:          "iaas",
 		HostedMachineCount: 10,
 		ApplicationCount:   3,
 		UnitCount:          20,
-		Owner:              "alice@canonical.com",
+		Qualifier:          coremodel.Qualifier("alice@canonical.com"),
 	},
 }, {
 	name: "APIError",
@@ -2285,8 +2268,8 @@ func TestForEachUserModel(t *testing.T) {
 		Cloud:           "test-cloud",
 		CloudRegion:     "test-cloud-region",
 		CloudCredential: "test-cloud/alice@canonical.com/cred-1",
-		Owner:           "alice@canonical.com",
-		Life:            life.Value(state.Alive.String()),
+		Qualifier:       coremodel.Qualifier("alice@canonical.com"),
+		Life:            life.Value(string(life.Alive)),
 		ModelUserAccess: "admin",
 	}, {
 		Name:            "model-2",
@@ -2296,8 +2279,8 @@ func TestForEachUserModel(t *testing.T) {
 		Cloud:           "test-cloud",
 		CloudRegion:     "test-cloud-region",
 		CloudCredential: "test-cloud/alice@canonical.com/cred-1",
-		Owner:           "alice@canonical.com",
-		Life:            life.Value(state.Alive.String()),
+		Qualifier:       coremodel.Qualifier("alice@canonical.com"),
+		Life:            life.Value(string(life.Alive)),
 		ModelUserAccess: "write",
 	}, {
 		Name:            "model-4",
@@ -2307,8 +2290,8 @@ func TestForEachUserModel(t *testing.T) {
 		Cloud:           "test-cloud",
 		CloudRegion:     "test-cloud-region",
 		CloudCredential: "test-cloud/alice@canonical.com/cred-1",
-		Owner:           "alice@canonical.com",
-		Life:            life.Value(state.Alive.String()),
+		Qualifier:       coremodel.Qualifier("alice@canonical.com"),
+		Life:            life.Value(string(life.Alive)),
 		ModelUserAccess: "read",
 	}})
 }
@@ -2426,7 +2409,6 @@ func TestModelSummaries(t *testing.T) {
 					Type:           "iaas",
 					ControllerUUID: "00000002-0000-0000-0000-000000000001",
 					IsController:   false,
-					DefaultSeries:  "series-1",
 					Life:           "alive",
 					Status: base.Status{
 						Status: "available",
@@ -2439,7 +2421,6 @@ func TestModelSummaries(t *testing.T) {
 					Type:           "iaas",
 					ControllerUUID: "00000001-0000-0000-0000-000000000001",
 					IsController:   false,
-					DefaultSeries:  "series-2",
 					Life:           "alive",
 					Status: base.Status{
 						Status: "available",
@@ -2456,11 +2437,10 @@ func TestModelSummaries(t *testing.T) {
 					ControllerUUID:  "00000001-0000-0000-0000-000000000001",
 					IsController:    false,
 					ProviderType:    "test-provider",
-					DefaultSeries:   "series-1",
 					Cloud:           "test-cloud",
 					CloudRegion:     "test-cloud-region",
 					CloudCredential: "test-cloud/alice@canonical.com/cred-1",
-					Owner:           "alice@canonical.com",
+					Qualifier:       coremodel.Qualifier("alice@canonical.com"),
 					Life:            "alive",
 					Status: base.Status{
 						Status: "available",
@@ -2474,11 +2454,10 @@ func TestModelSummaries(t *testing.T) {
 					ControllerUUID:  "00000001-0000-0000-0000-000000000001",
 					IsController:    false,
 					ProviderType:    "test-provider",
-					DefaultSeries:   "series-2",
 					Cloud:           "test-cloud",
 					CloudRegion:     "test-cloud-region",
 					CloudCredential: "test-cloud/alice@canonical.com/cred-1",
-					Owner:           "alice@canonical.com",
+					Qualifier:       coremodel.Qualifier("alice@canonical.com"),
 					Life:            "alive",
 					Status: base.Status{
 						Status: "available",
@@ -2511,11 +2490,10 @@ func TestModelSummaries(t *testing.T) {
 					ControllerUUID:  "00000001-0000-0000-0000-000000000001",
 					IsController:    false,
 					ProviderType:    "test-provider",
-					DefaultSeries:   "",
 					Cloud:           "test-cloud",
 					CloudRegion:     "test-cloud-region",
 					CloudCredential: "test-cloud/alice@canonical.com/cred-1",
-					Owner:           "alice@canonical.com",
+					Qualifier:       coremodel.Qualifier("alice@canonical.com"),
 					Life:            "alive",
 					Status: base.Status{
 						Status: "available",
@@ -2531,7 +2509,7 @@ func TestModelSummaries(t *testing.T) {
 					Cloud:           "test-cloud",
 					CloudRegion:     "test-cloud-region",
 					CloudCredential: "test-cloud/alice@canonical.com/cred-1",
-					Owner:           "alice@canonical.com",
+					Qualifier:       coremodel.Qualifier("alice@canonical.com"),
 					Life:            "alive",
 					Status: base.Status{
 						Status: "unavailable",
@@ -2551,11 +2529,10 @@ func TestModelSummaries(t *testing.T) {
 					ControllerUUID:  "00000001-0000-0000-0000-000000000001",
 					IsController:    false,
 					ProviderType:    "test-provider",
-					DefaultSeries:   "",
 					Cloud:           "test-cloud",
 					CloudRegion:     "test-cloud-region",
 					CloudCredential: "test-cloud/alice@canonical.com/cred-1",
-					Owner:           "alice@canonical.com",
+					Qualifier:       coremodel.Qualifier("alice@canonical.com"),
 					Life:            "alive",
 					Status: base.Status{
 						Status: "unavailable",
@@ -2569,11 +2546,10 @@ func TestModelSummaries(t *testing.T) {
 					ControllerUUID:  "00000001-0000-0000-0000-000000000001",
 					IsController:    false,
 					ProviderType:    "test-provider",
-					DefaultSeries:   "",
 					Cloud:           "test-cloud",
 					CloudRegion:     "test-cloud-region",
 					CloudCredential: "test-cloud/alice@canonical.com/cred-1",
-					Owner:           "alice@canonical.com",
+					Qualifier:       coremodel.Qualifier("alice@canonical.com"),
 					Life:            "alive",
 					Status: base.Status{
 						Status: "unavailable",
@@ -2771,7 +2747,7 @@ func TestDestroyModel(t *testing.T) {
 var dumpModelTests = []struct {
 	name            string
 	env             string
-	dumpModel       func(ctx context.Context, tag names.ModelTag, simplified bool) (map[string]interface{}, error)
+	dumpModel       func(ctx context.Context, tag names.ModelTag) (map[string]interface{}, error)
 	dialError       error
 	username        string
 	uuid            string
@@ -2796,12 +2772,9 @@ var dumpModelTests = []struct {
 }, {
 	name: "Success",
 	env:  destroyModelTestEnv,
-	dumpModel: func(ctx context.Context, tag names.ModelTag, simplified bool) (map[string]interface{}, error) {
+	dumpModel: func(ctx context.Context, tag names.ModelTag) (map[string]interface{}, error) {
 		if tag.Id() != "00000002-0000-0000-0000-000000000001" {
 			return nil, errors.E("incorrect model uuid")
-		}
-		if simplified != true {
-			return nil, errors.E("invalid simplified")
 		}
 		return map[string]interface{}{}, nil
 	},
@@ -2811,7 +2784,7 @@ var dumpModelTests = []struct {
 }, {
 	name: "SuperuserSuccess",
 	env:  destroyModelTestEnv,
-	dumpModel: func(ctx context.Context, tag names.ModelTag, simplified bool) (map[string]interface{}, error) {
+	dumpModel: func(ctx context.Context, tag names.ModelTag) (map[string]interface{}, error) {
 		return map[string]interface{}{}, nil
 	},
 	username: "charlie@canonical.com",
@@ -2826,7 +2799,7 @@ var dumpModelTests = []struct {
 }, {
 	name: "APIError",
 	env:  destroyModelTestEnv,
-	dumpModel: func(ctx context.Context, tag names.ModelTag, simplified bool) (map[string]interface{}, error) {
+	dumpModel: func(ctx context.Context, tag names.ModelTag) (map[string]interface{}, error) {
 		return map[string]interface{}{}, errors.E("api error")
 	},
 	username:    "charlie@canonical.com",
@@ -3532,9 +3505,9 @@ var modelListTests = []struct {
 		env:      listModelsTestEnv,
 		username: "bob@canonical.com",
 		expectedUserModels: []base.UserModel{
-			{UUID: "00000002-0000-0000-0000-000000000001", Owner: "alice@canonical.com"},
-			{UUID: "00000002-0000-0000-0000-000000000002", Owner: "alice@canonical.com"},
-			{UUID: "00000002-0000-0000-0000-000000000003", Owner: "alice@canonical.com"},
+			{UUID: "00000002-0000-0000-0000-000000000001", Qualifier: coremodel.Qualifier("alice@canonical.com")},
+			{UUID: "00000002-0000-0000-0000-000000000002", Qualifier: coremodel.Qualifier("alice@canonical.com")},
+			{UUID: "00000002-0000-0000-0000-000000000003", Qualifier: coremodel.Qualifier("alice@canonical.com")},
 		},
 		listModelsMockByControllerName: map[string]func(context.Context) ([]base.UserModel, error){
 			"controller-1": func(ctx context.Context) ([]base.UserModel, error) {
@@ -3555,10 +3528,10 @@ var modelListTests = []struct {
 		env:      listModelsTestEnv,
 		username: "alice@canonical.com",
 		expectedUserModels: []base.UserModel{
-			{UUID: "00000002-0000-0000-0000-000000000001", Owner: "alice@canonical.com"},
-			{UUID: "00000002-0000-0000-0000-000000000002", Owner: "alice@canonical.com"},
-			{UUID: "00000002-0000-0000-0000-000000000003", Owner: "alice@canonical.com"},
-			{UUID: "00000002-0000-0000-0000-000000000004", Owner: "alice@canonical.com"},
+			{UUID: "00000002-0000-0000-0000-000000000001", Qualifier: coremodel.Qualifier("alice@canonical.com")},
+			{UUID: "00000002-0000-0000-0000-000000000002", Qualifier: coremodel.Qualifier("alice@canonical.com")},
+			{UUID: "00000002-0000-0000-0000-000000000003", Qualifier: coremodel.Qualifier("alice@canonical.com")},
+			{UUID: "00000002-0000-0000-0000-000000000004", Qualifier: coremodel.Qualifier("alice@canonical.com")},
 		},
 		listModelsMockByControllerName: map[string]func(context.Context) ([]base.UserModel, error){
 			"controller-1": func(ctx context.Context) ([]base.UserModel, error) {
@@ -3643,8 +3616,8 @@ func newDate(year int, month time.Month, day, hour, min, sec, nsec int, loc *tim
 	return &t
 }
 
-// newVersion wraps version.MustParse to return a *version.Number
-func newVersion(s string) *version.Number {
-	n := version.MustParse(s)
+// newVersion wraps semversion.MustParse to return a *semversion.Number
+func newVersion(s string) *semversion.Number {
+	n := semversion.MustParse(s)
 	return &n
 }

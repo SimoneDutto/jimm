@@ -16,8 +16,7 @@ import (
 	"github.com/frankban/quicktest/qtsuite"
 	gliderssh "github.com/gliderlabs/ssh"
 	jujucontroller "github.com/juju/juju/controller"
-	jujutesting "github.com/juju/juju/testing"
-	"github.com/juju/names/v5"
+	"github.com/juju/names/v6"
 	gossh "golang.org/x/crypto/ssh"
 
 	"github.com/canonical/jimm/v3/internal/db"
@@ -114,7 +113,8 @@ func (s *sshManagerSuite) Init(c *qt.C) {
 	attrs := map[string]interface{}{
 		"ssh-server-port": "17023",
 	}
-	cfg, err := jujucontroller.NewConfig(uuid, jujutesting.CACert, attrs)
+	// TODO-juju4: generate a real ca cert
+	cfg, err := jujucontroller.NewConfig(uuid, "", attrs)
 	c.Assert(err, qt.IsNil)
 	controllerService := mocks.ControllerService{
 		ControllerConfig_: func(ctx context.Context, controllerName string) (jujucontroller.Config, error) {
