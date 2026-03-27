@@ -15,7 +15,6 @@ import (
 	"github.com/juju/juju/api/base"
 	"github.com/juju/juju/core/instance"
 	"github.com/juju/juju/core/life"
-	"github.com/juju/juju/core/model"
 	coremodel "github.com/juju/juju/core/model"
 	"github.com/juju/juju/core/semversion"
 	jujurpc "github.com/juju/juju/rpc"
@@ -40,7 +39,7 @@ var addModelTests = []struct {
 	username            string
 	jimmAdmin           bool
 	// This cloudCredTag is used to manually populate a dummy cloud credential
-	// into JIMM's credential store and then applied onto args before adding a model.
+	// into JIMM's credential store and then applied onto args before adding a coremodel.
 	cloudCredTag names.CloudCredentialTag
 	args         juju.ModelCreateArgs
 	expectModel  dbmodel.Model
@@ -1509,9 +1508,9 @@ func convertParamsModelInfo(modelInfo jujuparams.ModelInfo) (base.ModelInfo, err
 	}
 	modelType := modelInfo.Type
 	if modelType == "" {
-		modelType = model.IAAS.String()
+		modelType = coremodel.IAAS.String()
 	}
-	result.Type = model.ModelType(modelType)
+	result.Type = coremodel.ModelType(modelType)
 	result.Status = base.Status{
 		Status: modelInfo.Status.Status,
 		Info:   modelInfo.Status.Info,
@@ -1663,7 +1662,7 @@ func TestGetModel(t *testing.T) {
 	c.Assert(err, qt.ErrorMatches, "failed to get model: model not found")
 }
 
-// Note that this env does not give the everyone user access to the model.
+// Note that this env does not give the everyone user access to the coremodel.
 const modelInfoTestEnv = `clouds:
 - name: test-cloud
   type: test-provider
@@ -1700,7 +1699,7 @@ models:
     access: read
 `
 
-// This env extends the one above to provide the everyone user with access to the model.
+// This env extends the one above to provide the everyone user with access to the coremodel.
 const modelInfoTestEnvWithEveryoneAccess = modelInfoTestEnv + `
   - user: everyone@external
     access: read

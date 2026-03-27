@@ -10,7 +10,6 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/juju/juju/api/jujuclient"
 	"github.com/juju/juju/cmd/modelcmd"
-
 	"go.uber.org/mock/gomock"
 
 	apiparams "github.com/canonical/jimm/v3/pkg/api/params"

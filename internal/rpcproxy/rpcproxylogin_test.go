@@ -33,7 +33,6 @@ func TestProxySocketsAdminFacade(t *testing.T) {
 		clientID     = "test-client-id"
 		clientSecret = "test-client-secret"
 	)
-
 	loginData, err := json.Marshal(params.LoginRequest{
 		AuthTag: names.NewUserTag("alice@wonderland.io").String(),
 		Token:   "dGVzdCB0b2tlbg==",
@@ -45,7 +44,6 @@ func TestProxySocketsAdminFacade(t *testing.T) {
 		Token:   "dGVzdCB0b2tlbg==",
 	})
 	c.Assert(err, qt.IsNil)
-
 	ccData, err := json.Marshal(apiparams.LoginWithClientCredentialsRequest{
 		ClientID:     clientID,
 		ClientSecret: clientSecret,

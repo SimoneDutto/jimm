@@ -13,7 +13,6 @@ import (
 	"github.com/juju/juju/cmd/cmd"
 	jujucmdcommon "github.com/juju/juju/cmd/juju/common"
 	"github.com/juju/juju/cmd/modelcmd"
-
 	"github.com/juju/juju/rpc/params"
 	"github.com/juju/names/v6"
 

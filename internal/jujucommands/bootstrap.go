@@ -14,7 +14,6 @@ import (
 	"github.com/juju/juju/api/jujuclient"
 	jujucloud "github.com/juju/juju/cloud"
 	"github.com/juju/juju/juju/osenv"
-
 	"github.com/juju/version/v2"
 )
 

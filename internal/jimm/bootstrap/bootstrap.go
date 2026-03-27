@@ -15,7 +15,6 @@ import (
 
 	"github.com/juju/juju/api/jujuclient"
 	"github.com/juju/juju/core/network"
-
 	jujuparams "github.com/juju/juju/rpc/params"
 	"github.com/juju/zaputil/zapctx"
 	"github.com/riverqueue/river/rivertype"

@@ -14,7 +14,6 @@ import (
 	"github.com/juju/juju/cmd/modelcmd"
 	"github.com/juju/juju/core/crossmodel"
 	"github.com/juju/juju/core/permission"
-
 	jujuparams "github.com/juju/juju/rpc/params"
 	"go.uber.org/mock/gomock"
 

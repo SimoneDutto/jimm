@@ -20,7 +20,6 @@ import (
 	"github.com/juju/juju/cmd/modelcmd"
 	"github.com/juju/juju/core/crossmodel"
 	coremodel "github.com/juju/juju/core/model"
-
 	jujuparams "github.com/juju/juju/rpc/params"
 	"github.com/juju/names/v6"
 	"gopkg.in/yaml.v3"

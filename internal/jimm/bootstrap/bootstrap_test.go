@@ -16,7 +16,6 @@ import (
 	"github.com/juju/juju/api/jujuclient"
 	jujucloud "github.com/juju/juju/cloud"
 	"github.com/juju/juju/core/network"
-
 	jujuparams "github.com/juju/juju/rpc/params"
 	"github.com/riverqueue/river/rivertype"
 	"go.uber.org/mock/gomock"

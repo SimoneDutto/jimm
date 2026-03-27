@@ -11,7 +11,6 @@ import (
 	"github.com/juju/juju/cloud"
 	"github.com/juju/juju/cmd/cmd/cmdtesting"
 	"github.com/juju/juju/cmd/modelcmd"
-
 	jujuparams "github.com/juju/juju/rpc/params"
 	"github.com/juju/names/v6"
 	cookiejar "github.com/juju/persistent-cookiejar"

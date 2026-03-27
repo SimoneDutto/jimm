@@ -24,7 +24,6 @@ import (
 	"github.com/juju/juju/core/output"
 	"github.com/juju/juju/environs"
 	"github.com/juju/juju/environs/config"
-
 	"github.com/juju/juju/rpc/params"
 	"github.com/juju/names/v6"
 

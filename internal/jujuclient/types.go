@@ -5,7 +5,6 @@ package jujuclient
 import (
 	"github.com/juju/juju/api/base"
 	"github.com/juju/juju/core/instance"
-	"github.com/juju/juju/core/model"
 	coremodel "github.com/juju/juju/core/model"
 	"github.com/juju/juju/rpc/params"
 	"github.com/juju/names/v4"
@@ -55,9 +54,9 @@ func convertParamsModelInfo(modelInfo params.ModelInfo) (ModelInfo, error) {
 	}
 	modelType := modelInfo.Type
 	if modelType == "" {
-		modelType = model.IAAS.String()
+		modelType = coremodel.IAAS.String()
 	}
-	result.Type = model.ModelType(modelType)
+	result.Type = coremodel.ModelType(modelType)
 	result.Status = base.Status{
 		Status: modelInfo.Status.Status,
 		Info:   modelInfo.Status.Info,

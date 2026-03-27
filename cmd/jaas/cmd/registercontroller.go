@@ -11,7 +11,6 @@ import (
 	jujucmd "github.com/juju/juju/cmd"
 	"github.com/juju/juju/cmd/cmd"
 	"github.com/juju/juju/cmd/modelcmd"
-
 	"sigs.k8s.io/yaml"
 
 	apiparams "github.com/canonical/jimm/v3/pkg/api/params"
@@ -181,6 +180,7 @@ func (c *registerControllerCommand) getControllerDetails(ctxt *cmd.Context) ([]b
 		info.PublicAddress = c.publicAddress
 	}
 
+	//nolint:gosec // we marshal the Password, and it's needed to send details to JIMM to register a controller.
 	data, err := yaml.Marshal(info)
 	if err != nil {
 		return nil, errors.Mask(err)

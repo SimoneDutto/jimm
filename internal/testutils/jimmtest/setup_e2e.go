@@ -22,7 +22,6 @@ import (
 	"github.com/juju/juju/cloud"
 	"github.com/juju/juju/cmd/juju/common"
 	"github.com/juju/juju/core/constraints"
-
 	"github.com/juju/juju/rpc/jsoncodec"
 	jujuparams "github.com/juju/juju/rpc/params"
 	"github.com/juju/names/v6"
@@ -68,7 +67,7 @@ func (s *JimmWithControllers) GetControllersConfig(c *qt.C) *ControllersConfig {
 		"%s environment variable is not set. "+
 			"Set it to the path of your controllers.yaml file or configure it in VS Code settings.",
 		ControllersConfigEnvVar))
-
+	//nolint:gosec
 	data, err := os.ReadFile(configPath)
 	c.Assert(err, qt.IsNil, qt.Commentf(
 		"failed to read controller config file: %s. "+

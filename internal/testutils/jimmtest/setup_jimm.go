@@ -75,7 +75,7 @@ func SetupJimmEnv(c *qt.C, opts ...SetupOption) JIMMEnv {
 	c.Cleanup(func() {
 		database.Close()
 	})
-
+	//nolint:gosec
 	params := jimmsvc.Params{
 		ControllerUUID:                ControllerUUID,
 		PrivateKey:                    "ly/dzsI9Nt/4JxUILQeAX79qZ4mygDiuYGqc2ZEiDEc=",
@@ -234,7 +234,7 @@ func (s *JIMMEnv) realAuthenticationService(c *qt.C, db *db.Database) *auth.Auth
 	c.Cleanup(func() {
 		sessionStore.Close()
 	})
-
+	//nolint:gosec
 	authSvc, err := auth.NewAuthenticationService(context.Background(), auth.AuthenticationServiceParams{
 		IssuerURL:           "http://localhost:8082/realms/jimm",
 		ClientID:            "jimm-device",

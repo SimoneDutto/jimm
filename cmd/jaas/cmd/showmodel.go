@@ -7,12 +7,11 @@ import (
 	"io"
 
 	"github.com/juju/gnuflag"
+	"github.com/juju/juju/api/jujuclient"
 	jujucmd "github.com/juju/juju/cmd"
 	"github.com/juju/juju/cmd/cmd"
 	"github.com/juju/juju/cmd/modelcmd"
 	"github.com/juju/juju/core/output"
-
-	"github.com/juju/juju/api/jujuclient"
 
 	apiparams "github.com/canonical/jimm/v3/pkg/api/params"
 )

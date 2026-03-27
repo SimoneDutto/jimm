@@ -734,6 +734,7 @@ func (p *clientProxy) handleAdminFacade(ctx context.Context, msg *message) (clie
 		if err != nil {
 			return errorFnc(err)
 		}
+		//nolint:gosec // we purposely want to send the session token here.
 		data, err := json.Marshal(apiparams.GetDeviceSessionTokenResponse{
 			SessionToken: sessionToken,
 		})

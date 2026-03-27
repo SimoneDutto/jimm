@@ -11,7 +11,6 @@ import (
 	jujucmd "github.com/juju/juju/cmd"
 	"github.com/juju/juju/cmd/cmd"
 	"github.com/juju/juju/cmd/modelcmd"
-
 	"github.com/juju/names/v6"
 
 	apiparams "github.com/canonical/jimm/v3/pkg/api/params"
