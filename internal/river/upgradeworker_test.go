@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/juju/juju/core/semversion"
 	"github.com/juju/version/v2"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverdatabasesql"
@@ -30,7 +31,7 @@ func TestUpgradeWorker(t *testing.T) {
 	testWorker := rivertest.NewWorker(c.TB, riverdatabasesql.New(sqlDb), nil, w)
 
 	upgradeManager.EXPECT().
-		UpgradeModel(gomock.Any(), "test-string", version.Number{Major: 2, Minor: 0, Patch: 0}).
+		UpgradeModel(gomock.Any(), "test-string", semversion.Number{Major: 2, Minor: 0, Patch: 0}).
 		Return(nil)
 
 	tx, err := sqlDb.Begin()

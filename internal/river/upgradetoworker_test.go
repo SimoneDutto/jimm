@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/juju/juju/core/semversion"
 	"github.com/juju/version/v2"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
@@ -40,7 +41,7 @@ func TestUpgradeToWorker_Success(t *testing.T) {
 		MigrateModel(gomock.Any(), gomock.Any(), "model-uuid", "target-controller").
 		Return(nil)
 	upgradeManager.EXPECT().
-		UpgradeModel(gomock.Any(), "model-uuid", version.MustParse("2.0.0")).
+		UpgradeModel(gomock.Any(), "model-uuid", semversion.MustParse("2.0.0")).
 		Return(nil)
 
 	sub, cancel := riverClient.Subscribe(river.EventKindJobCompleted)
@@ -80,7 +81,7 @@ func TestUpgradeToWorker_SuccessCanBeUpgradedToAgain(t *testing.T) {
 		MigrateModel(gomock.Any(), gomock.Any(), "model-uuid", "target-controller").
 		Return(nil)
 	upgradeManager.EXPECT().
-		UpgradeModel(gomock.Any(), "model-uuid", version.MustParse("2.0.0")).
+		UpgradeModel(gomock.Any(), "model-uuid", semversion.MustParse("2.0.0")).
 		Return(nil)
 
 	sub, cancel := riverClient.Subscribe(river.EventKindJobCompleted)
@@ -104,7 +105,7 @@ func TestUpgradeToWorker_SuccessCanBeUpgradedToAgain(t *testing.T) {
 		MigrateModel(gomock.Any(), gomock.Any(), "model-uuid", "target-controller2").
 		Return(nil)
 	upgradeManager.EXPECT().
-		UpgradeModel(gomock.Any(), "model-uuid", version.MustParse("3.0.0")).
+		UpgradeModel(gomock.Any(), "model-uuid", semversion.MustParse("3.0.0")).
 		Return(nil)
 
 	insRes, err = riverClient.Insert(ctx, rivertypes.UpgradeToArgs{
@@ -203,8 +204,8 @@ func TestUpgradeToWorker_UpgradeFails(t *testing.T) {
 
 	attempt := 0
 	upgradeManager.EXPECT().
-		UpgradeModel(gomock.Any(), "model-uuid", version.MustParse("2.0.0")).
-		DoAndReturn(func(context.Context, string, version.Number) error {
+		UpgradeModel(gomock.Any(), "model-uuid", semversion.MustParse("2.0.0")).
+		DoAndReturn(func(context.Context, string, semversion.Number) error {
 			attempt++
 			return fmt.Errorf("unexpected-error-%d", attempt)
 		}).
@@ -261,8 +262,8 @@ func TestUpgradeToWorker_SuccessAfterTransientFailures(t *testing.T) {
 
 	upAttempt := 0
 	upgradeManager.EXPECT().
-		UpgradeModel(gomock.Any(), "model-uuid", version.MustParse("2.0.0")).
-		DoAndReturn(func(context.Context, string, version.Number) error {
+		UpgradeModel(gomock.Any(), "model-uuid", semversion.MustParse("2.0.0")).
+		DoAndReturn(func(context.Context, string, semversion.Number) error {
 			upAttempt++
 			if upAttempt == 1 {
 				return errors.New("upgrade-transient")
@@ -322,7 +323,7 @@ func TestUpgradeToWorker_EnsureCancellingSupervisorCancelsSpawnedMigrateJob(t *t
 		})
 
 	upgradeManager.EXPECT().
-		UpgradeModel(gomock.Any(), "model-uuid", version.MustParse("2.0.0")).
+		UpgradeModel(gomock.Any(), "model-uuid", semversion.MustParse("2.0.0")).
 		Return(nil)
 
 	sub, cancel := riverClient.Subscribe(river.EventKindJobFailed, river.EventKindJobCompleted)
@@ -396,7 +397,7 @@ func TestUpgradeToWorker_SupervisorHandlesCrashMidway(t *testing.T) {
 		})
 
 	upgradeManager.EXPECT().
-		UpgradeModel(gomock.Any(), "model-uuid", version.MustParse("2.0.0")).
+		UpgradeModel(gomock.Any(), "model-uuid", semversion.MustParse("2.0.0")).
 		Return(nil)
 
 	sub, cancel := riverClient.Subscribe(river.EventKindJobCompleted)

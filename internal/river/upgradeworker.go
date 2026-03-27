@@ -6,6 +6,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/juju/juju/core/semversion"
 	"github.com/juju/version/v2"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
@@ -63,7 +64,12 @@ type upgradeWorker struct {
 
 // Work performs the upgrade operation receiving the job with UpgradeArgs.
 func (w *upgradeWorker) Work(ctx context.Context, job *river.Job[upgradeWorkerArgs]) error {
-	err := w.upgradeManager.UpgradeModel(ctx, job.Args.ModelUUID, job.Args.TargetVersion)
+	targetVersion, err := semversion.Parse(job.Args.TargetVersion.String())
+	if err != nil {
+		return err
+	}
+
+	err = w.upgradeManager.UpgradeModel(ctx, job.Args.ModelUUID, targetVersion)
 	if err != nil {
 		return err
 	}
