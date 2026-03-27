@@ -105,8 +105,6 @@ models:
   users:
   - user: alice@canonical.com
     access: admin
-  sla:
-    level: unsupported
   agent-version: 1.2.3
 `
 
@@ -448,7 +446,6 @@ func TestQueryModelsJq(t *testing.T) {
 				},
 				"name": "model-1",
 				"region": "localhost",
-				"sla": "unsupported",
 				"type": "caas",
 				"version": "2.9.37"
 			}
@@ -463,7 +460,6 @@ func TestQueryModelsJq(t *testing.T) {
 				},
 				"name": "model-2",
 				"region": "localhost",
-				"sla": "unsupported",
 				"type": "caas",
 				"version": "2.9.37"
 			}
@@ -478,7 +474,6 @@ func TestQueryModelsJq(t *testing.T) {
 				},
 				"name": "model-3",
 				"region": "localhost",
-				"sla": "unsupported",
 				"type": "caas",
 				"version": "2.9.37"
 			}

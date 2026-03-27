@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/juju/juju/core/semversion"
-	"github.com/juju/version/v2"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 
@@ -28,8 +27,8 @@ func newUpgradeWorker(upgradeManager UpgradeManager) (*upgradeWorker, error) {
 type upgradeWorkerArgs struct {
 	// ModelUUID is the model UUID to migrate. We treat this as unique to prevent
 	// multiple concurrent migrations of the same model to many controllers.
-	ModelUUID     string         `json:"model-uuid" river:"unique"`
-	TargetVersion version.Number `json:"target-version"`
+	ModelUUID     string            `json:"model-uuid" river:"unique"`
+	TargetVersion semversion.Number `json:"target-version"`
 }
 
 // Kind returns the kind of the job.

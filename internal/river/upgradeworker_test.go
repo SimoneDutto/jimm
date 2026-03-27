@@ -8,7 +8,6 @@ import (
 
 	qt "github.com/frankban/quicktest"
 	"github.com/juju/juju/core/semversion"
-	"github.com/juju/version/v2"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverdatabasesql"
 	"github.com/riverqueue/river/rivertest"
@@ -39,7 +38,7 @@ func TestUpgradeWorker(t *testing.T) {
 	defer func() { _ = tx.Rollback() }()
 
 	result, err := testWorker.Work(c.Context(), c.TB, tx, upgradeWorkerArgs{
-		ModelUUID: "test-string", TargetVersion: version.MustParse("2.0.0")}, nil)
+		ModelUUID: "test-string", TargetVersion: semversion.MustParse("2.0.0")}, nil)
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.EventKind, qt.Equals, river.EventKindJobCompleted)
 	c.Assert(result.Job.State, qt.Equals, rivertype.JobStateCompleted)
@@ -68,7 +67,7 @@ func TestUpgradeWorker_Error(t *testing.T) {
 	defer func() { _ = tx.Rollback() }()
 
 	result, err := testWorker.Work(c.Context(), c.TB, tx, upgradeWorkerArgs{
-		ModelUUID: "test-string", TargetVersion: version.MustParse("2.0.0")}, nil)
+		ModelUUID: "test-string", TargetVersion: semversion.MustParse("2.0.0")}, nil)
 	c.Assert(err, qt.ErrorMatches, "some-error")
 	c.Assert(result.EventKind, qt.Equals, river.EventKindJobFailed)
 	c.Assert(result.Job.State, qt.Equals, rivertype.JobStateAvailable)

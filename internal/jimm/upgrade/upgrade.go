@@ -17,7 +17,6 @@ import (
 	jujuparams "github.com/juju/juju/rpc/params"
 	"github.com/juju/names/v6"
 	"github.com/juju/retry"
-	"github.com/juju/version/v2"
 	"github.com/juju/zaputil/zapctx"
 	"github.com/riverqueue/river/rivertype"
 	"go.uber.org/zap"
@@ -181,7 +180,7 @@ func (u *UpgradeManager) UpgradeTo(ctx context.Context, user *openfga.User, mode
 		return 0, errors.E(errors.CodeBadRequest, fmt.Sprintf("target controller %s is not a valid migration target for this model", targetControllerName))
 	}
 
-	targetVersion, err := version.Parse(targetController.AgentVersion)
+	targetVersion, err := semversion.Parse(targetController.AgentVersion)
 	if err != nil {
 		return 0, fmt.Errorf("failed to parse target controller version: %w", err)
 	}

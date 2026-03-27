@@ -11,7 +11,6 @@ import (
 
 	qt "github.com/frankban/quicktest"
 	"github.com/juju/juju/core/semversion"
-	"github.com/juju/version/v2"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 	gomock "go.uber.org/mock/gomock"
@@ -49,7 +48,7 @@ func TestUpgradeToWorker_Success(t *testing.T) {
 
 	insRes, err := riverClient.Insert(ctx, rivertypes.UpgradeToArgs{
 		ModelUUID:            "model-uuid",
-		TargetVersion:        version.MustParse("2.0.0"),
+		TargetVersion:        semversion.MustParse("2.0.0"),
 		Username:             username,
 		TargetControllerName: "target-controller",
 	}, nil)
@@ -89,7 +88,7 @@ func TestUpgradeToWorker_SuccessCanBeUpgradedToAgain(t *testing.T) {
 
 	insRes, err := riverClient.Insert(ctx, rivertypes.UpgradeToArgs{
 		ModelUUID:            "model-uuid",
-		TargetVersion:        version.MustParse("2.0.0"),
+		TargetVersion:        semversion.MustParse("2.0.0"),
 		Username:             username,
 		TargetControllerName: "target-controller",
 	}, nil)
@@ -110,7 +109,7 @@ func TestUpgradeToWorker_SuccessCanBeUpgradedToAgain(t *testing.T) {
 
 	insRes, err = riverClient.Insert(ctx, rivertypes.UpgradeToArgs{
 		ModelUUID:            "model-uuid",
-		TargetVersion:        version.MustParse("3.0.0"),
+		TargetVersion:        semversion.MustParse("3.0.0"),
 		Username:             username,
 		TargetControllerName: "target-controller2",
 	}, nil)
@@ -168,7 +167,7 @@ func TestUpgradeToWorker_MigrationFails(t *testing.T) {
 
 	insRes, err := riverClient.Insert(ctx, rivertypes.UpgradeToArgs{
 		ModelUUID:            "model-uuid",
-		TargetVersion:        version.MustParse("2.0.0"),
+		TargetVersion:        semversion.MustParse("2.0.0"),
 		Username:             username,
 		TargetControllerName: "target-controller",
 	}, &river.InsertOpts{MaxAttempts: 1})
@@ -216,7 +215,7 @@ func TestUpgradeToWorker_UpgradeFails(t *testing.T) {
 
 	insRes, err := riverClient.Insert(ctx, rivertypes.UpgradeToArgs{
 		ModelUUID:            "model-uuid",
-		TargetVersion:        version.MustParse("2.0.0"),
+		TargetVersion:        semversion.MustParse("2.0.0"),
 		Username:             username,
 		TargetControllerName: "target-controller",
 	}, &river.InsertOpts{MaxAttempts: 1})
@@ -277,7 +276,7 @@ func TestUpgradeToWorker_SuccessAfterTransientFailures(t *testing.T) {
 
 	insRes, err := riverClient.Insert(ctx, rivertypes.UpgradeToArgs{
 		ModelUUID:            "model-uuid",
-		TargetVersion:        version.MustParse("2.0.0"),
+		TargetVersion:        semversion.MustParse("2.0.0"),
 		Username:             username,
 		TargetControllerName: "target-controller",
 	}, nil)
@@ -331,7 +330,7 @@ func TestUpgradeToWorker_EnsureCancellingSupervisorCancelsSpawnedMigrateJob(t *t
 
 	_, err := riverClient.Insert(ctx, rivertypes.UpgradeToArgs{
 		ModelUUID:            "model-uuid",
-		TargetVersion:        version.MustParse("2.0.0"),
+		TargetVersion:        semversion.MustParse("2.0.0"),
 		Username:             username,
 		TargetControllerName: "target-controller",
 	}, nil)
@@ -405,7 +404,7 @@ func TestUpgradeToWorker_SupervisorHandlesCrashMidway(t *testing.T) {
 
 	insRes, err := riverClient.Insert(ctx, rivertypes.UpgradeToArgs{
 		ModelUUID:            "model-uuid",
-		TargetVersion:        version.MustParse("2.0.0"),
+		TargetVersion:        semversion.MustParse("2.0.0"),
 		Username:             username,
 		TargetControllerName: "target-controller",
 	}, nil)

@@ -3,6 +3,8 @@
 package jujuapi
 
 import (
+	"fmt"
+
 	"github.com/juju/juju/api/base"
 	"github.com/juju/juju/cloud"
 	jujuparams "github.com/juju/juju/rpc/params"
@@ -70,8 +72,14 @@ func toAddModelArgs(args jujuparams.ModelCreateArgs, authenticatedUser names.Use
 		}
 		a.Cloud = ct
 	}
-
-	a.Owner = authenticatedUser
+	if args.Qualifier != "" {
+		if !names.IsValidUser(args.Qualifier) {
+			return nil, errors.New(fmt.Sprintf("%q is not a valid user", args.Qualifier))
+		}
+		a.Owner = names.NewUserTag(args.Qualifier)
+	} else {
+		a.Owner = authenticatedUser
+	}
 	if args.CloudCredentialTag != "" {
 		ct, err := names.ParseCloudCredentialTag(args.CloudCredentialTag)
 		if err != nil {

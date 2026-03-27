@@ -1046,7 +1046,7 @@ func TestImport_Success(t *testing.T) {
 			desc, err := descriptionv9.Deserialize(bytes)
 			c.Check(err, qt.IsNil)
 			c.Check(desc.Tag().Id(), qt.Equals, migratingModelUUID)
-			c.Check(desc.Owner(), qt.Equals, names.NewUserTag("alice@canonical.com"))
+			c.Check(desc.Owner(), qt.Equals, namesv5.NewUserTag("alice@canonical.com"))
 			c.Check(desc.Users(), qt.HasLen, 0)
 			c.Check(desc.CloudCredential(), qt.Not(qt.IsNil))
 			c.Check(desc.CloudCredential().Name(), qt.Equals, "test-cred")

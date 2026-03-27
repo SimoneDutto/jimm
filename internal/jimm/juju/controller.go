@@ -371,6 +371,10 @@ func (m *modelImporter) fetchModelInfo(ctx context.Context, user *openfga.User, 
 	if err != nil {
 		return err
 	}
+	if !names.IsValidUser(modelInfo.Qualifier.String()) {
+		return errors.E(errors.CodeBadRequest, "invalid model owner")
+	}
+	m.originalOwner = names.NewUserTag(modelInfo.Qualifier.String())
 	m.modelInfo = modelInfo.ModelInfo
 
 	listedOffers, err := api.ListApplicationOffers(ctx, []crossmodel.ApplicationOfferFilter{

@@ -56,11 +56,11 @@ func TestModelCreateArgs(t *testing.T) {
 		about: "invalid owner tag",
 		args: jujuparams.ModelCreateArgs{
 			Name:               "test-model",
-			Qualifier:          "alice@canonical.com",
+			Qualifier:          "alice@canonical.com@canonical.com",
 			CloudTag:           names.NewCloudTag("test-cloud").String(),
 			CloudCredentialTag: names.NewCloudCredentialTag("test-cloud/alice/test-credential-1").String(),
 		},
-		expectedError: `"alice@canonical.com" is not a valid tag`,
+		expectedError: `"alice@canonical.com@canonical.com" is not a valid user`,
 	}, {
 		about: "invalid cloud tag",
 		args: jujuparams.ModelCreateArgs{
@@ -202,7 +202,7 @@ func TestToModelInfo(t *testing.T) {
 	c.Assert(got.CloudTag, qt.Equals, names.NewCloudTag(modelInfo.Cloud).String())
 	c.Assert(got.CloudRegion, qt.Equals, modelInfo.CloudRegion)
 	c.Assert(got.CloudCredentialTag, qt.Equals, names.NewCloudCredentialTag(modelInfo.CloudCredential).String())
-	c.Assert(got.Qualifier, qt.Equals, modelInfo.Qualifier)
+	c.Assert(got.Qualifier, qt.Equals, modelInfo.Qualifier.String())
 	c.Assert(got.Life, qt.Equals, modelInfo.Life)
 	c.Assert(got.ProviderType, qt.Equals, modelInfo.ProviderType)
 	c.Assert(got.AgentVersion, qt.Equals, modelInfo.AgentVersion)

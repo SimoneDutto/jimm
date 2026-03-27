@@ -519,7 +519,7 @@ func TestAddModelToController(t *testing.T) {
 	req := apiparams.AddModelToControllerRequest{
 		ModelCreateArgs: jujuparams.ModelCreateArgs{
 			Name:               "mymodel",
-			Qualifier:          "user-alice@canonical.com",
+			Qualifier:          "alice@canonical.com",
 			CloudTag:           "cloud-openstack",
 			CloudRegion:        "region-1",
 			CloudCredentialTag: "cloudcred-openstack/alice/mycred",

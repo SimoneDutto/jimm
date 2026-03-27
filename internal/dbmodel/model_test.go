@@ -246,7 +246,7 @@ func TestToJujuModel(t *testing.T) {
 	c.Check(jm, qt.DeepEquals, jujuparams.Model{
 		Name:      "test-model",
 		UUID:      "00000001-0000-0000-0000-0000-000000000001",
-		Qualifier: "user-bob@canonical.com",
+		Qualifier: "bob@canonical.com",
 	})
 }
 

@@ -113,8 +113,9 @@ func (s *sshManagerSuite) Init(c *qt.C) {
 	attrs := map[string]interface{}{
 		"ssh-server-port": "17023",
 	}
-	// TODO-juju4: generate a real ca cert
-	cfg, err := jujucontroller.NewConfig(uuid, "", attrs)
+	certPEM, _, err := jimmtest.GenerateTestCACert()
+	c.Assert(err, qt.IsNil)
+	cfg, err := jujucontroller.NewConfig(uuid, certPEM, attrs)
 	c.Assert(err, qt.IsNil)
 	controllerService := mocks.ControllerService{
 		ControllerConfig_: func(ctx context.Context, user *openfga.User, controllerName string) (jujucontroller.Config, error) {
