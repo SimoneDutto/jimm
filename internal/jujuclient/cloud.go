@@ -24,7 +24,7 @@ import (
 // checks a single credential is safe and is is not suitable when updating
 // the cloud's credential across many controllers.
 func (c Connection) CheckCredentialModels(ctx context.Context, cred jujuparams.TaggedCredential) ([]jujuparams.UpdateCredentialResult, error) {
-	return cloudapi.NewClient(&c).CheckCredentialsModels(jujuparams.TaggedCredentials{Credentials: []jujuparams.TaggedCredential{cred}})
+	return cloudapi.NewClient(&c).CheckCredentialsModels(ctx, jujuparams.TaggedCredentials{Credentials: []jujuparams.TaggedCredential{cred}})
 }
 
 // UpdateCloudsCredentialForce updates the given credential on the controller.
@@ -37,6 +37,7 @@ func (c Connection) CheckCredentialModels(ctx context.Context, cred jujuparams.T
 // then CheckCredentialModels should be used first.
 func (c Connection) UpdateCloudsCredentialForce(ctx context.Context, cred jujuparams.TaggedCredential) ([]jujuparams.UpdateCredentialResult, error) {
 	return cloudapi.NewClient(&c).UpdateCloudsCredentials(
+		ctx,
 		map[string]jujucloud.Credential{
 			cred.Tag: jujucloud.NewCredential(jujucloud.AuthType(cred.Credential.AuthType), cred.Credential.Attributes),
 		},
@@ -50,7 +51,7 @@ func (c Connection) UpdateCloudsCredentialForce(ctx context.Context, cred jujupa
 // to check that removing the credential will break existing models then
 // CheckCredentialModels should be used first.
 func (c Connection) RevokeCredential(ctx context.Context, cred names.CloudCredentialTag) error {
-	return cloudapi.NewClient(&c).RevokeCredential(cred, true)
+	return cloudapi.NewClient(&c).RevokeCredential(ctx, cred, true)
 }
 
 // Cloud retrieves information about the given cloud. Cloud uses the

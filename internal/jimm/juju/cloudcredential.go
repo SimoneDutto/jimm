@@ -9,7 +9,6 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/juju/juju/api/common/cloudcred"
 	jujuparams "github.com/juju/juju/rpc/params"
 	"github.com/juju/names/v6"
 
@@ -331,12 +330,13 @@ func (j *JujuManager) GetCloudCredentialAttributes(ctx context.Context, user *op
 		return
 	}
 
-	for k := range attrs {
-		if !cloudcred.IsVisibleAttribute(cred.Cloud.Type, cred.AuthType, k) {
-			delete(attrs, k)
-			redacted = append(redacted, k)
-		}
-	}
+	// TODO Juju4: once we merge latest ales' pr in Juju 4, we can reinstatiate this.
+	// for k := range attrs {
+	// 	if !cloudcred.IsVisibleAttribute(cred.Cloud.Type, cred.AuthType, k) {
+	// 		delete(attrs, k)
+	// 		redacted = append(redacted, k)
+	// 	}
+	// }
 	sort.Strings(redacted)
 
 	return

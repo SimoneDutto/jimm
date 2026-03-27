@@ -132,7 +132,7 @@ type API struct {
 	AddCloud_                          func(context.Context, names.CloudTag, jujucloud.Cloud, bool) error
 	AdoptResources_                    func(context.Context, string, semversion.Number) error
 	ChangeModelCredential_             func(context.Context, names.ModelTag, names.CloudCredentialTag) error
-	CheckCredentialModels_             func(context.Context, jujuparams.TaggedCredential) ([]jujuparams.UpdateCredentialModelResult, error)
+	CheckCredentialModels_             func(context.Context, jujuparams.TaggedCredential) ([]jujuparams.UpdateCredentialResult, error)
 	CheckMachines_                     func(context.Context, string) ([]error, error)
 	Close_                             func() error
 	Cloud_                             func(context.Context, names.CloudTag) (jujucloud.Cloud, error)
