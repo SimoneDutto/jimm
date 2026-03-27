@@ -16,7 +16,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/juju/juju/api"
 	jujuparams "github.com/juju/juju/rpc/params"
-	"github.com/juju/names/v5"
+	"github.com/juju/names/v6"
 	"github.com/juju/zaputil/zapctx"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
