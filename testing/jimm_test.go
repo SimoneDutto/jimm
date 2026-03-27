@@ -18,7 +18,7 @@ import (
 	"github.com/juju/juju/api/client/modelmanager"
 	"github.com/juju/juju/cloud"
 	jujuparams "github.com/juju/juju/rpc/params"
-	"github.com/juju/names/v5"
+	"github.com/juju/names/v6"
 
 	"github.com/canonical/jimm/v3/internal/dbmodel"
 	"github.com/canonical/jimm/v3/internal/errors"
@@ -39,7 +39,7 @@ func TestListControllersAdmin(t *testing.T) {
 	defer conn.Close()
 
 	client := api.NewClient(conn)
-	cis, err := client.ListControllers()
+	cis, err := client.ListControllers(t.Context())
 	c.Assert(err, qt.Equals, nil)
 	confs := s.GetControllersConfig(c)
 	controllerInfos := make([]apiparams.ControllerInfo, 0, len(confs.Controllers))
@@ -137,7 +137,7 @@ func TestListControllersOrdinaryUser(t *testing.T) {
 	defer conn.Close()
 
 	client := api.NewClient(conn)
-	cis, err := client.ListControllers()
+	cis, err := client.ListControllers(t.Context())
 	c.Assert(err, qt.Equals, nil)
 	c.Check(cis, qt.DeepEquals, []apiparams.ControllerInfo{
 		{
@@ -168,7 +168,7 @@ func TestModelGet(t *testing.T) {
 
 	client := modelconfig.NewClient(conn)
 
-	jimmCfg, err := client.ModelGet()
+	jimmCfg, err := client.ModelGet(t.Context())
 	c.Assert(err, qt.IsNil)
 
 	v, ok := jimmCfg["agent-version"]
@@ -186,7 +186,7 @@ func TestListControllersUnauthorized(t *testing.T) {
 	defer conn.Close()
 
 	client := api.NewClient(conn)
-	cis, err := client.ListControllers()
+	cis, err := client.ListControllers(t.Context())
 	c.Assert(err, qt.Equals, nil)
 	c.Check(cis, qt.DeepEquals, []apiparams.ControllerInfo{})
 }
@@ -228,7 +228,7 @@ func TestAddControllerPublicAddressWithoutPort(t *testing.T) {
 	}}
 
 	for _, test := range tests {
-		ci, err := client.AddController(&test.req)
+		ci, err := client.AddController(t.Context(), &test.req)
 		c.Assert(err, qt.ErrorMatches, test.expectedError)
 		c.Check(ci, qt.DeepEquals, apiparams.ControllerInfo{})
 	}
@@ -254,7 +254,7 @@ func TestAddController(t *testing.T) {
 		Password:      info.Password,
 	}
 
-	ci, err := client.AddController(&acr)
+	ci, err := client.AddController(t.Context(), &acr)
 	c.Assert(err, qt.Equals, nil)
 	ciExpected := apiparams.ControllerInfo{
 		Name:          acr.Name,
@@ -270,12 +270,12 @@ func TestAddController(t *testing.T) {
 
 	assertControllerInfos(c, []apiparams.ControllerInfo{ci}, []apiparams.ControllerInfo{ciExpected}, s.GetControllersConfig(c))
 
-	_, err = client.AddController(&acr)
+	_, err = client.AddController(t.Context(), &acr)
 	c.Assert(err, qt.ErrorMatches, `failed to add controller: controller "controller-2" already exists \(already exists\)`)
 	c.Assert(jujuparams.IsCodeAlreadyExists(err), qt.Equals, true)
 
 	acr.Name = "jimm"
-	_, err = client.AddController(&acr)
+	_, err = client.AddController(t.Context(), &acr)
 	c.Assert(err, qt.ErrorMatches, `cannot add a controller with name "jimm" \(bad request\)`)
 	c.Assert(jujuparams.IsBadRequest(err), qt.Equals, true)
 
@@ -283,7 +283,7 @@ func TestAddController(t *testing.T) {
 	defer conn.Close()
 	client = api.NewClient(conn)
 	acr.Name = "controller-2"
-	_, err = client.AddController(&acr)
+	_, err = client.AddController(t.Context(), &acr)
 	c.Assert(err, qt.ErrorMatches, `unauthorized \(unauthorized access\)`)
 	c.Assert(jujuparams.IsCodeUnauthorized(err), qt.Equals, true)
 }
@@ -309,11 +309,11 @@ func TestRemoveAndAddController(t *testing.T) {
 		Password:      info.Password,
 	}
 
-	ci, err := client.AddController(&acr)
+	ci, err := client.AddController(t.Context(), &acr)
 	c.Assert(err, qt.Equals, nil)
-	_, err = client.RemoveController(&apiparams.RemoveControllerRequest{Name: acr.Name, Force: true})
+	_, err = client.RemoveController(t.Context(), &apiparams.RemoveControllerRequest{Name: acr.Name, Force: true})
 	c.Assert(err, qt.Equals, nil)
-	ciNew, err := client.AddController(&acr)
+	ciNew, err := client.AddController(t.Context(), &acr)
 	c.Assert(err, qt.Equals, nil)
 	c.Assert(ci, qt.DeepEquals, ciNew)
 }
@@ -339,10 +339,10 @@ func TestAddControllerCustomTLSHostname(t *testing.T) {
 		TLSHostname:   "foo",
 	}
 
-	_, err := client.AddController(&acr)
+	_, err := client.AddController(t.Context(), &acr)
 	c.Assert(err, qt.ErrorMatches, "failed to add controller: failed to dial the controller.*")
 	acr.TLSHostname = "juju-apiserver"
-	ci, err := client.AddController(&acr)
+	ci, err := client.AddController(t.Context(), &acr)
 	c.Assert(err, qt.IsNil)
 	ciExpected := apiparams.ControllerInfo{
 		Name:          acr.Name,
@@ -368,7 +368,7 @@ func TestRemoveController(t *testing.T) {
 
 	name, conf := s.GetOneControllerConfig(c)
 
-	_, err := client.RemoveController(&apiparams.RemoveControllerRequest{
+	_, err := client.RemoveController(t.Context(), &apiparams.RemoveControllerRequest{
 		Name: name,
 	})
 	c.Check(err, qt.ErrorMatches, `controller is still alive \(still alive\)`)
@@ -378,13 +378,13 @@ func TestRemoveController(t *testing.T) {
 	defer conn2.Close()
 	client2 := api.NewClient(conn2)
 
-	_, err = client2.RemoveController(&apiparams.RemoveControllerRequest{
+	_, err = client2.RemoveController(t.Context(), &apiparams.RemoveControllerRequest{
 		Name: name,
 	})
 	c.Check(err, qt.ErrorMatches, `unauthorized \(unauthorized access\)`)
 	c.Check(jujuparams.ErrCode(err), qt.Equals, jujuparams.CodeUnauthorized)
 
-	ci, err := client.RemoveController(&apiparams.RemoveControllerRequest{
+	ci, err := client.RemoveController(t.Context(), &apiparams.RemoveControllerRequest{
 		Name:  name,
 		Force: true,
 	})
@@ -414,7 +414,7 @@ func TestSetControllerDeprecated(t *testing.T) {
 
 	name, conf := s.GetOneControllerConfig(c)
 
-	ci, err := client.SetControllerDeprecated(&apiparams.SetControllerDeprecatedRequest{
+	ci, err := client.SetControllerDeprecated(t.Context(), &apiparams.SetControllerDeprecatedRequest{
 		Name:       name,
 		Deprecated: true,
 	})
@@ -432,7 +432,7 @@ func TestSetControllerDeprecated(t *testing.T) {
 	}
 	assertControllerInfos(c, []apiparams.ControllerInfo{ci}, []apiparams.ControllerInfo{ciExpected}, s.GetControllersConfig(c))
 
-	ci, err = client.SetControllerDeprecated(&apiparams.SetControllerDeprecatedRequest{
+	ci, err = client.SetControllerDeprecated(t.Context(), &apiparams.SetControllerDeprecatedRequest{
 		Name:       name,
 		Deprecated: false,
 	})
@@ -451,7 +451,7 @@ func TestSetControllerDeprecated(t *testing.T) {
 	}
 	assertControllerInfos(c, []apiparams.ControllerInfo{ci}, []apiparams.ControllerInfo{ciExpected}, s.GetControllersConfig(c))
 
-	_, err = client.SetControllerDeprecated(&apiparams.SetControllerDeprecatedRequest{
+	_, err = client.SetControllerDeprecated(t.Context(), &apiparams.SetControllerDeprecatedRequest{
 		Name:       "controller-2",
 		Deprecated: true,
 	})
@@ -461,7 +461,7 @@ func TestSetControllerDeprecated(t *testing.T) {
 	conn = s.Open(c, nil, "bob", nil)
 	defer conn.Close()
 	client = api.NewClient(conn)
-	_, err = client.SetControllerDeprecated(&apiparams.SetControllerDeprecatedRequest{
+	_, err = client.SetControllerDeprecated(t.Context(), &apiparams.SetControllerDeprecatedRequest{
 		Name:       "controller-1",
 		Deprecated: true,
 	})
@@ -478,20 +478,20 @@ func TestAuditLog(t *testing.T) {
 	defer conn.Close()
 	client := api.NewClient(conn)
 
-	_, err := client.FindAuditEvents(&apiparams.FindAuditEventsRequest{})
+	_, err := client.FindAuditEvents(t.Context(), &apiparams.FindAuditEventsRequest{})
 	c.Check(err, qt.ErrorMatches, `unauthorized \(unauthorized access\)`)
 	c.Check(jujuparams.ErrCode(err), qt.Equals, jujuparams.CodeUnauthorized)
 
 	mmclient := modelmanager.NewClient(conn)
 	zeroDuration := time.Duration(0)
-	err = mmclient.DestroyModel(model.ResourceTag(), nil, nil, nil, &zeroDuration)
+	err = mmclient.DestroyModel(t.Context(), model.ResourceTag(), nil, nil, nil, &zeroDuration)
 	c.Assert(err, qt.Equals, nil)
 
 	conn2 := s.Open(c, nil, "alice", nil)
 	defer conn2.Close()
 	client2 := api.NewClient(conn2)
 
-	evs, err := client2.FindAuditEvents(&apiparams.FindAuditEventsRequest{})
+	evs, err := client2.FindAuditEvents(t.Context(), &apiparams.FindAuditEventsRequest{})
 	c.Assert(err, qt.Equals, nil)
 
 	c.Assert(len(evs.Events), qt.Equals, 9)
@@ -555,7 +555,7 @@ func TestAuditLog(t *testing.T) {
 	c.Check(evs, qt.DeepEquals, expectedEvents)
 
 	// alice can grant bob access to audit log entries
-	err = client2.GrantAuditLogAccess(&apiparams.AuditLogAccessRequest{
+	err = client2.GrantAuditLogAccess(t.Context(), &apiparams.AuditLogAccessRequest{
 		UserTag: names.NewUserTag("bob@canonical.com").String(),
 	})
 	c.Assert(err, qt.Equals, nil)
@@ -565,7 +565,7 @@ func TestAuditLog(t *testing.T) {
 	defer conn3.Close()
 	client3 := api.NewClient(conn3)
 
-	evs, err = client3.FindAuditEvents(&apiparams.FindAuditEventsRequest{})
+	evs, err = client3.FindAuditEvents(t.Context(), &apiparams.FindAuditEventsRequest{})
 	evs.Events = truncatedEvents
 	c.Assert(err, qt.Equals, nil)
 	c.Check(evs, qt.DeepEquals, expectedEvents)
@@ -578,7 +578,7 @@ func TestAuditLogFilterByMethod(t *testing.T) {
 	conn := s.Open(c, nil, "alice", nil)
 	defer conn.Close()
 	client := api.NewClient(conn)
-	evs, err := client.FindAuditEvents(&apiparams.FindAuditEventsRequest{Method: "Deploy"})
+	evs, err := client.FindAuditEvents(t.Context(), &apiparams.FindAuditEventsRequest{Method: "Deploy"})
 	c.Assert(err, qt.Equals, nil)
 	c.Assert(len(evs.Events), qt.Equals, 0)
 }
@@ -593,12 +593,12 @@ func TestFullModelStatus(t *testing.T) {
 	defer conn.Close()
 	client := api.NewClient(conn)
 
-	_, err := client.FullModelStatus(&apiparams.FullModelStatusRequest{
+	_, err := client.FullModelStatus(t.Context(), &apiparams.FullModelStatusRequest{
 		ModelTag: "invalid-model-tag",
 	})
 	c.Assert(err, qt.ErrorMatches, `"invalid-model-tag" is not a valid tag \(bad request\)`)
 
-	_, err = client.FullModelStatus(&apiparams.FullModelStatusRequest{
+	_, err = client.FullModelStatus(t.Context(), &apiparams.FullModelStatusRequest{
 		ModelTag: charlieModel.ResourceTag().String(),
 	})
 	c.Assert(err, qt.ErrorMatches, "unauthorized.*")
@@ -607,7 +607,7 @@ func TestFullModelStatus(t *testing.T) {
 	defer conn.Close()
 	client = api.NewClient(conn)
 
-	status, err := client.FullModelStatus(&apiparams.FullModelStatusRequest{
+	status, err := client.FullModelStatus(t.Context(), &apiparams.FullModelStatusRequest{
 		ModelTag: charlieModel.ResourceTag().String(),
 	})
 	c.Assert(err, qt.Equals, nil)
@@ -626,7 +626,6 @@ func TestFullModelStatus(t *testing.T) {
 				ModelStatus: jujuparams.DetailedStatus{
 					Status: "available",
 				},
-				SLA: "unsupported",
 			},
 		})
 }
@@ -644,7 +643,7 @@ func TestUpdateMigratedModel(t *testing.T) {
 		ModelTag:         names.NewModelTag(model2.UUID.String).String(),
 		TargetController: model2.Controller.Name,
 	}
-	err := conn.APICall("JIMM", 4, "", "UpdateMigratedModel", &req, nil)
+	err := conn.APICall(t.Context(), "JIMM", 4, "", "UpdateMigratedModel", &req, nil)
 	c.Assert(err, qt.ErrorMatches, `unauthorized \(unauthorized access\)`)
 
 	// Open the API connection as user "alice".
@@ -655,14 +654,14 @@ func TestUpdateMigratedModel(t *testing.T) {
 		ModelTag:         names.NewModelTag(model2.UUID.String).String(),
 		TargetController: model2.Controller.Name,
 	}
-	err = conn.APICall("JIMM", 4, "", "UpdateMigratedModel", &req, nil)
+	err = conn.APICall(t.Context(), "JIMM", 4, "", "UpdateMigratedModel", &req, nil)
 	c.Assert(err, qt.Equals, nil)
 
 	req = apiparams.UpdateMigratedModelRequest{
 		ModelTag:         "invalid-model-tag",
 		TargetController: model2.Controller.Name,
 	}
-	err = conn.APICall("JIMM", 4, "", "UpdateMigratedModel", &req, nil)
+	err = conn.APICall(t.Context(), "JIMM", 4, "", "UpdateMigratedModel", &req, nil)
 	c.Assert(err, qt.ErrorMatches, `"invalid-model-tag" is not a valid tag \(bad request\)`)
 }
 
@@ -686,14 +685,14 @@ func TestImportModel(t *testing.T) {
 		ModelTag:   model2.Tag().String(),
 		Owner:      "",
 	}
-	err = conn.APICall("JIMM", 4, "", "ImportModel", &req, nil)
+	err = conn.APICall(t.Context(), "JIMM", 4, "", "ImportModel", &req, nil)
 	c.Assert(err, qt.ErrorMatches, `unauthorized \(unauthorized access\)`)
 
 	// Open the API connection as user "alice".
 	conn = s.Open(c, nil, "alice", nil)
 	defer conn.Close()
 
-	err = conn.APICall("JIMM", 4, "", "ImportModel", &req, nil)
+	err = conn.APICall(t.Context(), "JIMM", 4, "", "ImportModel", &req, nil)
 	c.Assert(err, qt.Equals, nil)
 
 	var importedModel dbmodel.Model
@@ -706,7 +705,7 @@ func TestImportModel(t *testing.T) {
 		Controller: controllerName,
 		ModelTag:   "invalid-model-tag",
 	}
-	err = conn.APICall("JIMM", 4, "", "ImportModel", &req, nil)
+	err = conn.APICall(t.Context(), "JIMM", 4, "", "ImportModel", &req, nil)
 	c.Assert(err, qt.ErrorMatches, `"invalid-model-tag" is not a valid tag \(bad request\)`)
 }
 
@@ -743,7 +742,7 @@ func TestAddCloudToController(t *testing.T) {
 			}),
 		},
 	}
-	err = conn.APICall("JIMM", 4, "", "AddCloudToController", &req, nil)
+	err = conn.APICall(t.Context(), "JIMM", 4, "", "AddCloudToController", &req, nil)
 	c.Assert(err, qt.Equals, nil)
 
 	user := openfga.NewUser(u, s.OFGAClient)
@@ -757,7 +756,7 @@ func TestAddCloudToController(t *testing.T) {
 		CloudTag:       names.NewCloudTag(cloudName).String(),
 		ControllerName: name,
 	}
-	err = conn.APICall("JIMM", 4, "", "RemoveCloudFromController", &req1, nil)
+	err = conn.APICall(t.Context(), "JIMM", 4, "", "RemoveCloudFromController", &req1, nil)
 	c.Assert(err, qt.Equals, nil)
 }
 
@@ -795,7 +794,7 @@ func TestAddExistingCloudToController(t *testing.T) {
 			Force: &force,
 		},
 	}
-	err = conn.APICall("JIMM", 4, "", "AddCloudToController", &req, nil)
+	err = conn.APICall(t.Context(), "JIMM", 4, "", "AddCloudToController", &req, nil)
 	c.Assert(err, qt.Equals, nil)
 	user := openfga.NewUser(u, s.OFGAClient)
 	cloud, err := s.JIMM.JujuManager.GetCloud(context.Background(), user, names.NewCloudTag(cloudName))
@@ -808,7 +807,7 @@ func TestAddExistingCloudToController(t *testing.T) {
 	cloud, err = s.JIMM.JujuManager.GetCloud(context.Background(), user, names.NewCloudTag(cloudName))
 	c.Assert(err, qt.Not(qt.IsNil))
 	c.Assert(errors.ErrorCode(err), qt.Equals, errors.CodeNotFound)
-	err = conn.APICall("JIMM", 4, "", "AddCloudToController", &req, nil)
+	err = conn.APICall(t.Context(), "JIMM", 4, "", "AddCloudToController", &req, nil)
 	c.Assert(err, qt.Equals, nil)
 	cloud, err = s.JIMM.JujuManager.GetCloud(context.Background(), user, names.NewCloudTag(cloudName))
 	c.Assert(err, qt.IsNil)
@@ -819,7 +818,7 @@ func TestAddExistingCloudToController(t *testing.T) {
 		CloudTag:       names.NewCloudTag(cloudName).String(),
 		ControllerName: name,
 	}
-	err = conn.APICall("JIMM", 4, "", "RemoveCloudFromController", &req1, nil)
+	err = conn.APICall(t.Context(), "JIMM", 4, "", "RemoveCloudFromController", &req1, nil)
 	c.Assert(err, qt.Equals, nil)
 
 }
@@ -856,7 +855,7 @@ func TestRemoveCloudFromController(t *testing.T) {
 			}),
 		},
 	}
-	err = conn.APICall("JIMM", 4, "", "AddCloudToController", &req, nil)
+	err = conn.APICall(t.Context(), "JIMM", 4, "", "AddCloudToController", &req, nil)
 	c.Assert(err, qt.Equals, nil)
 
 	user := openfga.NewUser(u, s.OFGAClient)
@@ -868,7 +867,7 @@ func TestRemoveCloudFromController(t *testing.T) {
 		CloudTag:       names.NewCloudTag(cloudName).String(),
 		ControllerName: name,
 	}
-	err = conn.APICall("JIMM", 4, "", "RemoveCloudFromController", &req1, nil)
+	err = conn.APICall(t.Context(), "JIMM", 4, "", "RemoveCloudFromController", &req1, nil)
 	c.Assert(err, qt.Equals, nil)
 
 	_, err = s.JIMM.JujuManager.GetCloud(context.Background(), user, names.NewCloudTag(cloudName))
@@ -887,19 +886,19 @@ func TestCrossModelQuery(t *testing.T) {
 	defer conn.Close()
 	client := api.NewClient(conn)
 
-	_, err := client.CrossModelQuery(&apiparams.CrossModelQueryRequest{
+	_, err := client.CrossModelQuery(t.Context(), &apiparams.CrossModelQueryRequest{
 		Type:  "some-type-not-supported",
 		Query: ".",
 	})
 	c.Assert(err, qt.ErrorMatches, `unable to query models \(invalid query type\)`)
 
-	_, err = client.CrossModelQuery(&apiparams.CrossModelQueryRequest{
+	_, err = client.CrossModelQuery(t.Context(), &apiparams.CrossModelQueryRequest{
 		Type:  "jimmsql",
 		Query: ".",
 	})
 	c.Assert(err, qt.ErrorMatches, `(?s).*not implemented \(not implemented\).*`)
 
-	res, err := client.CrossModelQuery(&apiparams.CrossModelQueryRequest{
+	res, err := client.CrossModelQuery(t.Context(), &apiparams.CrossModelQueryRequest{
 		Type:  "jq",
 		Query: ".",
 	})
@@ -908,7 +907,7 @@ func TestCrossModelQuery(t *testing.T) {
 	c.Assert(res.Errors, qt.HasLen, 0)
 
 	// Query with broken jq, this JQ will run against each model and return the same error
-	res, err = client.CrossModelQuery(&apiparams.CrossModelQueryRequest{
+	res, err = client.CrossModelQuery(t.Context(), &apiparams.CrossModelQueryRequest{
 		Type:  "jq",
 		Query: "dig-lett",
 	})
@@ -920,7 +919,7 @@ func TestCrossModelQuery(t *testing.T) {
 	}
 
 	// Query for two very specific models
-	res, err = client.CrossModelQuery(&apiparams.CrossModelQueryRequest{
+	res, err = client.CrossModelQuery(t.Context(), &apiparams.CrossModelQueryRequest{
 		Type:  "jq",
 		Query: "select((.model.name==\"" + model2.Name + "\") or .model.name==\"" + model3.Name + "\")",
 	})
@@ -943,7 +942,7 @@ func TestJimmModelMigrationSuperuser(t *testing.T) {
 	defer conn.Close()
 	client := api.NewClient(conn)
 
-	res, err := client.MigrateModel(&apiparams.MigrateModelRequest{
+	res, err := client.MigrateModel(t.Context(), &apiparams.MigrateModelRequest{
 		Specs: []apiparams.MigrateModelInfo{
 			{TargetModelNameOrUUID: model.UUID.String, TargetController: ctrlName},
 			{TargetModelNameOrUUID: "charlie@canonical.com/" + model.Name, TargetController: ctrlName},
@@ -973,7 +972,7 @@ func TestJimmModelMigrationNonSuperuser(t *testing.T) {
 	defer conn.Close()
 	client := api.NewClient(conn)
 	ctrlName, _ := s.GetOneControllerConfig(c)
-	res, err := client.MigrateModel(&apiparams.MigrateModelRequest{
+	res, err := client.MigrateModel(t.Context(), &apiparams.MigrateModelRequest{
 		Specs: []apiparams.MigrateModelInfo{
 			{TargetModelNameOrUUID: model.UUID.String, TargetController: ctrlName},
 		},
@@ -991,7 +990,7 @@ func TestVersion(t *testing.T) {
 	conn := s.Open(c, nil, "bob", nil)
 	defer conn.Close()
 	client := api.NewClient(conn)
-	versionInfo, err := client.Version()
+	versionInfo, err := client.Version(t.Context())
 	c.Assert(err, qt.IsNil)
 	c.Assert(versionInfo.Version, qt.Not(qt.Equals), "")
 	c.Assert(versionInfo.Commit, qt.Not(qt.Equals), "")
@@ -1009,7 +1008,7 @@ func TestPrepareModelMigration(t *testing.T) {
 	ctlName := "prepare-model-migration-controller"
 	s.AddController(c, ctlName, conf.ToAPIInfo())
 
-	migrationToken, err := client.PrepareModelMigration(&apiparams.PrepareModelMigrationRequest{
+	migrationToken, err := client.PrepareModelMigration(t.Context(), &apiparams.PrepareModelMigrationRequest{
 		ModelTag:              names.NewModelTag("5650ac3f-8332-437f-874f-089e0e447e7f").String(),
 		BackingControllerName: ctlName,
 		UserMapping:           map[string]string{"alice": "alice@canonical.com"}, // `{"alice": "alice@canonical.com"}`,
@@ -1048,7 +1047,7 @@ func TestListMigrationTargets(t *testing.T) {
 	defer conn.Close()
 
 	client := api.NewClient(conn)
-	cis, err := client.ListMigrationTargets(&apiparams.ListMigrationTargetsRequest{
+	cis, err := client.ListMigrationTargets(t.Context(), &apiparams.ListMigrationTargetsRequest{
 		ModelTag: model.ResourceTag().String(),
 	})
 	c.Assert(err, qt.Equals, nil)
@@ -1071,7 +1070,7 @@ func TestUpgradeTo_Unauthorized(t *testing.T) {
 		ModelTag:             names.NewModelTag(model2.UUID.String).String(),
 		TargetControllerName: model.Controller.Name,
 	}
-	_, err := client.UpgradeTo(&req)
+	_, err := client.UpgradeTo(t.Context(), &req)
 	c.Assert(err, qt.ErrorMatches, `unauthorized \(unauthorized access\)`)
 	c.Assert(jujuparams.IsCodeUnauthorized(err), qt.Equals, true)
 }
@@ -1090,7 +1089,7 @@ func TestUpgradeTo_InvalidModelTag(t *testing.T) {
 		ModelTag:             "invalid-model-tag",
 		TargetControllerName: model.Controller.Name,
 	}
-	_, err := client.UpgradeTo(&req)
+	_, err := client.UpgradeTo(t.Context(), &req)
 	c.Assert(err, qt.ErrorMatches, `(invalid model tag "invalid-model-tag": )?"invalid-model-tag" is not a valid tag \(bad request\)`)
 }
 
@@ -1108,7 +1107,7 @@ func TestUpgradeTo_InvalidController(t *testing.T) {
 		ModelTag:             names.NewModelTag(model2.UUID.String).String(),
 		TargetControllerName: "does-not-exist",
 	}
-	_, err := client.UpgradeTo(&req)
+	_, err := client.UpgradeTo(t.Context(), &req)
 	c.Assert(err, qt.ErrorMatches, regexp.QuoteMeta(`failed to run upgrade to: target controller does-not-exist is not a valid migration target for this model (bad request)`))
 }
 
@@ -1132,10 +1131,10 @@ func TestCreateModelOnTargetController(t *testing.T) {
 	credentialTag := "cloudcred-" + jimmtest.TestE2ECloudName + "_bob@canonical.com_cred"
 
 	var mi jujuparams.ModelInfo
-	err := conn.APICall("JIMM", 4, "", "AddModelToController", apiparams.AddModelToControllerRequest{
+	err := conn.APICall(t.Context(), "JIMM", 4, "", "AddModelToController", apiparams.AddModelToControllerRequest{
 		ModelCreateArgs: jujuparams.ModelCreateArgs{
 			Name:               name,
-			OwnerTag:           ownerTag,
+			Qualifier:          ownerTag,
 			CloudTag:           cloudTag,
 			CloudCredentialTag: credentialTag,
 		},
@@ -1155,7 +1154,7 @@ func TestCreateModelOnTargetController(t *testing.T) {
 	c.Assert(err, qt.Equals, nil)
 	c.Assert(mi.Name, qt.Equals, name)
 	c.Assert(mi.UUID, qt.Not(qt.Equals), "")
-	c.Assert(mi.OwnerTag, qt.Equals, ownerTag)
+	c.Assert(mi.Qualifier, qt.Equals, ownerTag)
 	c.Assert(mi.ControllerUUID, qt.Equals, jimmtest.ControllerUUID)
 	c.Assert(mi.Users, qt.Not(qt.HasLen), 0)
 
@@ -1178,7 +1177,7 @@ func TestModelControllerInfo(t *testing.T) {
 
 	client := api.NewClient(conn)
 
-	modelControllerInfo, err := client.ModelControllerInfo(model.UUID.String)
+	modelControllerInfo, err := client.ModelControllerInfo(t.Context(), model.UUID.String)
 	c.Assert(err, qt.IsNil)
 	c.Assert(modelControllerInfo, qt.DeepEquals, &apiparams.ModelControllerInfo{
 		ModelName:      model.Name,
@@ -1187,7 +1186,7 @@ func TestModelControllerInfo(t *testing.T) {
 		ControllerUUID: model.Controller.UUID,
 	})
 
-	modelControllerInfo, err = client.ModelControllerInfo(fmt.Sprintf("%s/%s", model.OwnerIdentityName, model.Name))
+	modelControllerInfo, err = client.ModelControllerInfo(t.Context(), fmt.Sprintf("%s/%s", model.OwnerIdentityName, model.Name))
 	c.Assert(err, qt.IsNil)
 	c.Assert(modelControllerInfo, qt.DeepEquals, &apiparams.ModelControllerInfo{
 		ModelName:      model.Name,
@@ -1232,7 +1231,7 @@ func TestPurgeLogs(t *testing.T) {
 	defer conn.Close()
 
 	client := api.NewClient(conn)
-	resp, err := client.PurgeLogs(&apiparams.PurgeLogsRequest{
+	resp, err := client.PurgeLogs(t.Context(), &apiparams.PurgeLogsRequest{
 		Date: tomorrow,
 	})
 	// check that logs have been deleted
@@ -1249,7 +1248,7 @@ func TestPurgeLogs_NotAdmin(t *testing.T) {
 	defer conn.Close()
 
 	client := api.NewClient(conn)
-	_, err := client.PurgeLogs(&apiparams.PurgeLogsRequest{
+	_, err := client.PurgeLogs(t.Context(), &apiparams.PurgeLogsRequest{
 		Date: time.Now(),
 	})
 	c.Assert(err, qt.ErrorMatches, `unauthorized \(unauthorized access\)`)
@@ -1265,6 +1264,6 @@ func TestJobInfo(t *testing.T) {
 	client := api.NewClient(conn)
 
 	req := apiparams.JobInfoRequest{JobID: "123"}
-	_, err := client.JobInfo(&req)
+	_, err := client.JobInfo(t.Context(), &req)
 	c.Assert(err, qt.ErrorMatches, `failed to get job info: not found`)
 }

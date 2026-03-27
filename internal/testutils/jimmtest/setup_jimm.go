@@ -18,7 +18,7 @@ import (
 	"github.com/juju/juju/api"
 	"github.com/juju/juju/core/network"
 	jujuparams "github.com/juju/juju/rpc/params"
-	"github.com/juju/names/v5"
+	"github.com/juju/names/v6"
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 

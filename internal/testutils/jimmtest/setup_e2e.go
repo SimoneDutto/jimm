@@ -18,13 +18,14 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/juju/juju/api"
 	"github.com/juju/juju/api/client/application"
+	jclient "github.com/juju/juju/api/jujuclient"
 	"github.com/juju/juju/cloud"
 	"github.com/juju/juju/cmd/juju/common"
 	"github.com/juju/juju/core/constraints"
-	jclient "github.com/juju/juju/jujuclient"
+
 	"github.com/juju/juju/rpc/jsoncodec"
 	jujuparams "github.com/juju/juju/rpc/params"
-	"github.com/juju/names/v5"
+	"github.com/juju/names/v6"
 	"gopkg.in/yaml.v3"
 
 	"github.com/canonical/jimm/v3/internal/dbmodel"
@@ -284,7 +285,7 @@ func (s *JimmWithControllers) DeployApplication(c *qt.C, user *openfga.User, mod
 		channel = &params.Channel
 	}
 
-	_, _, errs := client.DeployFromRepository(application.DeployFromRepositoryArg{
+	_, _, errs := client.DeployFromRepository(c.Context(), application.DeployFromRepositoryArg{
 		CharmName:       params.Charm,
 		ApplicationName: params.App,
 		Channel:         channel,
@@ -333,7 +334,7 @@ func (s *JimmWithControllers) OpenNoAssert(c *qt.C, d LoginDetails, modelTag *na
 		dialOpts.DialWebsocket = d.DialWebsocket
 	}
 
-	return api.Open(&inf, dialOpts)
+	return api.Open(c.Context(), &inf, dialOpts)
 }
 
 func (s *JimmWithControllers) Open(c *qt.C, info *api.Info, username string, modelTag *names.ModelTag) api.Connection {
