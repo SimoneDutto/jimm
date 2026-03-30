@@ -77,7 +77,7 @@ func TestSupportedVersions_HappyPath(t *testing.T) {
 func TestSupportedVersions_MinVersion(t *testing.T) {
 	c := qt.New(t)
 
-	t.Run("filters to versions strictly greater than minVersion", func(t *testing.T) {
+	c.Run("filters to versions strictly greater than minVersion", func(c *qt.C) {
 		ctrl := gomock.NewController(t)
 		published := time.Date(2025, 2, 1, 0, 0, 0, 0, time.UTC)
 		releases := []*github.RepositoryRelease{

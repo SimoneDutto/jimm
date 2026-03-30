@@ -763,8 +763,10 @@ type SupportedJujuVersionsRequest struct {
 // VersionElem represents a single supported Juju version.
 type VersionElem struct {
 	// Version is the "x.x.x" version string.
-	Version       string `json:"version"`
-	Date          string `json:"date"`
+	Version string `json:"version"`
+	// Date is the release date of this version.
+	Date string `json:"date"`
+	// LinkToRelease is the URL to the release notes or page for this version.
 	LinkToRelease string `json:"link-to-release"`
 }
 
