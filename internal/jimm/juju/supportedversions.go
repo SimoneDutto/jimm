@@ -69,8 +69,7 @@ func (j *JujuManager) fetchReleasesWithCache(ctx context.Context) ([]params.Vers
 	j.releaseCache.mu.Lock()
 	defer j.releaseCache.mu.Unlock()
 	if time.Now().Before(j.releaseCache.exp) {
-		items := j.releaseCache.entries
-		return items, nil
+		return slices.Clone(j.releaseCache.entries), nil
 	}
 
 	client := j.GitHubClient
@@ -85,7 +84,7 @@ func (j *JujuManager) fetchReleasesWithCache(ctx context.Context) ([]params.Vers
 	j.releaseCache.entries = releases
 	j.releaseCache.exp = time.Now().Add(releasesCacheTTL)
 
-	return releases, nil
+	return slices.Clone(releases), nil
 }
 
 // filterByMinVersion returns only those releases with a version strictly greater
