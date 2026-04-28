@@ -18,10 +18,16 @@ jobs:
       - name: Checkout JIMM repo
         uses: actions/checkout@v4
 
-      - name: Cache Docker images
-        uses: ScribeMD/docker-cache@0.5.0
+      - name: Restore Docker image cache
+        id: docker-cache
+        uses: actions/cache@v4
         with:
+          path: /tmp/docker-images.tar
           key: docker-${{ runner.os }}-${{ hashFiles('docker-compose.yaml', 'docker-compose.common.yaml', 'local/*/Dockerfile') }}
+
+      - name: Load Docker images from cache
+        if: steps.docker-cache.outputs.cache-hit == 'true'
+        run: docker load -i /tmp/docker-images.tar
 
       - name: Set up Docker Compose
         uses: docker/setup-compose-action@v1
@@ -65,7 +71,7 @@ jobs:
       - name: Generate certs
         working-directory: local/traefik/certs
         run: ./certs.sh
-      
+
       - name: Start test environment
         run: docker compose up -d --wait
 
@@ -89,10 +95,14 @@ jobs:
               connect=tcp:$host_ip_addr:16443 \
               bind=container
           done
-      
+
       - name: Run E2E tests
         run: go test -v ./testing/... -timeout 30m
         env:
           RUN_E2E_TESTS: "1"
           JIMM_MICROK8S_TEST_CLOUD_NAME: "microk8s-cp"
           JIMM_BACKING_CONTROLLER_CONFIG: ${{ github.workspace }}/controllers.yaml
+      
+      - name: Save Docker images for cache
+        if: steps.docker-cache.outputs.cache-hit != 'true'
+        run: docker save $(docker images --format '{{.Repository}}:{{.Tag}}' | grep -v '<none>') -o /tmp/docker-images.tar

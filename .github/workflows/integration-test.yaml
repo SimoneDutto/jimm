@@ -17,10 +17,16 @@ jobs:
       - name: Checkout JIMM repo
         uses: actions/checkout@v4
 
-      - name: Cache Docker images
-        uses: ScribeMD/docker-cache@0.5.0
+      - name: Restore Docker image cache
+        id: docker-cache
+        uses: actions/cache/restore@v4
         with:
+          path: /tmp/docker-images.tar
           key: docker-${{ runner.os }}-${{ hashFiles('docker-compose.yaml', 'docker-compose.common.yaml', 'local/*/Dockerfile') }}
+
+      - name: Load Docker images from cache
+        if: steps.docker-cache.outputs.cache-hit == 'true'
+        run: docker load -i /tmp/docker-images.tar
 
       - name: Set up Docker Compose
         uses: docker/setup-compose-action@v1
