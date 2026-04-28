@@ -6,6 +6,25 @@ on:
       - "feature*"
 
 jobs:
+  docker_cache:
+    name: Cache Docker Images
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache Docker images
+        uses: ScribeMD/docker-cache@0.5.0
+        with:
+          key: docker-${{ runner.os }}-${{ hashFiles('docker-compose.yaml', 'docker-compose.common.yaml', 'local/*/Dockerfile') }}
+
+      - name: Pull all Docker Compose images
+        run: docker compose --profile dev pull --ignore-buildable
+
+      - name: Build custom Docker images
+        run: docker compose --profile dev build
+
   go_cache:
     name: Cache Go Dependencies and Build/Lint Artifacts
     runs-on: ubuntu-22.04
