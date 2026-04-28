@@ -21,7 +21,6 @@ jobs:
         uses: ScribeMD/docker-cache@0.5.0
         with:
           key: docker-${{ runner.os }}-${{ hashFiles('docker-compose.yaml', 'docker-compose.common.yaml', 'local/*/Dockerfile') }}
-          read-only: true
 
       - name: Set up Docker Compose
         uses: docker/setup-compose-action@v1
