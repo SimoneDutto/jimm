@@ -8,13 +8,13 @@ import (
 	"io"
 	"strings"
 
-	"github.com/juju/cmd/v3"
 	"github.com/juju/errors"
 	"github.com/juju/gnuflag"
+	"github.com/juju/juju/api/jujuclient"
 	jujucmd "github.com/juju/juju/cmd"
+	"github.com/juju/juju/cmd/cmd"
 	"github.com/juju/juju/cmd/modelcmd"
-	"github.com/juju/juju/cmd/output"
-	"github.com/juju/juju/jujuclient"
+	"github.com/juju/juju/core/output"
 	"sigs.k8s.io/yaml"
 
 	apiparams "github.com/canonical/jimm/v3/pkg/api/params"
@@ -129,13 +129,13 @@ func (c *addControllerProfileCommand) Run(ctxt *cmd.Context) error {
 		return err
 	}
 
-	client, err := c.getJIMMAPI()
+	client, err := c.getJIMMAPI(ctxt)
 	if err != nil {
 		return fmt.Errorf("could not create JIMM client: %w", err)
 	}
 	defer client.Close()
 
-	resp, err := client.SaveControllerProfile(&req)
+	resp, err := client.SaveControllerProfile(ctxt, &req)
 	if err != nil {
 		return err
 	}
@@ -195,21 +195,21 @@ func (c *updateControllerProfileCommand) Run(ctxt *cmd.Context) error {
 		return err
 	}
 
-	client, err := c.getJIMMAPI()
+	client, err := c.getJIMMAPI(ctxt)
 	if err != nil {
 		return fmt.Errorf("could not create JIMM client: %w", err)
 	}
 	defer client.Close()
 
 	if req.Version == 0 {
-		current, err := client.GetControllerProfile(&apiparams.GetControllerProfileRequest{Name: req.Name})
+		current, err := client.GetControllerProfile(ctxt, &apiparams.GetControllerProfileRequest{Name: req.Name})
 		if err != nil {
 			return err
 		}
 		req.Version = current.Version
 	}
 
-	resp, err := client.SaveControllerProfile(&req)
+	resp, err := client.SaveControllerProfile(ctxt, &req)
 	if err != nil {
 		return err
 	}
@@ -266,13 +266,13 @@ func (c *showControllerProfileCommand) Init(args []string) error {
 
 // Run implements cmd.Command.
 func (c *showControllerProfileCommand) Run(ctxt *cmd.Context) error {
-	client, err := c.getJIMMAPI()
+	client, err := c.getJIMMAPI(ctxt)
 	if err != nil {
 		return fmt.Errorf("could not create JIMM client: %w", err)
 	}
 	defer client.Close()
 
-	resp, err := client.GetControllerProfile(&apiparams.GetControllerProfileRequest{Name: c.name})
+	resp, err := client.GetControllerProfile(ctxt, &apiparams.GetControllerProfileRequest{Name: c.name})
 	if err != nil {
 		return err
 	}
@@ -351,13 +351,13 @@ func (c *listControllerProfilesCommand) Init(args []string) error {
 
 // Run implements cmd.Command.
 func (c *listControllerProfilesCommand) Run(ctxt *cmd.Context) error {
-	client, err := c.getJIMMAPI()
+	client, err := c.getJIMMAPI(ctxt)
 	if err != nil {
 		return fmt.Errorf("could not create JIMM client: %w", err)
 	}
 	defer client.Close()
 
-	profiles, err := client.ListControllerProfiles(&apiparams.ListControllerProfilesRequest{
+	profiles, err := client.ListControllerProfiles(ctxt, &apiparams.ListControllerProfilesRequest{
 		JujuVersion: c.jujuVersion,
 	})
 	if err != nil {
@@ -429,11 +429,11 @@ func (c *removeControllerProfileCommand) Run(ctxt *cmd.Context) error {
 		}
 	}
 
-	client, err := c.getJIMMAPI()
+	client, err := c.getJIMMAPI(ctxt)
 	if err != nil {
 		return fmt.Errorf("could not create JIMM client: %w", err)
 	}
 	defer client.Close()
 
-	return client.RemoveControllerProfile(&apiparams.RemoveControllerProfileRequest{Name: c.name})
+	return client.RemoveControllerProfile(ctxt, &apiparams.RemoveControllerProfileRequest{Name: c.name})
 }

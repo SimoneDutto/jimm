@@ -685,7 +685,7 @@ func TestApplicationOfferDangling(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Trigger sync cleanup
-	_, err = client.ApplicationOffer(url)
+	_, err = client.ApplicationOffer(ctx, url)
 	c.Assert(err, qt.ErrorMatches, "application offer not found")
 
 	// Ensure offer has been removed from the database
@@ -696,6 +696,6 @@ func TestApplicationOfferDangling(t *testing.T) {
 	c.Assert(err, qt.ErrorMatches, "application offer not found")
 
 	// Ensure offer doesn't show up in endpoint either
-	_, err = client.ApplicationOffer(url)
+	_, err = client.ApplicationOffer(ctx, url)
 	c.Assert(err, qt.ErrorMatches, "application offer not found")
 }

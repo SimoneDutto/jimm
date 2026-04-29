@@ -4,10 +4,11 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
-	"github.com/juju/cmd/v3/cmdtesting"
+	"github.com/juju/juju/cmd/cmd/cmdtesting"
 	"go.uber.org/mock/gomock"
 	"sigs.k8s.io/yaml"
 
@@ -54,7 +55,7 @@ func TestAddControllerProfileRun(t *testing.T) {
 	ctx := newTestContext(c)
 	ctx.Stdin = bytes.NewBufferString(sampleControllerProfileYAML(c, "aws-prod"))
 
-	s.client.EXPECT().SaveControllerProfile(gomock.Any()).DoAndReturn(func(req *apiparams.SaveControllerProfileRequest) (apiparams.SaveControllerProfileResponse, error) {
+	s.client.EXPECT().SaveControllerProfile(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, req *apiparams.SaveControllerProfileRequest) (apiparams.SaveControllerProfileResponse, error) {
 		c.Check(req.Name, qt.Equals, "aws-prod")
 		c.Check(req.JujuVersion, qt.Equals, "3.6")
 		return apiparams.SaveControllerProfileResponse{ControllerProfile: req.ControllerProfile}, nil
@@ -79,11 +80,11 @@ func TestUpdateControllerProfileRunUsesCurrentVersion(t *testing.T) {
 	ctx := newTestContext(c)
 	ctx.Stdin = bytes.NewBufferString(sampleControllerProfileYAML(c, "aws-prod"))
 
-	s.client.EXPECT().GetControllerProfile(&apiparams.GetControllerProfileRequest{Name: "aws-prod"}).Return(
+	s.client.EXPECT().GetControllerProfile(gomock.Any(), &apiparams.GetControllerProfileRequest{Name: "aws-prod"}).Return(
 		apiparams.GetControllerProfileResponse{ControllerProfile: apiparams.ControllerProfile{Name: "aws-prod", Version: 7}},
 		nil,
 	).Times(1)
-	s.client.EXPECT().SaveControllerProfile(gomock.Any()).DoAndReturn(func(req *apiparams.SaveControllerProfileRequest) (apiparams.SaveControllerProfileResponse, error) {
+	s.client.EXPECT().SaveControllerProfile(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, req *apiparams.SaveControllerProfileRequest) (apiparams.SaveControllerProfileResponse, error) {
 		c.Check(req.Name, qt.Equals, "aws-prod")
 		c.Check(req.Version, qt.Equals, uint(7))
 		return apiparams.SaveControllerProfileResponse{ControllerProfile: req.ControllerProfile}, nil
@@ -103,7 +104,7 @@ func TestShowControllerProfileRun(t *testing.T) {
 	showCmd.setJIMMAPI(s.client)
 	initCommand(c, showCmd, "aws-prod", "--format", "yaml")
 
-	s.client.EXPECT().GetControllerProfile(&apiparams.GetControllerProfileRequest{Name: "aws-prod"}).Return(
+	s.client.EXPECT().GetControllerProfile(gomock.Any(), &apiparams.GetControllerProfileRequest{Name: "aws-prod"}).Return(
 		apiparams.GetControllerProfileResponse{ControllerProfile: sampleControllerProfileRequest("aws-prod").ControllerProfile},
 		nil,
 	).Times(1)
@@ -124,7 +125,7 @@ func TestListControllerProfilesRun(t *testing.T) {
 	listCmd.setJIMMAPI(s.client)
 	initCommand(c, listCmd, "--juju-version", "3.6.4")
 
-	s.client.EXPECT().ListControllerProfiles(&apiparams.ListControllerProfilesRequest{JujuVersion: "3.6.4"}).Return([]apiparams.ControllerProfileSummary{{
+	s.client.EXPECT().ListControllerProfiles(gomock.Any(), &apiparams.ListControllerProfilesRequest{JujuVersion: "3.6.4"}).Return([]apiparams.ControllerProfileSummary{{
 		Name:        "aws-prod",
 		Description: "Reusable bootstrap settings",
 	}}, nil).Times(1)
@@ -145,7 +146,7 @@ func TestRemoveControllerProfileRun(t *testing.T) {
 	removeCmd.setJIMMAPI(s.client)
 	initCommand(c, removeCmd, "aws-prod", "--force")
 
-	s.client.EXPECT().RemoveControllerProfile(&apiparams.RemoveControllerProfileRequest{Name: "aws-prod"}).Return(nil).Times(1)
+	s.client.EXPECT().RemoveControllerProfile(gomock.Any(), &apiparams.RemoveControllerProfileRequest{Name: "aws-prod"}).Return(nil).Times(1)
 	s.client.EXPECT().Close().Times(1)
 
 	ctx := newTestContext(c)

@@ -117,7 +117,7 @@ func TestBootstrapWithPublicCloud(t *testing.T) {
 		},
 	}, nil)
 
-	s.client.EXPECT().StartBootstrap(gomock.Any(), gomock.Any()).DoAndReturn(func(bsp *params.BootstrapParams) (*params.StartBootstrapResponse, error) {
+	s.client.EXPECT().StartBootstrap(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, bsp *params.BootstrapParams) (*params.StartBootstrapResponse, error) {
 		c.Check(bsp.Cloud, qt.DeepEquals, params.BootstrapCloud{
 			Name: cloudName,
 			Region: params.BootstrapCloudRegion{

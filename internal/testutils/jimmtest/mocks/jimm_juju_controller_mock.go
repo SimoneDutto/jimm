@@ -57,7 +57,7 @@ func (j *ControllerService) ControllerInfo(ctx context.Context, name string) (*d
 
 func (j *ControllerService) EarliestControllerVersion(ctx context.Context) (semversion.Number, error) {
 	if j.EarliestControllerVersion_ == nil {
-		return version.Number{}, errors.New("not implemented")
+		return semversion.Number{}, errors.New("not implemented")
 	}
 	return j.EarliestControllerVersion_(ctx)
 }

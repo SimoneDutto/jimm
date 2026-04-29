@@ -14,6 +14,7 @@ import (
 	"github.com/juju/juju/cmd/juju/common"
 	"github.com/juju/juju/cmd/modelcmd"
 	corebase "github.com/juju/juju/core/base"
+	"github.com/juju/juju/core/constraints"
 	jujuparams "github.com/juju/juju/rpc/params"
 	"github.com/juju/names/v6"
 
