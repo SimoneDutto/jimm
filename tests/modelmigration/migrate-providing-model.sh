@@ -122,7 +122,20 @@ juju login -c "$SOURCE_CONTROLLER_NAME" -u admin --no-prompt <<< "test-password"
 
 echo
 echo "Waiting for dummy-sink to be ready and receive token over the relation"
-juju wait-for application dummy-sink --timeout=5m
+success=0
+for _ in {1..60}; do
+    app_status=$(juju status dummy-sink --format json | jq -r '.applications["dummy-sink"]["application-status"].current')
+    if [[ "$app_status" == "active" ]]; then
+        success=1
+        break
+    fi
+    sleep 5
+done
+if [[ $success -ne 1 ]]; then
+    echo "dummy-sink did not become active within 5 minutes."
+    exit 1
+fi
+sleep 120
 
 # From this point on, the test is not idempotent
 # because it becomes it becomes more complex to
@@ -144,16 +157,14 @@ echo
 echo "Waiting for model migration to complete"
 echo "Switching to $JIMM_CONTROLLER_NAME and waiting for the model to appear"
 juju switch "$JIMM_CONTROLLER_NAME"
-# For some reason, wait-for model when the model doesn't exist yet just
-# hangs until you run another Juju CLI command but since we can't do that
-# in CI, we will just loop until the model appears.
 # Loop for up to 5 minutes (30 iterations of 10 seconds each)
 success=0
 for _ in {1..30}; do
-    if juju wait-for model "$PROVIDER_MODEL_NAME" --timeout=10s; then
+    if juju show-model "$PROVIDER_MODEL_NAME" > /dev/null 2>&1; then
         success=1
         break
     fi
+    sleep 10
 done
 if [[ $success -ne 1 ]]; then
     echo "Model $PROVIDER_MODEL_NAME did not appear after 5 minutes."
@@ -190,7 +201,19 @@ echo "Token migration successful, got '$new_token' as expected."
 
 echo
 echo "Ensuring the dummy-sink app is still running with an active state"
-juju wait-for application dummy-sink --timeout=5m
+success=0
+for _ in {1..60}; do
+    app_status=$(juju status dummy-sink --format json | jq -r '.applications["dummy-sink"]["application-status"].current')
+    if [[ "$app_status" == "active" ]]; then
+        success=1
+        break
+    fi
+    sleep 5
+done
+if [[ $success -ne 1 ]]; then
+    echo "dummy-sink did not remain active within 5 minutes."
+    exit 1
+fi
 
 echo
 echo "Cleaning up: removing relation and destroying $CONSUMER_MODEL_NAME model"
