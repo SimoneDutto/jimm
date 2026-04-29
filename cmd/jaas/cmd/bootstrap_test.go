@@ -90,7 +90,6 @@ func TestBootstrapArgParsing(t *testing.T) {
 		},
 	}
 	for i, test := range tests {
-		test := test
 		t.Run(fmt.Sprintf("%02d-%s", i, test.name), func(t *testing.T) {
 			c := qt.New(t)
 			command := &bootstrapCommand{}
@@ -118,7 +117,7 @@ func TestBootstrapWithPublicCloud(t *testing.T) {
 		},
 	}, nil)
 
-	s.client.EXPECT().StartBootstrap(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, bsp *params.BootstrapParams) (*params.StartBootstrapResponse, error) {
+	s.client.EXPECT().StartBootstrap(gomock.Any(), gomock.Any()).DoAndReturn(func(bsp *params.BootstrapParams) (*params.StartBootstrapResponse, error) {
 		c.Check(bsp.Cloud, qt.DeepEquals, params.BootstrapCloud{
 			Name: cloudName,
 			Region: params.BootstrapCloudRegion{

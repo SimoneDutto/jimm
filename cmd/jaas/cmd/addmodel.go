@@ -256,6 +256,7 @@ func (c *addModelCommand) Run(ctx *cmd.Context) error {
 
 	messageFormat := "Added '%s' model"
 	messageArgs := []any{c.Name}
+	messageArgs := []any{c.Name}
 
 	details := jujuclient.ModelDetails{
 		ModelUUID: model.UUID,
@@ -585,6 +586,7 @@ func (c *addModelCommand) findLocalCredential(ctx *cmd.Context, p *findCredentia
 }
 
 func (c *addModelCommand) getConfigValues(ctx *cmd.Context) (map[string]any, error) {
+func (c *addModelCommand) getConfigValues(ctx *cmd.Context) (map[string]any, error) {
 	configValues, err := c.Config.ReadAttrs(ctx)
 	if err != nil {
 		return nil, errors.Annotate(err, "unable to parse config")
@@ -593,6 +595,7 @@ func (c *addModelCommand) getConfigValues(ctx *cmd.Context) (map[string]any, err
 	if err != nil {
 		return nil, errors.Annotate(err, "unable to parse config")
 	}
+	attrs, ok := coercedValues.(map[string]any)
 	attrs, ok := coercedValues.(map[string]any)
 	if !ok {
 		return nil, errors.New("params must contain a YAML map with string keys")

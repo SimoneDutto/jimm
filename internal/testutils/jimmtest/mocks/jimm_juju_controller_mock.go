@@ -30,7 +30,6 @@ type ControllerService struct {
 func (j *ControllerService) AddController(ctx context.Context, u *openfga.User, ctl *dbmodel.Controller, creds juju.ControllerCreds) error {
 	if j.AddController_ == nil {
 		return errors.New("not implemented")
-		return errors.New("not implemented")
 	}
 	return j.AddController_(ctx, u, ctl, creds)
 }
@@ -58,7 +57,7 @@ func (j *ControllerService) ControllerInfo(ctx context.Context, name string) (*d
 
 func (j *ControllerService) EarliestControllerVersion(ctx context.Context) (semversion.Number, error) {
 	if j.EarliestControllerVersion_ == nil {
-		return semversion.Number{}, errors.New("not implemented")
+		return version.Number{}, errors.New("not implemented")
 	}
 	return j.EarliestControllerVersion_(ctx)
 }
