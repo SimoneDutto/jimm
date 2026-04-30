@@ -135,7 +135,6 @@ if [[ $success -ne 1 ]]; then
     echo "dummy-sink did not become active within 5 minutes."
     exit 1
 fi
-sleep 120
 
 # From this point on, the test is not idempotent
 # because it becomes it becomes more complex to
@@ -184,7 +183,7 @@ juju switch "$SOURCE_CONTROLLER_NAME"
 # Retry for up to 1 minute (12 iterations of 5 seconds each).
 success=0
 for _ in {1..12}; do
-    new_token=$(juju show-unit dummy-sink/0 --format json | jq -r "$JQ_TOKEN_QUERY")
+    new_token=$(juju show-unit -m admin/"$CONSUMER_MODEL_NAME" dummy-sink/0 --format json | jq -r "$JQ_TOKEN_QUERY")
     if [[ "$new_token" == "def" ]]; then
         success=1
         break
@@ -203,7 +202,7 @@ echo
 echo "Ensuring the dummy-sink app is still running with an active state"
 success=0
 for _ in {1..60}; do
-    app_status=$(juju status dummy-sink --format json | jq -r '.applications["dummy-sink"]["application-status"].current')
+    app_status=$(juju status -m admin/"$CONSUMER_MODEL_NAME" dummy-sink --format json | jq -r '.applications["dummy-sink"]["application-status"].current')
     if [[ "$app_status" == "active" ]]; then
         success=1
         break
@@ -217,8 +216,8 @@ fi
 
 echo
 echo "Cleaning up: removing relation and destroying $CONSUMER_MODEL_NAME model"
-juju remove-relation dummy-sink dummy-source
-juju remove-saas dummy-source
+juju remove-relation -m admin/"$CONSUMER_MODEL_NAME" dummy-sink dummy-source
+juju remove-saas -m admin/"$CONSUMER_MODEL_NAME" dummy-source
 juju destroy-model "$CONSUMER_MODEL_NAME" --no-prompt
 
 echo
