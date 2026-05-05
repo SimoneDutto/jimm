@@ -69,6 +69,3 @@ See [here](./local/README.md) on how to get started.
 ## Testing
 
 See [here](./CONTRIBUTING.md) on how to get started.
-
-
-.

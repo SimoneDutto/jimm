@@ -3,7 +3,7 @@ on:
   push:
     branches:
       - v3
-      - "feature*"
+      - "feature/**"
 
 jobs:
   docker_cache:
