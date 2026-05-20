@@ -20,7 +20,7 @@ func TestUpgradeModelDryRun(t *testing.T) {
 	s := jimmtest.SetupJimmWithControllers(c)
 	model := s.CreateModelForBob(c)
 
-	conn := s.Open(c, nil, "bob", nil)
+	conn := s.Open(c, nil, "bob@canonical.com", nil)
 	defer conn.Close()
 
 	client := modelupgrader.NewClient(conn)
@@ -45,7 +45,7 @@ func TestUpgradeModel(t *testing.T) {
 		Patch: ctrlVersion.Patch - 1,
 	}
 
-	conn := s.Open(c, nil, "bob", nil)
+	conn := s.Open(c, nil, "bob@canonical.com", nil)
 	defer conn.Close()
 
 	// Create a model pinned to a lower agent version so there is something to upgrade.
@@ -82,7 +82,7 @@ func TestUpgradeModelCrossMajor(t *testing.T) {
 		Major: ctrlVersion.Major + 1,
 	}
 
-	conn := s.Open(c, nil, "bob", nil)
+	conn := s.Open(c, nil, "bob@canonical.com", nil)
 	defer conn.Close()
 
 	client := modelupgrader.NewClient(conn)
@@ -98,7 +98,7 @@ func TestUpgradeModelUnauthorized(t *testing.T) {
 	// Charlie owns the model; bob only has read access.
 	model := s.CreateModelForCharlieWithBobReadAccess(c)
 
-	conn := s.Open(c, nil, "bob", nil)
+	conn := s.Open(c, nil, "bob@canonical.com", nil)
 	defer conn.Close()
 
 	client := modelupgrader.NewClient(conn)
@@ -111,7 +111,7 @@ func TestAbortModelUpgrade(t *testing.T) {
 	s := jimmtest.SetupJimmWithControllers(c)
 	model := s.CreateModelForBob(c)
 
-	conn := s.Open(c, nil, "bob", nil)
+	conn := s.Open(c, nil, "bob@canonical.com", nil)
 	defer conn.Close()
 
 	client := modelupgrader.NewClient(conn)
@@ -125,7 +125,7 @@ func TestAbortModelUpgradeUnauthorized(t *testing.T) {
 	// Charlie owns the model; bob only has read access.
 	model := s.CreateModelForCharlieWithBobReadAccess(c)
 
-	conn := s.Open(c, nil, "bob", nil)
+	conn := s.Open(c, nil, "bob@canonical.com", nil)
 	defer conn.Close()
 
 	client := modelupgrader.NewClient(conn)
