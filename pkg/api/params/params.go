@@ -402,8 +402,7 @@ type UpgradeToResponse struct {
 
 // UpgradeToResult holds the result for a single model in an UpgradeTo request.
 type UpgradeToResult struct {
-	Success bool              `json:"success" yaml:"success"`
-	Error   *jujuparams.Error `json:"error,omitempty" yaml:"error,omitempty"`
+	Error *jujuparams.Error `json:"error,omitempty" yaml:"error,omitempty"`
 }
 
 // FullModelStatusRequest is the request that is sent in a FullModelStatus method.

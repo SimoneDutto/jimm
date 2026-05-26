@@ -25,7 +25,7 @@ func TestUpgradeTo(t *testing.T) {
 	}
 
 	s.client.EXPECT().UpgradeTo(upgradeToParams).Return(apiparams.UpgradeToResponse{
-		Results: []apiparams.UpgradeToResult{{Success: true}},
+		Results: []apiparams.UpgradeToResult{{}},
 	}, nil)
 	s.client.EXPECT().Close().Return(nil)
 
@@ -37,7 +37,9 @@ func TestUpgradeTo(t *testing.T) {
 	ctx := newTestContext(c)
 	err := upgradeToCmd.Run(ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(ctx.Stdout.(*bytes.Buffer).String(), qt.Matches, "results:\n- success: true\n")
+	c.Assert(ctx.Stdout.(*bytes.Buffer).String(), qt.Matches, `results:
+- \{\}
+`)
 }
 
 func TestUpgradeToWithFailureResponse(t *testing.T) {
@@ -124,7 +126,7 @@ func TestUpgradeToWithPositionalArgs(t *testing.T) {
 	}
 
 	s.client.EXPECT().UpgradeTo(upgradeToParams).Return(apiparams.UpgradeToResponse{
-		Results: []apiparams.UpgradeToResult{{Success: true}},
+		Results: []apiparams.UpgradeToResult{{}},
 	}, nil)
 	s.client.EXPECT().Close().Return(nil)
 

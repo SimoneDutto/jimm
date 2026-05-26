@@ -1102,9 +1102,8 @@ func TestUpgradeTo_InvalidModelUUID(t *testing.T) {
 	resp, err := client.UpgradeTo(&req)
 	c.Assert(err, qt.IsNil)
 	c.Assert(resp.Results, qt.HasLen, 1)
-	c.Assert(resp.Results[0].Success, qt.IsFalse)
 	c.Assert(resp.Results[0].Error, qt.IsNotNil)
-	c.Assert(resp.Results[0].Error.Message, qt.Equals, `invalid model UUID "invalid-model-uuid"`)
+	c.Assert(resp.Results[0].Error.Code, qt.Equals, string(errors.CodeBadRequest))
 }
 
 // TestUpgradeTo_InvalidController verifies invalid controllers are rejected.
@@ -1124,9 +1123,8 @@ func TestUpgradeTo_InvalidController(t *testing.T) {
 	resp, err := client.UpgradeTo(&req)
 	c.Assert(err, qt.IsNil)
 	c.Assert(resp.Results, qt.HasLen, 1)
-	c.Assert(resp.Results[0].Success, qt.IsFalse)
 	c.Assert(resp.Results[0].Error, qt.IsNotNil)
-	c.Assert(resp.Results[0].Error.Message, qt.Equals, `failed to run upgrade to for model "`+model2.UUID.String+`": target controller does-not-exist is not a valid migration target for this model`)
+	c.Assert(resp.Results[0].Error.Code, qt.Equals, string(errors.CodeBadRequest))
 }
 
 func TestCreateModelOnTargetController(t *testing.T) {

@@ -794,8 +794,6 @@ func (r *controllerRoot) UpgradeTo(ctx context.Context, req apiparams.UpgradeToR
 			results[i].Error = r.mapError(ctx, errors.Codef(errors.CodeBadRequest, "failed to run upgrade to for model %q: %w", modelUUID, err))
 			continue
 		}
-
-		results[i].Success = true
 	}
 
 	return apiparams.UpgradeToResponse{
