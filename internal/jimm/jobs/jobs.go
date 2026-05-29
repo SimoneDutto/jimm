@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
@@ -145,6 +146,41 @@ func (j *JobManager) GetUpgradeToStatusForModel(ctx context.Context, modelUUID s
 	}
 
 	return status, nil
+}
+
+// ListUpgradeToJobsForModels returns the set of model UUIDs that currently have
+// an active upgrade-to supervisor job.
+func (j *JobManager) ListUpgradeToJobsForModels(ctx context.Context, modelUUIDs []string) (map[string]bool, error) {
+	jobsByModelUUID := make(map[string]bool, len(modelUUIDs))
+	if len(modelUUIDs) == 0 {
+		return jobsByModelUUID, nil
+	}
+
+	whereClause, namedArgs := buildModelUUIDWhereClause(modelUUIDs)
+	jobListResult, err := j.jobQuerier.ListJobs(
+		ctx,
+		river.NewJobListParams().
+			Kinds(rivertypes.UpgradeToJobKind).
+			First(maxListJobsCount).
+			States(activeJobStates...).
+			Where(whereClause, namedArgs),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, job := range jobListResult.Jobs {
+		var metadata rivertypes.JobModelUUIDMetadata
+		if err := json.Unmarshal(job.Metadata, &metadata); err != nil {
+			return nil, fmt.Errorf("failed to decode upgrade-to metadata: %w", err)
+		}
+		if metadata.ModelUUID == "" {
+			continue
+		}
+		jobsByModelUUID[metadata.ModelUUID] = true
+	}
+
+	return jobsByModelUUID, nil
 }
 
 // ListJobs returns a list of jobs based on the provided parameters. It converts the API parameters to the internal river job query parameters and retrieves the job list from the job querier.
@@ -289,6 +325,17 @@ func (j *JobManager) findUpgradeToRootJob(ctx context.Context, modelUUID string)
 	}
 
 	return finalizedJobs.Jobs[0], nil
+}
+
+func buildModelUUIDWhereClause(modelUUIDs []string) (string, river.NamedArgs) {
+	clauses := make([]string, 0, len(modelUUIDs))
+	namedArgs := river.NamedArgs{}
+	for i, modelUUID := range modelUUIDs {
+		argName := fmt.Sprintf("model_uuid_%d", i)
+		clauses = append(clauses, fmt.Sprintf("metadata->>'model-uuid' = @%s", argName))
+		namedArgs[argName] = modelUUID
+	}
+	return strings.Join(clauses, " OR "), namedArgs
 }
 
 func toJobDetail(jobRow *rivertype.JobRow) apiparams.JobDetail {

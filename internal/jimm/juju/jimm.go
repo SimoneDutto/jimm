@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -21,6 +22,7 @@ import (
 	"github.com/canonical/jimm/v3/internal/errors"
 	"github.com/canonical/jimm/v3/internal/jimm/credentials"
 	"github.com/canonical/jimm/v3/internal/openfga"
+	ofganames "github.com/canonical/jimm/v3/internal/openfga/names"
 	apiparams "github.com/canonical/jimm/v3/pkg/api/params"
 )
 
@@ -424,4 +426,40 @@ func (j *JujuManager) ModelControllerInfo(ctx context.Context, user *openfga.Use
 		ControllerName: model.Controller.Name,
 		ControllerUUID: model.Controller.UUID,
 	}, nil
+}
+
+// ListModelControllerInfo returns lightweight controller information for all
+// models the user can read.
+func (j *JujuManager) ListModelControllerInfo(ctx context.Context, user *openfga.User) ([]apiparams.ModelControllerInfoListItem, error) {
+	modelUUIDs, err := user.ListModels(ctx, ofganames.ReaderRelation)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list user models: %w", err)
+	}
+	if len(modelUUIDs) == 0 {
+		return []apiparams.ModelControllerInfoListItem{}, nil
+	}
+
+	models, err := j.Database.GetModelsByUUID(ctx, modelUUIDs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get models by uuid: %w", err)
+	}
+
+	info := make([]apiparams.ModelControllerInfoListItem, 0, len(models))
+	for _, model := range models {
+		info = append(info, apiparams.ModelControllerInfoListItem{
+			ModelName:      model.Name,
+			ModelUUID:      model.UUID.String,
+			ControllerName: model.Controller.Name,
+			ControllerUUID: model.Controller.UUID,
+		})
+	}
+
+	slices.SortFunc(info, func(a, b apiparams.ModelControllerInfoListItem) int {
+		if cmp := strings.Compare(a.ModelName, b.ModelName); cmp != 0 {
+			return cmp
+		}
+		return strings.Compare(a.ModelUUID, b.ModelUUID)
+	})
+
+	return info, nil
 }
