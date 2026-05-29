@@ -6,7 +6,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -453,13 +452,6 @@ func (j *JujuManager) ListModelControllerInfo(ctx context.Context, user *openfga
 			ControllerUUID: model.Controller.UUID,
 		})
 	}
-
-	slices.SortFunc(info, func(a, b apiparams.ModelControllerInfoListItem) int {
-		if cmp := strings.Compare(a.ModelName, b.ModelName); cmp != 0 {
-			return cmp
-		}
-		return strings.Compare(a.ModelUUID, b.ModelUUID)
-	})
 
 	return info, nil
 }

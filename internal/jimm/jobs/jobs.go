@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
@@ -156,14 +155,17 @@ func (j *JobManager) ListUpgradeToJobsForModels(ctx context.Context, modelUUIDs 
 		return jobsByModelUUID, nil
 	}
 
-	whereClause, namedArgs := buildModelUUIDWhereClause(modelUUIDs)
+	requestedModelUUIDs := make(map[string]struct{}, len(modelUUIDs))
+	for _, modelUUID := range modelUUIDs {
+		requestedModelUUIDs[modelUUID] = struct{}{}
+	}
+
 	jobListResult, err := j.jobQuerier.ListJobs(
 		ctx,
 		river.NewJobListParams().
 			Kinds(rivertypes.UpgradeToJobKind).
 			First(maxListJobsCount).
-			States(activeJobStates...).
-			Where(whereClause, namedArgs),
+			States(activeJobStates...),
 	)
 	if err != nil {
 		return nil, err
@@ -175,6 +177,9 @@ func (j *JobManager) ListUpgradeToJobsForModels(ctx context.Context, modelUUIDs 
 			return nil, fmt.Errorf("failed to decode upgrade-to metadata: %w", err)
 		}
 		if metadata.ModelUUID == "" {
+			continue
+		}
+		if _, ok := requestedModelUUIDs[metadata.ModelUUID]; !ok {
 			continue
 		}
 		jobsByModelUUID[metadata.ModelUUID] = true
@@ -325,17 +330,6 @@ func (j *JobManager) findUpgradeToRootJob(ctx context.Context, modelUUID string)
 	}
 
 	return finalizedJobs.Jobs[0], nil
-}
-
-func buildModelUUIDWhereClause(modelUUIDs []string) (string, river.NamedArgs) {
-	clauses := make([]string, 0, len(modelUUIDs))
-	namedArgs := river.NamedArgs{}
-	for i, modelUUID := range modelUUIDs {
-		argName := fmt.Sprintf("model_uuid_%d", i)
-		clauses = append(clauses, fmt.Sprintf("metadata->>'model-uuid' = @%s", argName))
-		namedArgs[argName] = modelUUID
-	}
-	return strings.Join(clauses, " OR "), namedArgs
 }
 
 func toJobDetail(jobRow *rivertype.JobRow) apiparams.JobDetail {

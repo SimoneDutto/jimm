@@ -181,10 +181,13 @@ func TestListUpgradeToJobsForModels_Success(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	metadataTwo, err := json.Marshal(rivertypes.JobModelUUIDMetadata{ModelUUID: "model-uuid-2"})
 	c.Assert(err, qt.IsNil)
+	metadataThree, err := json.Marshal(rivertypes.JobModelUUIDMetadata{ModelUUID: "model-uuid-3"})
+	c.Assert(err, qt.IsNil)
 
 	deps.jobQuerier.EXPECT().ListJobs(gomock.Any(), gomock.Any()).Return(&river.JobListResult{Jobs: []*rivertype.JobRow{
 		{Metadata: metadataOne},
 		{Metadata: metadataTwo},
+		{Metadata: metadataThree},
 	}}, nil)
 
 	jobsByModel, err := deps.jobManager.ListUpgradeToJobsForModels(context.Background(), []string{"model-uuid-1", "model-uuid-2"})
