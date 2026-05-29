@@ -149,8 +149,6 @@ func init() {
 	}
 }
 
-const upgradeToInProgressStatus = "upgrade-to in progress"
-
 // DisableControllerUUIDMasking ensures that the controller UUID returned
 // with any model information is the UUID of the juju controller that is
 // hosting the model, and not JAAS.
@@ -893,8 +891,8 @@ func (r *controllerRoot) ListModelControllerInfo(ctx context.Context) (apiparams
 	}
 
 	for i := range models {
-		if activeUpgradeJobs[models[i].ModelUUID] {
-			models[i].UpgradeToJobStatus = upgradeToInProgressStatus
+		if status, ok := activeUpgradeJobs[models[i].ModelUUID]; ok {
+			models[i].UpgradeToJobStatus = status
 		}
 	}
 

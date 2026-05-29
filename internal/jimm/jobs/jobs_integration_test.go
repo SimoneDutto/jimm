@@ -449,8 +449,8 @@ func TestListUpgradeToJobsForModels_MultipleModels(t *testing.T) {
 		requestedModelUUID2,
 	})
 	c.Assert(err, qt.IsNil)
-	c.Assert(jobsByModelUUID, qt.DeepEquals, map[string]bool{
-		requestedModelUUID1: true,
-		requestedModelUUID2: true,
+	c.Assert(jobsByModelUUID, qt.DeepEquals, map[string]string{
+		requestedModelUUID1: UpgradeToModelStatusProgress,
+		requestedModelUUID2: UpgradeToModelStatusProgress,
 	})
 }

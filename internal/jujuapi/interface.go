@@ -348,6 +348,6 @@ type JobManager interface {
 	GetJobInfo(ctx context.Context, jobID int64) (jobs.JobInfo, error)
 	GetActiveBootstrapStatusForController(ctx context.Context, controllerName string) (*params.BootstrapJobStatus, error)
 	GetUpgradeToStatusForModel(ctx context.Context, modelUUID string) (*params.UpgradeToJobStatus, error)
-	ListUpgradeToJobsForModels(ctx context.Context, modelUUIDs []string) (map[string]bool, error)
+	ListUpgradeToJobsForModels(ctx context.Context, modelUUIDs []string) (map[string]string, error)
 	ListJobs(ctx context.Context, params params.ListJobsRequest) (params.ListJobsResponse, error)
 }

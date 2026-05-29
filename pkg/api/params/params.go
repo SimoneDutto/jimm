@@ -851,8 +851,8 @@ type ModelControllerInfoListItem struct {
 	// ControllerUUID is the UUID of the controller hosting the model.
 	ControllerUUID string `json:"controller-uuid" yaml:"controller-uuid"`
 
-	// UpgradeToJobStatus holds a lightweight status string when an upgrade-to job
-	// is currently associated with the model.
+	// UpgradeToJobStatus holds a lightweight status string for the latest relevant
+	// upgrade-to job associated with the model, such as progress or error.
 	UpgradeToJobStatus string `json:"upgrade-to-job-status,omitempty" yaml:"upgrade-to-job-status,omitempty"`
 }
 

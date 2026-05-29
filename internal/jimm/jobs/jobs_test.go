@@ -176,6 +176,8 @@ func TestGetUpgradeToStatusForModel_ActiveQueryError(t *testing.T) {
 func TestListUpgradeToJobsForModels_Success(t *testing.T) {
 	c := qt.New(t)
 	deps := setupDeps(c)
+	now := time.Now()
+	earlier := now.Add(-time.Minute)
 
 	metadataOne, err := json.Marshal(rivertypes.JobModelUUIDMetadata{ModelUUID: "model-uuid-1"})
 	c.Assert(err, qt.IsNil)
@@ -183,18 +185,62 @@ func TestListUpgradeToJobsForModels_Success(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	metadataThree, err := json.Marshal(rivertypes.JobModelUUIDMetadata{ModelUUID: "model-uuid-3"})
 	c.Assert(err, qt.IsNil)
+	metadataCompleted, err := json.Marshal(rivertypes.JobModelUUIDMetadata{ModelUUID: "model-uuid-2"})
+	c.Assert(err, qt.IsNil)
 
 	deps.jobQuerier.EXPECT().ListJobs(gomock.Any(), gomock.Any()).Return(&river.JobListResult{Jobs: []*rivertype.JobRow{
-		{Metadata: metadataOne},
-		{Metadata: metadataTwo},
-		{Metadata: metadataThree},
+		{Metadata: metadataOne, State: rivertype.JobStateRunning, AttemptedAt: &now},
+		{Metadata: metadataTwo, State: rivertype.JobStateRunning, AttemptedAt: &earlier},
+		{Metadata: metadataThree, State: rivertype.JobStateRunning, AttemptedAt: &now},
+		{Metadata: metadataTwo, State: rivertype.JobStateDiscarded, AttemptedAt: &now},
+		{Metadata: metadataCompleted, State: rivertype.JobStateCompleted, AttemptedAt: &earlier},
 	}}, nil)
 
 	jobsByModel, err := deps.jobManager.ListUpgradeToJobsForModels(context.Background(), []string{"model-uuid-1", "model-uuid-2"})
 	c.Assert(err, qt.IsNil)
-	c.Assert(jobsByModel, qt.DeepEquals, map[string]bool{
-		"model-uuid-1": true,
-		"model-uuid-2": true,
+	c.Assert(jobsByModel, qt.DeepEquals, map[string]string{
+		"model-uuid-1": UpgradeToModelStatusProgress,
+		"model-uuid-2": UpgradeToModelStatusError,
+	})
+}
+
+func TestListUpgradeToJobsForModels_CompletedJobSuppressesOlderError(t *testing.T) {
+	c := qt.New(t)
+	deps := setupDeps(c)
+	now := time.Now()
+	earlier := now.Add(-time.Minute)
+
+	metadata, err := json.Marshal(rivertypes.JobModelUUIDMetadata{ModelUUID: "model-uuid-1"})
+	c.Assert(err, qt.IsNil)
+
+	deps.jobQuerier.EXPECT().ListJobs(gomock.Any(), gomock.Any()).Return(&river.JobListResult{Jobs: []*rivertype.JobRow{
+		{Metadata: metadata, State: rivertype.JobStateCompleted, AttemptedAt: &now},
+		{Metadata: metadata, State: rivertype.JobStateDiscarded, AttemptedAt: &earlier},
+	}}, nil)
+
+	jobsByModel, err := deps.jobManager.ListUpgradeToJobsForModels(context.Background(), []string{"model-uuid-1"})
+	c.Assert(err, qt.IsNil)
+	c.Assert(jobsByModel, qt.DeepEquals, map[string]string{})
+}
+
+func TestListUpgradeToJobsForModels_ActiveJobSuppressesOlderError(t *testing.T) {
+	c := qt.New(t)
+	deps := setupDeps(c)
+	now := time.Now()
+	earlier := now.Add(-time.Minute)
+
+	metadata, err := json.Marshal(rivertypes.JobModelUUIDMetadata{ModelUUID: "model-uuid-1"})
+	c.Assert(err, qt.IsNil)
+
+	deps.jobQuerier.EXPECT().ListJobs(gomock.Any(), gomock.Any()).Return(&river.JobListResult{Jobs: []*rivertype.JobRow{
+		{Metadata: metadata, State: rivertype.JobStateRunning, AttemptedAt: &now},
+		{Metadata: metadata, State: rivertype.JobStateDiscarded, AttemptedAt: &earlier},
+	}}, nil)
+
+	jobsByModel, err := deps.jobManager.ListUpgradeToJobsForModels(context.Background(), []string{"model-uuid-1"})
+	c.Assert(err, qt.IsNil)
+	c.Assert(jobsByModel, qt.DeepEquals, map[string]string{
+		"model-uuid-1": UpgradeToModelStatusProgress,
 	})
 }
 

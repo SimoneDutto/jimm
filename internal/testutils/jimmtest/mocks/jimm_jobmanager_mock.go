@@ -14,7 +14,7 @@ type JobManager struct {
 	GetJobInfo_                            func(ctx context.Context, jobID int64) (jobs.JobInfo, error)
 	GetActiveBootstrapStatusForController_ func(ctx context.Context, controllerName string) (*params.BootstrapJobStatus, error)
 	GetUpgradeToStatusForModel_            func(ctx context.Context, modelUUID string) (*params.UpgradeToJobStatus, error)
-	ListUpgradeToJobsForModels_            func(ctx context.Context, modelUUIDs []string) (map[string]bool, error)
+	ListUpgradeToJobsForModels_            func(ctx context.Context, modelUUIDs []string) (map[string]string, error)
 	ListJobs_                              func(ctx context.Context, req params.ListJobsRequest) (params.ListJobsResponse, error)
 }
 
@@ -39,7 +39,7 @@ func (j *JobManager) GetUpgradeToStatusForModel(ctx context.Context, modelUUID s
 	return j.GetUpgradeToStatusForModel_(ctx, modelUUID)
 }
 
-func (j *JobManager) ListUpgradeToJobsForModels(ctx context.Context, modelUUIDs []string) (map[string]bool, error) {
+func (j *JobManager) ListUpgradeToJobsForModels(ctx context.Context, modelUUIDs []string) (map[string]string, error) {
 	if j.ListUpgradeToJobsForModels_ == nil {
 		return nil, errors.New("not implemented")
 	}
