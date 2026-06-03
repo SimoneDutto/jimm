@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
@@ -161,9 +160,9 @@ func (j *JobManager) GetUpgradeToStatusForModel(ctx context.Context, modelUUID s
 }
 
 // ListUpgradeToJobsForModels returns a lightweight per-model status for the most
-// recent relevant upgrade-to supervisor job.
-// The status is fetched from the latest supervisor job for each model, including
-// completed jobs.
+// relevant upgrade-to supervisor job for each requested model.
+// Active jobs are loaded first so in-flight work takes precedence, then the most
+// recent finalized jobs fill in any remaining models.
 func (j *JobManager) ListUpgradeToJobsForModels(ctx context.Context, modelUUIDs []string) (map[string]string, error) {
 	jobsByModelUUID := make(map[string]string, len(modelUUIDs))
 	if len(modelUUIDs) == 0 {
@@ -175,19 +174,19 @@ func (j *JobManager) ListUpgradeToJobsForModels(ctx context.Context, modelUUIDs 
 		requestedModelUUIDs[modelUUID] = struct{}{}
 	}
 
-	jobListResult, err := j.jobQuerier.ListJobs(
+	activeJobListResult, err := j.jobQuerier.ListJobs(
 		ctx,
 		river.NewJobListParams().
 			Kinds(rivertypes.UpgradeToJobKind).
 			First(maxListJobsCount).
-			States((append(activeJobStates, finalizedUpgradeToJobStates...))...),
+			States(activeJobStates...).
+			OrderBy(river.JobListOrderByTime, river.SortOrderDesc),
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	latestJobByModelUUID := make(map[string]*rivertype.JobRow, len(modelUUIDs))
-	for _, job := range jobListResult.Jobs {
+	for _, job := range activeJobListResult.Jobs {
 		if job == nil {
 			continue
 		}
@@ -198,10 +197,36 @@ func (j *JobManager) ListUpgradeToJobsForModels(ctx context.Context, modelUUIDs 
 		if modelUUID == "" {
 			continue
 		}
-		latestJobByModelUUID[modelUUID] = laterJob(latestJobByModelUUID[modelUUID], job)
+		jobsByModelUUID[modelUUID] = UpgradeToModelStatusProgress
 	}
 
-	for modelUUID, job := range latestJobByModelUUID {
+	finalizedJobListResult, err := j.jobQuerier.ListJobs(
+		ctx,
+		river.NewJobListParams().
+			Kinds(rivertypes.UpgradeToJobKind).
+			First(maxListJobsCount).
+			States(finalizedUpgradeToJobStates...).
+			OrderBy(river.JobListOrderByTime, river.SortOrderDesc),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, job := range finalizedJobListResult.Jobs {
+		if job == nil {
+			continue
+		}
+		modelUUID, err := requestedUpgradeToModelUUID(job, requestedModelUUIDs)
+		if err != nil {
+			return nil, err
+		}
+		if modelUUID == "" {
+			continue
+		}
+		if _, ok := jobsByModelUUID[modelUUID]; ok {
+			continue
+		}
+
 		switch job.State {
 		case rivertype.JobStateCancelled, rivertype.JobStateDiscarded:
 			jobsByModelUUID[modelUUID] = UpgradeToModelStatusError
@@ -229,26 +254,6 @@ func requestedUpgradeToModelUUID(job *rivertype.JobRow, requestedModelUUIDs map[
 		return "", nil
 	}
 	return metadata.ModelUUID, nil
-}
-
-// laterJob returns the later of the two jobs based on their attempted or created time. ù
-// If one of the jobs is nil, it returns the other job.
-func laterJob(current, candidate *rivertype.JobRow) *rivertype.JobRow {
-	if current == nil {
-		return candidate
-	}
-	if jobTime(candidate).After(jobTime(current)) {
-		return candidate
-	}
-	return current
-}
-
-// jobTime returns the attempted time of the job if available, otherwise it returns the created time.
-func jobTime(job *rivertype.JobRow) time.Time {
-	if job.AttemptedAt != nil {
-		return *job.AttemptedAt
-	}
-	return job.CreatedAt
 }
 
 // ListJobs returns a list of jobs based on the provided parameters. It converts the API parameters to the internal river job query parameters and retrieves the job list from the job querier.
