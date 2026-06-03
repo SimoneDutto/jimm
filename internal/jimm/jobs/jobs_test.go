@@ -220,7 +220,9 @@ func TestListUpgradeToJobsForModels_CompletedJobSuppressesOlderError(t *testing.
 
 	jobsByModel, err := deps.jobManager.ListUpgradeToJobsForModels(context.Background(), []string{"model-uuid-1"})
 	c.Assert(err, qt.IsNil)
-	c.Assert(jobsByModel, qt.DeepEquals, map[string]string{})
+	c.Assert(jobsByModel, qt.DeepEquals, map[string]string{
+		"model-uuid-1": UpgradeToModelStatusCompleted,
+	})
 }
 
 func TestListUpgradeToJobsForModels_ActiveJobSuppressesOlderError(t *testing.T) {
