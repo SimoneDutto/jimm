@@ -454,3 +454,29 @@ func TestListUpgradeToJobsForModels_MultipleModels(t *testing.T) {
 		requestedModelUUID2: UpgradeToModelStatusProgress,
 	})
 }
+
+func TestListUpgradeToJobsForModels_CompletedModel(t *testing.T) {
+	c := qt.New(t)
+	ctx := c.Context()
+
+	jobManager, client := setupJobsIntegrationTest(c)
+	modelUUID := "93608db4-f1cb-4da5-9926-8233981aef0a"
+
+	metadata, err := json.Marshal(rivertypes.JobModelUUIDMetadata{ModelUUID: modelUUID})
+	c.Assert(err, qt.IsNil)
+
+	_, err = client.Insert(ctx, rivertypes.UpgradeToArgs{
+		ModelUUID:            modelUUID,
+		Username:             "complete-model",
+		TargetControllerName: "target-controller",
+	}, &river.InsertOpts{Metadata: metadata, MaxAttempts: 1})
+	c.Assert(err, qt.IsNil)
+
+	waitForJobs(c, client, 1, defaultTestTimeout)
+
+	jobsByModelUUID, err := jobManager.ListUpgradeToJobsForModels(ctx, []string{modelUUID})
+	c.Assert(err, qt.IsNil)
+	c.Assert(jobsByModelUUID, qt.DeepEquals, map[string]string{
+		modelUUID: UpgradeToModelStatusCompleted,
+	})
+}

@@ -41,6 +41,7 @@ type listModelsCommand struct {
 	out cmd.Output
 }
 
+// Info implements Command.Info.
 func (c *listModelsCommand) Info() *cmd.Info {
 	return jujucmd.Info(&cmd.Info{
 		Name:     "models",

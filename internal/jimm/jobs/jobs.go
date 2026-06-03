@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
@@ -33,19 +32,16 @@ var finalizedUpgradeToJobStates = []rivertype.JobState{
 	rivertype.JobStateDiscarded,
 }
 
-var notCompletedStates = []rivertype.JobState{
-	rivertype.JobStateAvailable,
-	rivertype.JobStatePending,
-	rivertype.JobStateRunning,
-	rivertype.JobStateRetryable,
-	rivertype.JobStateScheduled,
-	rivertype.JobStateCancelled,
-	rivertype.JobStateDiscarded,
-}
-
 const (
+	// UpgradeToModelStatusProgress indicates an upgrade-to job is currently in progress for the model.
+	// It maps to in-progress job states: available, pending, running, retryable, scheduled.
 	UpgradeToModelStatusProgress = "progress"
-	UpgradeToModelStatusError    = "error"
+	// UpgradeToModelStatusError indicates an upgrade-to job has encountered an error for the model.
+	// It maps to error job states: cancelled, discarded.
+	UpgradeToModelStatusError = "error"
+	// UpgradeToModelStatusCompleted indicates the latest upgrade-to job completed successfully.
+	// It maps to the completed job state.
+	UpgradeToModelStatusCompleted = "completed"
 )
 
 // JobQuerier defines the interface for querying and managing jobs in JIMM.
@@ -164,8 +160,9 @@ func (j *JobManager) GetUpgradeToStatusForModel(ctx context.Context, modelUUID s
 }
 
 // ListUpgradeToJobsForModels returns a lightweight per-model status for the most
-// recent relevant upgrade-to supervisor job.
-// The status is fetched from the latest supervisor job for each model.
+// relevant upgrade-to supervisor job for each requested model.
+// Active jobs are loaded first so in-flight work takes precedence, then the most
+// recent finalized jobs fill in any remaining models.
 func (j *JobManager) ListUpgradeToJobsForModels(ctx context.Context, modelUUIDs []string) (map[string]string, error) {
 	jobsByModelUUID := make(map[string]string, len(modelUUIDs))
 	if len(modelUUIDs) == 0 {
@@ -177,19 +174,22 @@ func (j *JobManager) ListUpgradeToJobsForModels(ctx context.Context, modelUUIDs 
 		requestedModelUUIDs[modelUUID] = struct{}{}
 	}
 
-	jobListResult, err := j.jobQuerier.ListJobs(
+	activeJobListResult, err := j.jobQuerier.ListJobs(
 		ctx,
 		river.NewJobListParams().
 			Kinds(rivertypes.UpgradeToJobKind).
 			First(maxListJobsCount).
-			States(notCompletedStates...),
+			States(activeJobStates...).
+			OrderBy(river.JobListOrderByTime, river.SortOrderDesc),
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	latestJobByModelUUID := make(map[string]*rivertype.JobRow, len(modelUUIDs))
-	for _, job := range jobListResult.Jobs {
+	for _, job := range activeJobListResult.Jobs {
+		if job == nil {
+			continue
+		}
 		modelUUID, err := requestedUpgradeToModelUUID(job, requestedModelUUIDs)
 		if err != nil {
 			return nil, err
@@ -197,13 +197,41 @@ func (j *JobManager) ListUpgradeToJobsForModels(ctx context.Context, modelUUIDs 
 		if modelUUID == "" {
 			continue
 		}
-		latestJobByModelUUID[modelUUID] = laterJob(latestJobByModelUUID[modelUUID], job)
+		jobsByModelUUID[modelUUID] = UpgradeToModelStatusProgress
 	}
 
-	for modelUUID, job := range latestJobByModelUUID {
+	finalizedJobListResult, err := j.jobQuerier.ListJobs(
+		ctx,
+		river.NewJobListParams().
+			Kinds(rivertypes.UpgradeToJobKind).
+			First(maxListJobsCount).
+			States(finalizedUpgradeToJobStates...).
+			OrderBy(river.JobListOrderByTime, river.SortOrderDesc),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, job := range finalizedJobListResult.Jobs {
+		if job == nil {
+			continue
+		}
+		modelUUID, err := requestedUpgradeToModelUUID(job, requestedModelUUIDs)
+		if err != nil {
+			return nil, err
+		}
+		if modelUUID == "" {
+			continue
+		}
+		if _, ok := jobsByModelUUID[modelUUID]; ok {
+			continue
+		}
+
 		switch job.State {
 		case rivertype.JobStateCancelled, rivertype.JobStateDiscarded:
 			jobsByModelUUID[modelUUID] = UpgradeToModelStatusError
+		case rivertype.JobStateCompleted:
+			jobsByModelUUID[modelUUID] = UpgradeToModelStatusCompleted
 		case rivertype.JobStateAvailable, rivertype.JobStatePending, rivertype.JobStateRunning, rivertype.JobStateRetryable, rivertype.JobStateScheduled:
 			jobsByModelUUID[modelUUID] = UpgradeToModelStatusProgress
 		}
@@ -212,7 +240,7 @@ func (j *JobManager) ListUpgradeToJobsForModels(ctx context.Context, modelUUIDs 
 	return jobsByModelUUID, nil
 }
 
-// requestedUpgradeToModelUUID checks if the job has metadata indicating it is an upgrade-to job for one of the requested ù
+// requestedUpgradeToModelUUID checks if the job has metadata indicating it is an upgrade-to job for one of the requested
 // model UUIDs. If so, it returns that model UUID; otherwise, it returns an empty string.
 func requestedUpgradeToModelUUID(job *rivertype.JobRow, requestedModelUUIDs map[string]struct{}) (string, error) {
 	var metadata rivertypes.JobModelUUIDMetadata
@@ -226,26 +254,6 @@ func requestedUpgradeToModelUUID(job *rivertype.JobRow, requestedModelUUIDs map[
 		return "", nil
 	}
 	return metadata.ModelUUID, nil
-}
-
-// laterJob returns the later of the two jobs based on their attempted or created time. ù
-// If one of the jobs is nil, it returns the other job.
-func laterJob(current, candidate *rivertype.JobRow) *rivertype.JobRow {
-	if current == nil {
-		return candidate
-	}
-	if jobTime(candidate).After(jobTime(current)) {
-		return candidate
-	}
-	return current
-}
-
-// jobTime returns the attempted time of the job if available, otherwise it returns the created time.
-func jobTime(job *rivertype.JobRow) time.Time {
-	if job.AttemptedAt != nil {
-		return *job.AttemptedAt
-	}
-	return job.CreatedAt
 }
 
 // ListJobs returns a list of jobs based on the provided parameters. It converts the API parameters to the internal river job query parameters and retrieves the job list from the job querier.
