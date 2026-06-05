@@ -6,11 +6,12 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	stderrors "errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"path"
-	"sync"
+	"sync/atomic"
 
 	"github.com/gorilla/websocket"
 	"github.com/juju/juju/core/network"
@@ -19,13 +20,17 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/canonical/jimm/v3/internal/dbmodel"
-	"github.com/canonical/jimm/v3/internal/errors"
+	jimmerrors "github.com/canonical/jimm/v3/internal/errors"
 )
 
 // A Dialer is used to create client connections to an RPC URL.
 type Dialer struct {
 	// TLSConfig is used to configure TLS for the client connection.
 	TLSConfig *tls.Config
+}
+
+type websocketDialer interface {
+	DialWebsocket(context.Context, string, http.Header) (*websocket.Conn, error)
 }
 
 // Dial establishes a new client RPC connection to the given URL.
@@ -141,9 +146,9 @@ func websocketURL(s string, mt names.ModelTag, finalPath string, attrs url.Value
 
 // dialAll simultaneously dials all given urls and returns the first
 // connection.
-func dialAll(ctx context.Context, dialer *Dialer, urls []string, headers http.Header) (*websocket.Conn, error) {
+func dialAll(ctx context.Context, dialer websocketDialer, urls []string, headers http.Header) (*websocket.Conn, error) {
 	if len(urls) == 0 {
-		return nil, errors.New("no urls to dial")
+		return nil, jimmerrors.New("no urls to dial")
 	}
 	conn, err := dialAllHelper(ctx, dialer, urls, headers)
 	if err != nil {
@@ -152,40 +157,45 @@ func dialAll(ctx context.Context, dialer *Dialer, urls []string, headers http.He
 	return conn, nil
 }
 
+type dialResult struct {
+	url  string
+	conn *websocket.Conn
+	err  error
+}
+
 // dialAllHelper simultaneously dials all given urls and returns the first successful websocket connection.
-func dialAllHelper(ctx context.Context, dialer *Dialer, urls []string, headers http.Header) (*websocket.Conn, error) {
+func dialAllHelper(ctx context.Context, dialer websocketDialer, urls []string, headers http.Header) (*websocket.Conn, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	var clientOnce, errOnce sync.Once
-	var err error
-	var wg sync.WaitGroup
-	var res *websocket.Conn
+	results := make(chan dialResult, len(urls))
+	var winnerSelected atomic.Bool
 	for _, url := range urls {
 		zapctx.Info(ctx, "dialing", zap.String("url", url))
 		url := url
-		wg.Go(func() {
-			conn, dErr := dialer.DialWebsocket(ctx, url, headers)
-			if dErr != nil {
-				errOnce.Do(func() {
-					err = dErr
-				})
-				return
+		go func() {
+			conn, err := dialer.DialWebsocket(ctx, url, headers)
+			if err == nil {
+				if !winnerSelected.CompareAndSwap(false, true) {
+					if conn != nil {
+						conn.Close()
+					}
+					return
+				}
 			}
-			var keep bool
-			clientOnce.Do(func() {
-				res = conn
-				keep = true
-				cancel()
-			})
-			if !keep {
-				conn.Close()
-			}
-		})
+			results <- dialResult{url: url, conn: conn, err: err}
+		}()
 	}
-	wg.Wait()
-	if res != nil {
-		return res, nil
+
+	var errs []error
+	for i := 0; i < len(urls); i++ {
+		result := <-results
+		if result.err != nil {
+			errs = append(errs, fmt.Errorf("dial %q: %w", result.url, result.err))
+			continue
+		}
+
+		return result.conn, nil
 	}
-	return nil, err
+	return nil, stderrors.Join(errs...)
 }
