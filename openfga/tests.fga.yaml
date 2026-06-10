@@ -202,8 +202,66 @@ tuples:
       relation: reader
       object: applicationoffer:ao-applicationoffer-1
     
+    # can_manage (cm) - relation-management policy via the `grantable` condition.
+    # cm-user-1 administers model:cm-model-1 but is NOT a JIMM admin. The
+    # request_ok tuple is what JIMM injects contextually at check time; here it
+    # is stored (conditioned) so the model test can supply the request via
+    # `context`.
+    - user: user:cm-user-1
+      relation: administrator
+      object: model:cm-model-1
+    - user: user:cm-user-1
+      relation: request_ok
+      object: model:cm-model-1
+      condition:
+          name: grantable
+    # cm-user-2 administers nothing -> cannot manage even an allowlisted request.
+    - user: user:cm-user-2
+      relation: request_ok
+      object: model:cm-model-1
+      condition:
+          name: grantable
+
 # Tests directly correspond to the types available in JIMM's authorisation model
 tests:
+    # Ensures the `grantable` condition reproduces JIMM's former Go allowlists:
+    # a resource administrator may only grant an access relation, only to a
+    # user/group/role, and only on a target they administer.
+    - name: Can manage (relation-management policy)
+      check:
+          # access relation granted to a user -> allowed
+          - user: user:cm-user-1
+            object: model:cm-model-1
+            context:
+                requested_relation: writer
+                grantee_kind: user
+            assertions:
+                can_manage: true
+          # structural relation (controller) -> denied by the condition
+          - user: user:cm-user-1
+            object: model:cm-model-1
+            context:
+                requested_relation: controller
+                grantee_kind: controller
+            assertions:
+                can_manage: false
+          # access relation granted to a non-grantee kind -> denied
+          - user: user:cm-user-1
+            object: model:cm-model-1
+            context:
+                requested_relation: writer
+                grantee_kind: controller
+            assertions:
+                can_manage: false
+          # not an administrator of the target -> denied even when allowlisted
+          - user: user:cm-user-2
+            object: model:cm-model-1
+            context:
+                requested_relation: writer
+                grantee_kind: user
+            assertions:
+                can_manage: false
+
     # Ensures:
     # - all or individual users can become members of a group
     # - group membership can have multiple layers

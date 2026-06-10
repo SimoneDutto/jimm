@@ -244,6 +244,29 @@ func (o *OFGAClient) CheckRelation(ctx context.Context, tuple Tuple, trace bool)
 	return o.cofgaClient.CheckRelation(ctx, tuple)
 }
 
+// CheckRelationWithContext verifies access like CheckRelation, but additionally
+// supplies a request-level condition context (the CEL parameters evaluated by
+// conditions in the authorisation model) and conditioned contextual tuples.
+// This is what lets relation-management policy (which relations are grantable,
+// and to which grantee kinds) live in the model's `grantable` condition rather
+// than in Go allowlists.
+func (o *OFGAClient) CheckRelationWithContext(ctx context.Context, tuple Tuple, context map[string]any, contextualTuples ...Tuple) (_ bool, err error) {
+	const op = "openfga.CheckRelationWithContext"
+
+	durationObserver := servermon.DurationObserver(servermon.OpenFGACallDurationHistogram, op)
+	defer durationObserver()
+	defer servermon.ErrorCounter(servermon.OpenFGACallErrorCount, &err, op)
+
+	return o.cofgaClient.CheckRelationWithContext(ctx, tuple, context, contextualTuples...)
+}
+
+// NewGrantableCondition returns the RelationshipCondition that guards the
+// request_ok relation. It carries no inline context; the CEL parameters are
+// supplied at check time via the request-level context.
+func NewGrantableCondition() *cofga.RelationshipCondition {
+	return cofga.NewRelationshipCondition(ofganames.GrantableCondition)
+}
+
 // removeTuples iteratively reads through all the tuples with the parameters as supplied by tuple and deletes them.
 func (o *OFGAClient) removeTuples(ctx context.Context, tuple Tuple) (err error) {
 	const op = "openfga.removeTuples"

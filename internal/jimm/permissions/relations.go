@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/canonical/ofga"
 	"github.com/juju/zaputil/zapctx"
 	"go.uber.org/zap"
 
@@ -26,37 +25,13 @@ import (
 // requests according to the deployed OpenFGA instance configuration.
 const BATCH_SIZE_OPENFGA = 100
 
-// resourceAdminRelations are the access-grant relations a resource administrator
-// (a non-JIMM-admin who administers the target) is permitted to manage. The
-// structural relations that define the resource hierarchy (controller, model)
-// are deliberately excluded — only JIMM admins may change those, since they are
-// set by JIMM internally and are not part of the user-facing access-grant API.
-// Using an allowlist (rather than a denylist) keeps any relation added to the
-// OpenFGA model in the future JIMM-admin-only until explicitly opted in.
-var resourceAdminRelations = map[ofga.Relation]bool{
-	ofganames.AdministratorRelation:  true,
-	ofganames.ReaderRelation:         true,
-	ofganames.WriterRelation:         true,
-	ofganames.ConsumerRelation:       true,
-	ofganames.CanAddModelRelation:    true,
-	ofganames.AuditLogViewerRelation: true,
-}
-
-// grantableObjectKinds are the object kinds an access grant may be made to.
-// Service accounts and public-access (user:*) are both kind `user`. Structural
-// relations are the only ones whose object is a controller/model/cloud, so
-// restricting grantees to these kinds independently prevents a non-admin from
-// writing a structural tuple.
-var grantableObjectKinds = map[openfga.Kind]bool{
-	openfga.UserType:  true,
-	openfga.GroupType: true,
-	openfga.RoleType:  true,
-}
-
 // authorizeRelationTargetAdmin authorizes a non-JIMM-admin to manage the given
 // relation tuple. JIMM admins may manage any tuple. A non-admin may only grant
-// or revoke an access relation (resourceAdminRelations) to a grantee of an
-// allowed kind (grantableObjectKinds) on a resource target they administer.
+// or revoke an access relation to a grantee of an allowed kind on a resource
+// target they administer.
+//
+// The allowlist policy (which relations are grantable, and to which grantee
+// kinds) lives in the OpenFGA authorisation model as the `grantable` condition.
 //
 // E.g. a non-jimm-admin who is a model admin can grant 'user-alice' with 'write' permission
 // to a model but cannot remove the relation between a controller and that model.
@@ -65,40 +40,38 @@ func (j *PermissionManager) authorizeRelationTargetAdmin(ctx context.Context, us
 		return nil
 	}
 
-	// Non-admins may only manage access-grant relations, never the structural
-	// (controller/model) relations that define the resource hierarchy.
-	if !resourceAdminRelations[tuple.Relation] {
-		return errors.Codef(errors.CodeUnauthorized, "unauthorized")
-	}
-
-	// ...and only grant them to a user, service account, group or role.
 	if tuple.Object == nil {
 		return errors.Codef(errors.CodeBadRequest, "object not specified")
 	}
-	if !grantableObjectKinds[tuple.Object.Kind] {
+
+	allowed, err := j.authSvc.CheckRelationWithContext(ctx,
+		openfga.Tuple{
+			Object:   ofganames.ConvertTag(user.ResourceTag()),
+			Relation: ofganames.CanManageRelation,
+			Target:   tuple.Target,
+		},
+		// The condition context describing the write being attempted. OpenFGA
+		// evaluates it against the `grantable` condition in the model.
+		map[string]any{
+			"requested_relation": tuple.Relation.String(),
+			"grantee_kind":       tuple.Object.Kind.String(),
+		},
+		// Its `grantable` condition is evaluated
+		// against the request-level context above.
+		openfga.Tuple{
+			Object:    ofganames.ConvertTag(user.ResourceTag()),
+			Relation:  ofganames.RequestOkRelation,
+			Target:    tuple.Target,
+			Condition: openfga.NewGrantableCondition(),
+		},
+	)
+	if err != nil {
+		return errors.Codef(errors.CodeOpenFGARequestFailed, "%w", err)
+	}
+	if !allowed {
 		return errors.Codef(errors.CodeUnauthorized, "unauthorized")
 	}
-
-	switch tuple.Target.Kind {
-	case openfga.ControllerType, openfga.ModelType, openfga.ApplicationOfferType, openfga.CloudType:
-		allowed, err := j.authSvc.CheckRelation(ctx, openfga.Tuple{
-			Object:   ofganames.ConvertTag(user.ResourceTag()),
-			Relation: ofganames.AdministratorRelation,
-			Target:   tuple.Target,
-		}, false)
-		if err != nil {
-			return errors.Codef(errors.CodeOpenFGARequestFailed, "%w", err)
-		}
-		if allowed {
-			return nil
-		}
-	case openfga.GroupType, openfga.RoleType:
-		// Membership changes for groups and roles are restricted to JIMM admins.
-	default:
-		// Unsupported relation-management targets are rejected for non-admins.
-	}
-
-	return errors.Codef(errors.CodeUnauthorized, "unauthorized")
+	return nil
 }
 
 // AddRelation checks user permission and adds the given relation tuples.

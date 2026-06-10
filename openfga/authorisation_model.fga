@@ -17,6 +17,14 @@ type controller
     define administrator: [user, user:*, group#member, role#assignee] or administrator from controller
     define audit_log_viewer: [user, user:*, group#member, role#assignee] or administrator
     define can_addmodel: [user, user:*, group#member, role#assignee] or administrator
+    # request_ok is never stored; JIMM injects it as a contextual tuple guarded
+    # by the `grantable` condition, describing the access-management request.
+    define request_ok: [user with grantable]
+    # can_manage models the resource-administrator relation-management policy
+    # that used to live in JIMM's Go allowlists: administer the target AND make
+    # a request the `grantable` condition permits. (JIMM admins bypass this in
+    # Go, since the model cannot distinguish them from other administrators.)
+    define can_manage: administrator and request_ok
 
 type model
   relations
@@ -24,6 +32,8 @@ type model
     define administrator: [user, user:*, group#member, role#assignee] or administrator from controller
     define reader: [user, user:*, group#member, role#assignee] or writer
     define writer: [user, user:*, group#member, role#assignee] or administrator
+    define request_ok: [user with grantable]
+    define can_manage: administrator and request_ok
 
 type applicationoffer
   relations
@@ -31,9 +41,24 @@ type applicationoffer
     define administrator: [user, user:*, group#member, role#assignee] or administrator from model
     define consumer: [user, user:*, group#member, role#assignee] or administrator
     define reader: [user, user:*, group#member, role#assignee] or consumer
+    define request_ok: [user with grantable]
+    define can_manage: administrator and request_ok
 
 type cloud
   relations
     define controller: [controller]
     define administrator: [user, user:*, group#member, role#assignee] or administrator from controller
     define can_addmodel: [user, user:*, group#member, role#assignee] or administrator
+    define request_ok: [user with grantable]
+    define can_manage: administrator and request_ok
+
+# grantable encodes, as policy, exactly what JIMM used to hard-code in Go
+# (resourceAdminRelations + grantableObjectKinds). A resource administrator may
+# only grant an access relation, and only to a user/service-account, group or
+# role. Adding a new relation to the model keeps it JIMM-admin-only until it is
+# explicitly listed here, preserving the default-deny property.
+condition grantable(requested_relation: string, grantee_kind: string) {
+  requested_relation in ["administrator", "reader", "writer", "consumer", "can_addmodel", "audit_log_viewer"] &&
+  grantee_kind in ["user", "group", "role"]
+}
+

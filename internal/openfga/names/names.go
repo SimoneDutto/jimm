@@ -37,13 +37,25 @@ var (
 	CanAddModelRelation cofga.Relation = "can_addmodel"
 	// AuditLogViewer represents an audit_log_viewer relation between entities.
 	AuditLogViewerRelation cofga.Relation = "audit_log_viewer"
+	// RequestOkRelation is the conditioned relation JIMM injects as a contextual
+	// tuple to describe an access-management request. It is guarded by the
+	// `grantable` condition in the authorisation model and is never persisted.
+	RequestOkRelation cofga.Relation = "request_ok"
+	// CanManageRelation is the relation a user must hold on a target to manage
+	// its access grants. It resolves to either the JIMM-admin bypass or
+	// (resource-admin AND a request satisfying the `grantable` condition).
+	CanManageRelation cofga.Relation = "can_manage"
 	// NoRelation is returned when there is no relation.
 	NoRelation cofga.Relation = ""
 )
 
+// GrantableCondition is the name of the OpenFGA condition that guards the
+// request_ok relation, encoding the relation-management allowlist policy.
+const GrantableCondition = "grantable"
+
 // allRelations contains a slice of all valid relations.
 // NB: Add any new relations from the above to this slice.
-var allRelations = []cofga.Relation{MemberRelation, AdministratorRelation, ControllerRelation, ModelRelation, ConsumerRelation, ReaderRelation, WriterRelation, CanAddModelRelation, AuditLogViewerRelation, AssigneeRelation, NoRelation}
+var allRelations = []cofga.Relation{MemberRelation, AdministratorRelation, ControllerRelation, ModelRelation, ConsumerRelation, ReaderRelation, WriterRelation, CanAddModelRelation, AuditLogViewerRelation, AssigneeRelation, RequestOkRelation, CanManageRelation, NoRelation}
 
 // EveryoneUser is the username representing all users and is treated uniquely when used in OpenFGA tuples.
 const EveryoneUser = "everyone@external"
