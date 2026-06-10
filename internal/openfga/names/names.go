@@ -53,9 +53,12 @@ var (
 // request_ok relation, encoding the relation-management allowlist policy.
 const GrantableCondition = "grantable"
 
-// allRelations contains a slice of all valid relations.
+// allRelations contains a slice of all valid user-facing relations.
 // NB: Add any new relations from the above to this slice.
-var allRelations = []cofga.Relation{MemberRelation, AdministratorRelation, ControllerRelation, ModelRelation, ConsumerRelation, ReaderRelation, WriterRelation, CanAddModelRelation, AuditLogViewerRelation, AssigneeRelation, RequestOkRelation, CanManageRelation, NoRelation}
+// NB: request_ok and can_manage are deliberately excluded: they are internal
+// relations used only by JIMM's relation-management check and must never be
+// parseable from user input (see ParseRelation).
+var allRelations = []cofga.Relation{MemberRelation, AdministratorRelation, ControllerRelation, ModelRelation, ConsumerRelation, ReaderRelation, WriterRelation, CanAddModelRelation, AuditLogViewerRelation, AssigneeRelation, NoRelation}
 
 // EveryoneUser is the username representing all users and is treated uniquely when used in OpenFGA tuples.
 const EveryoneUser = "everyone@external"

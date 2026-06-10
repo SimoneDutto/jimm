@@ -6,10 +6,21 @@ type user
 type role
  relations
    define assignee: [user, user:*, group#member]
+   # request_ok / can_manage mirror the resource types so the relation-management
+   # check resolves in-model for every target kind. Roles have no per-resource
+   # administrator, and `assignee` is not in the `grantable` condition's relation
+   # list, so can_manage is always false for non-admins: role management stays
+   # JIMM-admin-only (JIMM admins bypass this in Go).
+   define request_ok: [user with grantable]
+   define can_manage: request_ok
 
 type group
   relations
     define member: [user, user:*, group#member]
+    # See role above: `member` is not a grantable relation, so can_manage is
+    # always false for non-admins and group management stays JIMM-admin-only.
+    define request_ok: [user with grantable]
+    define can_manage: request_ok
 
 type controller
   relations
