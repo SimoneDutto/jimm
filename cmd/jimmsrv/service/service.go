@@ -22,6 +22,7 @@ import (
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
 	vaultapi "github.com/hashicorp/vault/api"
+	jujuTrace "github.com/juju/juju/core/trace"
 	"github.com/juju/names/v6"
 	"github.com/juju/zaputil/zapctx"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -51,6 +52,7 @@ import (
 	ofganames "github.com/canonical/jimm/v3/internal/openfga/names"
 	"github.com/canonical/jimm/v3/internal/pubsub"
 	"github.com/canonical/jimm/v3/internal/river"
+	"github.com/canonical/jimm/v3/internal/telemetry"
 	"github.com/canonical/jimm/v3/internal/vault"
 )
 
@@ -153,6 +155,9 @@ type Params struct {
 
 	// Parameters used to initialize connection to an OpenFGA server.
 	OpenFGAParams OpenFGAParams
+
+	// TelemetryParams holds parameters used to export traces.
+	TelemetryParams telemetry.Params
 
 	// PrivateKey holds the private part of the bakery keypair.
 	PrivateKey string
@@ -261,6 +266,7 @@ type ServiceDependencies struct {
 	OAuthAuthenticator      login.OAuthAuthenticator
 	OAuthHandler            *jimmhttp.OAuthHandler
 	OpenFGAClient           *openfga.OFGAClient
+	Tracer                  jujuTrace.Tracer
 	// Cleanup
 	cleanupFuncs []func() error
 }
@@ -454,6 +460,12 @@ func NewServiceDependencies(ctx context.Context, p Params) (*ServiceDependencies
 		return nil, err
 	}
 
+	tracer, shutdownTracer, err := telemetry.NewTracer(ctx, p.TelemetryParams)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize tracer: %w", err)
+	}
+	ctx = jujuTrace.WithTracer(ctx, tracer)
+
 	if err := ensureControllerAdministrators(ctx, openFGAclient, controllerUUID, p.ControllerAdmins); err != nil {
 		return nil, fmt.Errorf("failed to ensure controller admins: %w", err)
 	}
@@ -494,10 +506,14 @@ func NewServiceDependencies(ctx context.Context, p Params) (*ServiceDependencies
 		Client:                        jimm.NewDialerAdapter(dialer),
 		RiverClient:                   riverClient,
 		OpenFGAClient:                 openFGAclient,
+		Tracer:                        tracer,
 		CredentialStore:               credentialStore,
 		JWTService:                    jwtService,
 		JWKSService:                   jwksService,
 	}
+	deps.cleanupFuncs = append(deps.cleanupFuncs, func() error {
+		return shutdownTracer(context.Background())
+	})
 
 	sessionStore, cleanupFuncs, err := setupSessionStore(p.CookieSessionKey, db)
 	if err != nil {
@@ -558,6 +574,10 @@ func NewServiceFromDependencies(ctx context.Context, deps *ServiceDependencies) 
 	if err := deps.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid service dependencies: %w", err)
 	}
+	if deps.Tracer == nil {
+		deps.Tracer = jujuTrace.NoopTracer{}
+	}
+	ctx = jujuTrace.WithTracer(ctx, deps.Tracer)
 
 	s := &Service{
 		jwkService: deps.JWKSService,
@@ -633,6 +653,7 @@ func NewServiceFromDependencies(ctx context.Context, deps *ServiceDependencies) 
 	params := jujuapi.Params{
 		ControllerUUID: deps.ControllerUUID,
 		PublicDNSName:  deps.PublicDNSHost,
+		Tracer:         deps.Tracer,
 	}
 
 	// Websockets require extra care when cookies are used for authentication
