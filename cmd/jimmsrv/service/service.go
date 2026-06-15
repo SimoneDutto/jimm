@@ -802,13 +802,91 @@ func openDB(ctx context.Context, dsn string, logSQL bool) (*gorm.DB, error) {
 	default:
 		return nil, errors.Codef(errors.CodeServerConfiguration, "unsupported DSN")
 	}
-	return gorm.Open(dialect, &gorm.Config{
+	database, err := gorm.Open(dialect, &gorm.Config{
 		Logger: &logger.GormLogger{LogSQL: logSQL},
 		NowFunc: func() time.Time {
 			// This is to set the timestamp precision at the service level.
 			return time.Now().Truncate(time.Microsecond)
 		},
 	})
+	if err != nil {
+		return nil, err
+	}
+	if err := registerDatabaseTracing(database); err != nil {
+		return nil, fmt.Errorf("failed to register database tracing: %w", err)
+	}
+	return database, nil
+}
+
+func registerDatabaseTracing(database *gorm.DB) error {
+	if err := database.Callback().Create().Before("gorm:create").Register("jimm:trace_before", beforeDatabaseTrace("create")); err != nil {
+		return fmt.Errorf("register create before callback: %w", err)
+	}
+	if err := database.Callback().Create().After("gorm:create").Register("jimm:trace_after", afterDatabaseTrace("create")); err != nil {
+		return fmt.Errorf("register create after callback: %w", err)
+	}
+	if err := database.Callback().Query().Before("gorm:query").Register("jimm:trace_before", beforeDatabaseTrace("query")); err != nil {
+		return fmt.Errorf("register query before callback: %w", err)
+	}
+	if err := database.Callback().Query().After("gorm:query").Register("jimm:trace_after", afterDatabaseTrace("query")); err != nil {
+		return fmt.Errorf("register query after callback: %w", err)
+	}
+	if err := database.Callback().Update().Before("gorm:update").Register("jimm:trace_before", beforeDatabaseTrace("update")); err != nil {
+		return fmt.Errorf("register update before callback: %w", err)
+	}
+	if err := database.Callback().Update().After("gorm:update").Register("jimm:trace_after", afterDatabaseTrace("update")); err != nil {
+		return fmt.Errorf("register update after callback: %w", err)
+	}
+	if err := database.Callback().Delete().Before("gorm:delete").Register("jimm:trace_before", beforeDatabaseTrace("delete")); err != nil {
+		return fmt.Errorf("register delete before callback: %w", err)
+	}
+	if err := database.Callback().Delete().After("gorm:delete").Register("jimm:trace_after", afterDatabaseTrace("delete")); err != nil {
+		return fmt.Errorf("register delete after callback: %w", err)
+	}
+	if err := database.Callback().Row().Before("gorm:row").Register("jimm:trace_before", beforeDatabaseTrace("row")); err != nil {
+		return fmt.Errorf("register row before callback: %w", err)
+	}
+	if err := database.Callback().Row().After("gorm:row").Register("jimm:trace_after", afterDatabaseTrace("row")); err != nil {
+		return fmt.Errorf("register row after callback: %w", err)
+	}
+	if err := database.Callback().Raw().Before("gorm:raw").Register("jimm:trace_before", beforeDatabaseTrace("raw")); err != nil {
+		return fmt.Errorf("register raw before callback: %w", err)
+	}
+	if err := database.Callback().Raw().After("gorm:raw").Register("jimm:trace_after", afterDatabaseTrace("raw")); err != nil {
+		return fmt.Errorf("register raw after callback: %w", err)
+	}
+	return nil
+}
+
+func beforeDatabaseTrace(operation string) func(*gorm.DB) {
+	return func(tx *gorm.DB) {
+		ctx := tx.Statement.Context
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		ctx, span := telemetry.StartSpan(ctx, "jimm.db")
+		tx.Statement.Context = ctx
+		tx.InstanceSet("jimm:trace_span", span)
+	}
+}
+
+func afterDatabaseTrace(operation string) func(*gorm.DB) {
+	return func(tx *gorm.DB) {
+		spanValue, ok := tx.InstanceGet("jimm:trace_span")
+		if !ok {
+			return
+		}
+		span, ok := spanValue.(telemetry.TrackedSpan)
+		if !ok {
+			return
+		}
+		span.Finish(tx.Error,
+			jujuTrace.StringAttr("db.system", "postgresql"),
+			jujuTrace.StringAttr("db.operation", operation),
+			jujuTrace.StringAttr("db.table", tx.Statement.Table),
+			jujuTrace.StringAttr("db.rows_affected", strconv.FormatInt(tx.RowsAffected, 10)),
+		)
+	}
 }
 
 func setupCredentialStore(ctx context.Context, p Params, db *db.Database) (jimmcreds.CredentialStore, error) {

@@ -14,6 +14,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 	"github.com/gorilla/websocket"
+	jujuTrace "github.com/juju/juju/core/trace"
+	jujuRPC "github.com/juju/juju/rpc"
 
 	"github.com/canonical/jimm/v3/internal/errors"
 	"github.com/canonical/jimm/v3/internal/rpc"
@@ -155,6 +157,62 @@ func TestCallErrorResponse(t *testing.T) {
 	c.Check(res, qt.Equals, "")
 
 	err = conn.Call(context.Background(), "test", 1, "", "Test", "SUCCESS", &res)
+	c.Assert(err, qt.IsNil)
+	c.Check(res, qt.Equals, "SUCCESS")
+}
+
+func TestCallPropagatesTraceScope(t *testing.T) {
+	c := qt.New(t)
+
+	srv := newServer(func(conn *websocket.Conn) error {
+		var req map[string]interface{}
+		if err := conn.ReadJSON(&req); err != nil {
+			return err
+		}
+		c.Check(req["trace-id"], qt.Equals, "0123456789abcdef0123456789abcdef")
+		c.Check(req["span-id"], qt.Equals, "0123456789abcdef")
+		c.Check(req["trace-flags"], qt.Equals, float64(1))
+		return conn.WriteJSON(map[string]interface{}{
+			"request-id": req["request-id"],
+			"response":   "SUCCESS",
+		})
+	})
+	defer srv.Close()
+	conn, err := srv.dialer.Dial(context.Background(), srv.URL, nil)
+	c.Assert(err, qt.IsNil)
+	defer conn.Close()
+
+	ctx := jujuTrace.WithTraceScope(context.Background(), "0123456789abcdef0123456789abcdef", "0123456789abcdef", 1)
+	var res string
+	err = conn.Call(ctx, "test", 1, "", "Test", "SUCCESS", &res)
+	c.Assert(err, qt.IsNil)
+	c.Check(res, qt.Equals, "SUCCESS")
+}
+
+func TestCallPropagatesJujuRPCTracing(t *testing.T) {
+	c := qt.New(t)
+
+	srv := newServer(func(conn *websocket.Conn) error {
+		var req map[string]interface{}
+		if err := conn.ReadJSON(&req); err != nil {
+			return err
+		}
+		c.Check(req["trace-id"], qt.Equals, "0123456789abcdef0123456789abcdef")
+		c.Check(req["span-id"], qt.Equals, "0123456789abcdef")
+		c.Check(req["trace-flags"], qt.Equals, float64(1))
+		return conn.WriteJSON(map[string]interface{}{
+			"request-id": req["request-id"],
+			"response":   "SUCCESS",
+		})
+	})
+	defer srv.Close()
+	conn, err := srv.dialer.Dial(context.Background(), srv.URL, nil)
+	c.Assert(err, qt.IsNil)
+	defer conn.Close()
+
+	ctx := jujuRPC.WithTracing(context.Background(), "0123456789abcdef0123456789abcdef", "0123456789abcdef", 1)
+	var res string
+	err = conn.Call(ctx, "test", 1, "", "Test", "SUCCESS", &res)
 	c.Assert(err, qt.IsNil)
 	c.Check(res, qt.Equals, "SUCCESS")
 }

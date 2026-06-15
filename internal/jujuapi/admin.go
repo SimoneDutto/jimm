@@ -6,6 +6,7 @@ import (
 	"context"
 	"sort"
 
+	jujuTrace "github.com/juju/juju/core/trace"
 	jujuparams "github.com/juju/juju/rpc/params"
 	"github.com/juju/names/v6"
 	"github.com/juju/zaputil/zapctx"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/canonical/jimm/v3/internal/errors"
 	"github.com/canonical/jimm/v3/internal/openfga"
+	"github.com/canonical/jimm/v3/internal/telemetry"
 	"github.com/canonical/jimm/v3/pkg/api/params"
 )
 
@@ -83,11 +85,19 @@ func (r *controllerRoot) GetDeviceSessionToken(ctx context.Context) (params.GetD
 //
 // It may be misleading in that it does not interact with cookies at all, but this will only ever
 // be successful upon the http layer login being successful.
-func (r *controllerRoot) LoginWithSessionCookie(ctx context.Context) (jujuparams.LoginResult, error) {
+func (r *controllerRoot) LoginWithSessionCookie(ctx context.Context) (result jujuparams.LoginResult, err error) {
+	ctx, span := telemetry.StartSpan(ctx, "jimm.auth",
+		jujuTrace.StringAttr("auth.endpoint", "controller-api"),
+		jujuTrace.StringAttr("auth.method", "LoginWithSessionCookie"),
+	)
+	defer func() {
+		span.Finish(err)
+	}()
 
 	user, err := r.jimm.LoginManager().LoginWithSessionCookie(ctx, r.identityId)
 	if err != nil {
-		return jujuparams.LoginResult{}, errors.Codef(errors.CodeUnauthorized, "%w", err)
+		err = errors.Codef(errors.CodeUnauthorized, "%w", err)
+		return result, err
 	}
 
 	r.mu.Lock()
@@ -97,7 +107,7 @@ func (r *controllerRoot) LoginWithSessionCookie(ctx context.Context) (jujuparams
 	// Get server version for LoginResult
 	srvVersion, err := r.jimm.JujuManager().EarliestControllerVersion(ctx)
 	if err != nil {
-		return jujuparams.LoginResult{}, err
+		return result, err
 	}
 
 	return jujuparams.LoginResult{

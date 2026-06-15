@@ -12,14 +12,17 @@ import (
 
 	qt "github.com/frankban/quicktest"
 	"github.com/google/uuid"
+	jujuTrace "github.com/juju/juju/core/trace"
 	"github.com/juju/juju/rpc/params"
 	"github.com/juju/names/v6"
+	"go.uber.org/mock/gomock"
 	"golang.org/x/oauth2"
 
 	"github.com/canonical/jimm/v3/internal/dbmodel"
 	"github.com/canonical/jimm/v3/internal/errors"
 	"github.com/canonical/jimm/v3/internal/openfga"
 	"github.com/canonical/jimm/v3/internal/rpcproxy"
+	telemetrymocks "github.com/canonical/jimm/v3/internal/telemetry/mocks"
 	apiparams "github.com/canonical/jimm/v3/pkg/api/params"
 	jimmnames "github.com/canonical/jimm/v3/pkg/names"
 )
@@ -393,6 +396,98 @@ func TestProxySocketsAdminFacade(t *testing.T) {
 			t.Logf("completed test %s", t.Name())
 		})
 	}
+}
+
+func TestProxySocketsProxiedEndpointStartsAndPropagatesTraceSpan(t *testing.T) {
+	c := qt.New(t)
+	ctrl := gomock.NewController(t)
+	tracer := telemetrymocks.NewMockTracer(ctrl)
+	span := telemetrymocks.NewMockSpan(ctrl)
+	scope := telemetrymocks.NewMockScope(ctrl)
+
+	tracer.EXPECT().Enabled().Return(true)
+	tracer.EXPECT().Start(gomock.Any(), "jimm.juju-proxy", gomock.Any()).DoAndReturn(
+		func(ctx context.Context, _ string, _ ...jujuTrace.Option) (context.Context, jujuTrace.Span) {
+			return jujuTrace.WithSpan(ctx, span), span
+		},
+	)
+	span.EXPECT().Scope().Return(scope)
+	scope.EXPECT().TraceID().Return("0123456789abcdef0123456789abcdef").Times(2)
+	scope.EXPECT().SpanID().Return("0123456789abcdef").Times(2)
+	scope.EXPECT().TraceFlags().Return(1)
+	span.EXPECT().End()
+
+	ctx := jujuTrace.WithTracer(context.Background(), tracer)
+	ctx, cancelFunc := context.WithCancel(ctx)
+	defer cancelFunc()
+
+	clientWebsocket := newMockWebsocketConnection(10)
+	controllerWebsocket := newMockWebsocketConnection(10)
+	helpers := rpcproxy.ProxyHelpers{
+		ConnClient: clientWebsocket,
+		TokenGen:   &mockTokenGenerator{},
+		ConnectController: func(ctx context.Context) (rpcproxy.WebsocketConnectionWithMetadata, error) {
+			return rpcproxy.WebsocketConnectionWithMetadata{
+				Conn:           controllerWebsocket,
+				ModelName:      "test model",
+				ControllerUUID: uuid.NewString(),
+			}, nil
+		},
+		AuditLog:     func(*dbmodel.AuditLogEntry) {},
+		LoginService: &mockLoginService{},
+		RedirectInfo: &mockRedirectInfo{},
+	}
+
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		err := rpcproxy.ProxySockets(ctx, helpers)
+		c.Assert(err, qt.ErrorMatches, "Context cancelled")
+	})
+
+	request := rpcproxy.Message{
+		RequestID: 1,
+		Type:      "Client",
+		Version:   7,
+		Request:   "FullStatus",
+		Params:    []byte(`{"patterns":null}`),
+	}
+	data, err := json.Marshal(request)
+	c.Assert(err, qt.IsNil)
+	clientWebsocket.read <- data
+
+	select {
+	case data := <-controllerWebsocket.write:
+		var controllerMessage rpcproxy.Message
+		err := json.Unmarshal(data, &controllerMessage)
+		c.Assert(err, qt.IsNil)
+		c.Assert(controllerMessage.RequestID, qt.Equals, uint64(1))
+		c.Assert(controllerMessage.Type, qt.Equals, "Client")
+		c.Assert(controllerMessage.Request, qt.Equals, "FullStatus")
+		c.Assert(controllerMessage.TraceID, qt.Equals, "0123456789abcdef0123456789abcdef")
+		c.Assert(controllerMessage.SpanID, qt.Equals, "0123456789abcdef")
+		c.Assert(controllerMessage.TraceFlags, qt.Equals, 1)
+	case <-time.After(2 * time.Second):
+		c.Fatal("timed out waiting for controller request")
+	}
+
+	response := rpcproxy.Message{RequestID: 1, Response: []byte(`{"ok":true}`)}
+	data, err = json.Marshal(response)
+	c.Assert(err, qt.IsNil)
+	controllerWebsocket.read <- data
+
+	select {
+	case data := <-clientWebsocket.write:
+		var clientMessage rpcproxy.Message
+		err := json.Unmarshal(data, &clientMessage)
+		c.Assert(err, qt.IsNil)
+		c.Assert(clientMessage.RequestID, qt.Equals, uint64(1))
+		c.Assert(string(clientMessage.Response), qt.Equals, `{"ok":true}`)
+	case <-time.After(2 * time.Second):
+		c.Fatal("timed out waiting for client response")
+	}
+
+	cancelFunc()
+	wg.Wait()
 }
 
 type mockLoginService struct {
