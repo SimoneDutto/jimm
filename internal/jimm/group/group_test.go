@@ -59,30 +59,15 @@ func (s *groupManagerSuite) Init(c *qt.C) {
 	s.user = openfga.NewUser(i2, ofgaClient)
 }
 
-func (s *groupManagerSuite) TestAddGroup(c *qt.C) {
-	c.Parallel()
-	ctx := context.Background()
-
-	g, err := s.manager.AddGroup(ctx, s.adminUser, "test-group-1")
-	c.Assert(err, qt.IsNil)
-	c.Assert(g.UUID, qt.Not(qt.Equals), "")
-	c.Assert(g.Name, qt.Equals, "test-group-1")
-
-	g, err = s.manager.AddGroup(ctx, s.adminUser, "test-group-2")
-	c.Assert(err, qt.IsNil)
-	c.Assert(g.UUID, qt.Not(qt.Equals), "")
-	c.Assert(g.Name, qt.Equals, "test-group-2")
-}
-
 func (s *groupManagerSuite) TestCountGroups(c *qt.C) {
 	c.Parallel()
 	ctx := context.Background()
 
-	groupEntry, err := s.manager.AddGroup(ctx, s.adminUser, "test-group-1")
+	groupEntry, err := s.db.AddGroup(ctx, "test-group-1")
 	c.Assert(err, qt.IsNil)
 	c.Assert(groupEntry.UUID, qt.Not(qt.Equals), "")
 
-	_, err = s.manager.AddGroup(ctx, s.adminUser, "test-group-1")
+	_, err = s.db.AddGroup(ctx, "test-group-1")
 	c.Assert(errors.ErrorCode(err), qt.Equals, errors.CodeAlreadyExists)
 }
 
@@ -90,7 +75,7 @@ func (s *groupManagerSuite) TestGetGroup(c *qt.C) {
 	c.Parallel()
 	ctx := context.Background()
 
-	groupEntry, err := s.manager.AddGroup(ctx, s.adminUser, "test-group-1")
+	groupEntry, err := s.db.AddGroup(ctx, "test-group-1")
 	c.Assert(err, qt.IsNil)
 	c.Assert(groupEntry.UUID, qt.Not(qt.Equals), "")
 
@@ -187,81 +172,6 @@ func (s *groupManagerSuite) TestRemoveGroupRemovesTuples(c *qt.C) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(remainingTuples, qt.HasLen, 0)
 }
-
-func (s *groupManagerSuite) TestRenameGroup(c *qt.C) {
-	c.Parallel()
-	ctx := context.Background()
-
-	user, group, controller, model, _, _, _, _ := jimmtest.CreateTestControllerEnvironment(ctx, c, s.db)
-
-	tuples := []openfga.Tuple{
-		{
-			Object:   ofganames.ConvertTag(user.ResourceTag()),
-			Relation: "member",
-			Target:   ofganames.ConvertTag(group.ResourceTag()),
-		},
-		{
-			Object:   ofganames.ConvertTagWithRelation(group.ResourceTag(), ofganames.MemberRelation),
-			Relation: "administrator",
-			Target:   ofganames.ConvertTag(controller.ResourceTag()),
-		},
-		{
-			Object:   ofganames.ConvertTagWithRelation(group.ResourceTag(), ofganames.MemberRelation),
-			Relation: "writer",
-			Target:   ofganames.ConvertTag(model.ResourceTag()),
-		},
-	}
-
-	err := s.ofgaClient.AddRelation(ctx, tuples...)
-	c.Assert(err, qt.IsNil)
-
-	err = s.manager.RenameGroup(ctx, s.adminUser, group.Name, "test-new-group")
-	c.Assert(err, qt.IsNil)
-
-	group.Name = "test-new-group"
-
-	// check the user still has member relation to the group
-	allowed, err := s.ofgaClient.CheckRelation(
-		ctx,
-		ofga.Tuple{
-			Object:   ofganames.ConvertTag(user.ResourceTag()),
-			Relation: "member",
-			Target:   ofganames.ConvertTag(group.ResourceTag()),
-		},
-		false,
-	)
-	c.Assert(err, qt.IsNil)
-	c.Assert(allowed, qt.IsTrue)
-
-	// check the user still has writer relation to the model via the
-	// group membership
-	allowed, err = s.ofgaClient.CheckRelation(
-		ctx,
-		ofga.Tuple{
-			Object:   ofganames.ConvertTag(user.ResourceTag()),
-			Relation: "writer",
-			Target:   ofganames.ConvertTag(model.ResourceTag()),
-		},
-		false,
-	)
-	c.Assert(err, qt.IsNil)
-	c.Assert(allowed, qt.IsTrue)
-
-	// check the user still has administrator relation to the controller
-	// via group membership
-	allowed, err = s.ofgaClient.CheckRelation(
-		ctx,
-		ofga.Tuple{
-			Object:   ofganames.ConvertTag(user.ResourceTag()),
-			Relation: "administrator",
-			Target:   ofganames.ConvertTag(controller.ResourceTag()),
-		},
-		false,
-	)
-	c.Assert(err, qt.IsNil)
-	c.Assert(allowed, qt.IsTrue)
-}
-
 func (s *groupManagerSuite) TestListGroups(c *qt.C) {
 	c.Parallel()
 	ctx := context.Background()
@@ -284,7 +194,7 @@ func (s *groupManagerSuite) TestListGroups(c *qt.C) {
 	}
 
 	for _, name := range groupNames {
-		_, err := s.manager.AddGroup(ctx, u, name)
+		_, err := s.db.AddGroup(ctx, name)
 		c.Assert(err, qt.IsNil)
 	}
 	groups, err = s.manager.ListGroups(ctx, u, pagination, "")
@@ -301,6 +211,18 @@ func (s *groupManagerSuite) TestListGroups(c *qt.C) {
 	c.Assert(groups[2].Name, qt.Equals, "test-group0")
 	c.Assert(groups[3].Name, qt.Equals, "test-group1")
 	c.Assert(groups[4].Name, qt.Equals, "test-group2")
+}
+
+func (s *groupManagerSuite) TestAddGroupDeprecated(c *qt.C) {
+	c.Parallel()
+	_, err := s.manager.AddGroup(context.Background(), s.adminUser, "test-group-1")
+	c.Assert(err, qt.ErrorMatches, ".*JAAS-managed group writes are deprecated.*")
+}
+
+func (s *groupManagerSuite) TestRenameGroupDeprecated(c *qt.C) {
+	c.Parallel()
+	err := s.manager.RenameGroup(context.Background(), s.adminUser, "old-group", "new-group")
+	c.Assert(err, qt.ErrorMatches, ".*JAAS-managed group writes are deprecated.*")
 }
 
 func TestGroupManager(t *testing.T) {

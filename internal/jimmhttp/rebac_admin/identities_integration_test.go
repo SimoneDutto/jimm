@@ -9,6 +9,7 @@ import (
 	rebac_handlers "github.com/canonical/rebac-admin-ui-handlers/v1"
 	"github.com/canonical/rebac-admin-ui-handlers/v1/resources"
 	qt "github.com/frankban/quicktest"
+	"github.com/google/uuid"
 	"github.com/juju/names/v5"
 
 	"github.com/canonical/jimm/v3/internal/dbmodel"
@@ -63,44 +64,12 @@ func TestIdentityPatchGroups(t *testing.T) {
 
 	ctx = rebac_handlers.ContextWithIdentity(ctx, s.AdminUser)
 	identitySvc := rebac_admin.NewidentitiesService(jujuapi.NewJIMMAdapter(s.JIMM))
-	groupName := "group-test1"
 	username := s.AdminUser.Name
-	group := s.AddGroup(c, groupName)
-
-	// test add identity group
-	changed, err := identitySvc.PatchIdentityGroups(ctx, username, []resources.IdentityGroupsPatchItem{{
-		Group: group.UUID,
+	_, err := identitySvc.PatchIdentityGroups(ctx, username, []resources.IdentityGroupsPatchItem{{
+		Group: uuid.NewString(),
 		Op:    resources.IdentityGroupsPatchItemOpAdd,
 	}})
-	c.Assert(err, qt.IsNil)
-	c.Assert(changed, qt.Equals, true)
-
-	// test user added to groups
-	objUser, err := s.JIMM.IdentityManager.FetchIdentity(ctx, username)
-	c.Assert(err, qt.IsNil)
-	tuples, _, err := s.JIMM.PermissionManager.ListRelationshipTuples(ctx, s.AdminUser, params.RelationshipTuple{
-		Object:       objUser.ResourceTag().String(),
-		Relation:     ofganames.MemberRelation.String(),
-		TargetObject: group.ResourceTag().String(),
-	}, 10, "")
-	c.Assert(err, qt.IsNil)
-	c.Assert(len(tuples), qt.Equals, 1)
-	c.Assert(group.UUID, qt.Equals, tuples[0].Target.ID)
-
-	// test user remove from group
-	changed, err = identitySvc.PatchIdentityGroups(ctx, username, []resources.IdentityGroupsPatchItem{{
-		Group: group.UUID,
-		Op:    resources.IdentityGroupsPatchItemOpRemove,
-	}})
-	c.Assert(err, qt.IsNil)
-	c.Assert(changed, qt.Equals, true)
-	tuples, _, err = s.JIMM.PermissionManager.ListRelationshipTuples(ctx, s.AdminUser, params.RelationshipTuple{
-		Object:       objUser.ResourceTag().String(),
-		Relation:     ofganames.MemberRelation.String(),
-		TargetObject: group.ResourceTag().String(),
-	}, 10, "")
-	c.Assert(err, qt.IsNil)
-	c.Assert(len(tuples), qt.Equals, 0)
+	c.Assert(err, qt.ErrorMatches, ".*JAAS-managed group writes are deprecated.*")
 }
 
 func TestIdentityGetGroups(t *testing.T) {
@@ -113,21 +82,20 @@ func TestIdentityGetGroups(t *testing.T) {
 	identitySvc := rebac_admin.NewidentitiesService(jujuapi.NewJIMMAdapter(s.JIMM))
 	username := s.AdminUser.Name
 	groupsSize := 10
-	groupsToAdd := make([]resources.IdentityGroupsPatchItem, groupsSize)
 	groupTags := make([]jimmnames.GroupTag, groupsSize)
+	tuples := make([]openfga.Tuple, 0, groupsSize)
 	for i := range groupsSize {
 		groupName := fmt.Sprintf("group-test%d", i)
 		group := s.AddGroup(c, groupName)
 		groupTags[i] = group.ResourceTag()
-		groupsToAdd[i] = resources.IdentityGroupsPatchItem{
-			Group: group.UUID,
-			Op:    resources.IdentityGroupsPatchItemOpAdd,
-		}
-
+		tuples = append(tuples, openfga.Tuple{
+			Object:   ofganames.ConvertTag(s.AdminUser.ResourceTag()),
+			Relation: ofganames.MemberRelation,
+			Target:   ofganames.ConvertTag(group.ResourceTag()),
+		})
 	}
-	changed, err := identitySvc.PatchIdentityGroups(ctx, username, groupsToAdd)
+	err := s.JIMM.OpenFGAClient.AddRelation(ctx, tuples...)
 	c.Assert(err, qt.IsNil)
-	c.Assert(changed, qt.Equals, true)
 
 	// test list identity's groups with token pagination
 	size := 3

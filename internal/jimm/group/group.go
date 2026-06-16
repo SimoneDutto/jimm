@@ -13,6 +13,9 @@ import (
 	"github.com/canonical/jimm/v3/internal/openfga"
 )
 
+//nolint:gosec // This is a user-facing deprecation message, not a credential.
+const deprecatedJAASGroupWriteMessage = "JAAS-managed group writes are deprecated; group ownership is managed by the identity provider"
+
 // GroupManager provides a means to manage groups within JIMM.
 type GroupManager struct {
 	store   *db.Database
@@ -33,16 +36,7 @@ func NewGroupManager(store *db.Database, authSvc *openfga.OFGAClient) (*GroupMan
 
 // AddGroup creates a group within JIMMs DB for reference by OpenFGA.
 func (j *GroupManager) AddGroup(ctx context.Context, user *openfga.User, name string) (*dbmodel.GroupEntry, error) {
-
-	if !user.JimmAdmin {
-		return nil, errors.Codef(errors.CodeUnauthorized, "unauthorized")
-	}
-
-	ge, err := j.store.AddGroup(ctx, name)
-	if err != nil {
-		return nil, err
-	}
-	return ge, nil
+	return nil, errors.Codef(errors.CodeNotSupported, deprecatedJAASGroupWriteMessage)
 }
 
 // CountGroups returns the number of groups that exist.
@@ -82,31 +76,7 @@ func (j *GroupManager) GetGroupByName(ctx context.Context, user *openfga.User, n
 
 // RenameGroup renames a group in JIMM's DB.
 func (j *GroupManager) RenameGroup(ctx context.Context, user *openfga.User, oldName, newName string) error {
-
-	if !user.JimmAdmin {
-		return errors.Codef(errors.CodeUnauthorized, "unauthorized")
-	}
-
-	group := &dbmodel.GroupEntry{
-		Name: oldName,
-	}
-
-	err := j.store.Transaction(func(d *db.Database) error {
-		err := d.GetGroup(ctx, group)
-		if err != nil {
-			return err
-		}
-
-		if err := d.UpdateGroupName(ctx, group.UUID, newName); err != nil {
-			return err
-		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return errors.Codef(errors.CodeNotSupported, deprecatedJAASGroupWriteMessage)
 }
 
 // RemoveGroup removes a group within JIMMs DB for reference by OpenFGA.

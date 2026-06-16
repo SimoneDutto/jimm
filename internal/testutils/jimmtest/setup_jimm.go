@@ -384,7 +384,7 @@ func (s *JIMMEnv) RemoveCloud(c *qt.C, cloudName string) {
 
 func (s *JIMMEnv) AddGroup(c *qt.C, groupName string) dbmodel.GroupEntry {
 	ctx := context.Background()
-	group, err := s.JIMM.GroupManager.AddGroup(ctx, s.AdminUser, groupName)
+	group, err := s.JIMM.Database.AddGroup(ctx, groupName)
 	c.Assert(err, qt.Equals, nil)
 	return *group
 }

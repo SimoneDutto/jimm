@@ -55,7 +55,10 @@ const (
 
 	// migrationTokenExpiry is the expiry time for migration tokens.
 	migrationTokenExpiry = 3 * time.Hour
-	idpGroupLimit        = 20
+	// idpGroupLimit is the maximum number of groups that will be accepted from an identity provider
+	// in the configured group claim. Since we are handling idp groups as contextual tuples, and OpenFGA
+	// supports a max of 20 contextual tuples, this is the limit for now.
+	idpGroupLimit = 20
 )
 
 // AuthStyle determines how the client credentials are sent to the token endpoint.

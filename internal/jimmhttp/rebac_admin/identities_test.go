@@ -210,59 +210,17 @@ func TestGetIdentityGroups(t *testing.T) {
 
 func TestPatchIdentityGroups(t *testing.T) {
 	c := qt.New(t)
-	var patchTuplesErr error
-	identityManager := mocks.IdentityManager{
-		FetchIdentity_: func(ctx context.Context, id string) (*openfga.User, error) {
-			if id == "bob@canonical.com" {
-				return openfga.NewUser(&dbmodel.Identity{Name: "bob@canonical.com"}, nil), nil
-			}
-			return nil, dbmodel.ErrIdentityCreation
-		},
-	}
-	permissionManager := mocks.PermissionManager{
-		AddRelation_: func(ctx context.Context, user *openfga.User, tuples []params.RelationshipTuple) error {
-			return patchTuplesErr
-		},
-		RemoveRelation_: func(ctx context.Context, user *openfga.User, tuples []params.RelationshipTuple) error {
-			return patchTuplesErr
-		},
-	}
-	jimm := jimmtest.JIMM{
-		IdentityManager_: func() jujuapi.IdentityManager {
-			return &identityManager
-		},
-		PermissionManager_: func() jujuapi.PermissionManager {
-			return &permissionManager
-		},
-	}
+	jimm := jimmtest.JIMM{}
 	user := openfga.User{}
 	ctx := context.Background()
 	ctx = rebac_handlers.ContextWithIdentity(ctx, &user)
 	idSvc := rebac_admin.NewidentitiesService(&jimm)
 
-	_, err := idSvc.PatchIdentityGroups(ctx, "bob-not-found@canonical.com", nil)
-	c.Assert(err, qt.ErrorMatches, ".* not found")
-
-	username := "bob@canonical.com"
-	group1ID := uuid.New()
-	group2ID := uuid.New()
-	operations := []resources.IdentityGroupsPatchItem{
-		{Group: group1ID.String(), Op: resources.IdentityGroupsPatchItemOpAdd},
-		{Group: group2ID.String(), Op: resources.IdentityGroupsPatchItemOpRemove},
-	}
-	res, err := idSvc.PatchIdentityGroups(ctx, username, operations)
-	c.Assert(err, qt.IsNil)
-	c.Assert(res, qt.IsTrue)
-
-	patchTuplesErr = errors.New("foo")
-	_, err = idSvc.PatchIdentityGroups(ctx, username, operations)
-	c.Assert(err, qt.ErrorMatches, ".*foo")
-
-	invalidGroupName := []resources.IdentityGroupsPatchItem{
-		{Group: "test-group1", Op: resources.IdentityGroupsPatchItemOpAdd},
-	}
-	_, err = idSvc.PatchIdentityGroups(ctx, "bob@canonical.com", invalidGroupName)
-	c.Assert(err, qt.ErrorMatches, "Bad Request: ID test-group1 is not a valid group ID")
+	_, err := idSvc.PatchIdentityGroups(ctx, "bob@canonical.com", []resources.IdentityGroupsPatchItem{{
+		Group: uuid.NewString(),
+		Op:    resources.IdentityGroupsPatchItemOpAdd,
+	}})
+	c.Assert(err, qt.ErrorMatches, ".*JAAS-managed group writes are deprecated.*")
 }
 
 func TestGetIdentityRoles(t *testing.T) {

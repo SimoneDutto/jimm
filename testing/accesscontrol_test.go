@@ -3,64 +3,68 @@
 package testing
 
 import (
-	"context"
 	"database/sql"
+	"encoding/base64"
 	"testing"
 
 	petname "github.com/dustinkirkland/golang-petname"
 	qt "github.com/frankban/quicktest"
 	"github.com/google/uuid"
+	jujuapi "github.com/juju/juju/api"
 	"github.com/juju/juju/api/client/modelmanager"
 	"github.com/juju/juju/core/crossmodel"
 	jujuparams "github.com/juju/juju/rpc/params"
 	"github.com/juju/juju/state"
 	"github.com/juju/names/v5"
+	"github.com/lestrrat-go/jwx/v2/jwa"
+	"github.com/lestrrat-go/jwx/v2/jwt"
 
+	"github.com/canonical/jimm/v3/internal/auth"
 	"github.com/canonical/jimm/v3/internal/dbmodel"
 	"github.com/canonical/jimm/v3/internal/openfga"
 	ofganames "github.com/canonical/jimm/v3/internal/openfga/names"
 	"github.com/canonical/jimm/v3/internal/testutils/jimmtest"
 	"github.com/canonical/jimm/v3/pkg/api"
 	apiparams "github.com/canonical/jimm/v3/pkg/api/params"
+	jimmnames "github.com/canonical/jimm/v3/pkg/names"
 )
 
 /*
  Group facade related tests
 */
 
-func TestAddGroup(t *testing.T) {
+func TestAddGroupDeprecated(t *testing.T) {
 	c := qt.New(t)
 	s := jimmtest.SetupJimmWithControllers(c)
 	conn := s.Open(c, nil, "alice@canonical.com", nil)
 	defer conn.Close()
 
 	client := api.NewClient(conn)
-	res, err := client.AddGroup(&apiparams.AddGroupRequest{Name: "test-group"})
-	c.Assert(err, qt.IsNil)
-	c.Assert(res.UUID, qt.Not(qt.Equals), "")
-
-	_, err = client.AddGroup(&apiparams.AddGroupRequest{Name: "test-group"})
-	c.Assert(err, qt.ErrorMatches, ".*already exists.*")
+	_, err := client.AddGroup(&apiparams.AddGroupRequest{Name: "test-group"})
+	c.Assert(err, qt.ErrorMatches, ".*JAAS-managed group writes are deprecated.*")
 }
 
 func TestGetGroup(t *testing.T) {
 	c := qt.New(t)
 	s := jimmtest.SetupJimmWithControllers(c)
+	ctx := t.Context()
 	conn := s.Open(c, nil, "alice@canonical.com", nil)
 	defer conn.Close()
 
 	client := api.NewClient(conn)
 
-	created, err := client.AddGroup(&apiparams.AddGroupRequest{Name: "test-group"})
+	created, err := s.JIMM.Database.AddGroup(ctx, "test-group")
 	c.Assert(err, qt.IsNil)
 
-	retrievedUuid, err := client.GetGroup(&apiparams.GetGroupRequest{UUID: created.UUID})
+	retrievedUUID, err := client.GetGroup(&apiparams.GetGroupRequest{UUID: created.UUID})
 	c.Assert(err, qt.IsNil)
-	c.Assert(retrievedUuid.Group, qt.DeepEquals, created.Group)
+	c.Assert(retrievedUUID.UUID, qt.Equals, created.UUID)
+	c.Assert(retrievedUUID.Name, qt.Equals, created.Name)
 
 	retrievedName, err := client.GetGroup(&apiparams.GetGroupRequest{Name: created.Name})
 	c.Assert(err, qt.IsNil)
-	c.Assert(retrievedName.Group, qt.DeepEquals, created.Group)
+	c.Assert(retrievedName.UUID, qt.Equals, created.UUID)
+	c.Assert(retrievedName.Name, qt.Equals, created.Name)
 
 	_, err = client.GetGroup(&apiparams.GetGroupRequest{UUID: "non-existent"})
 	c.Assert(err, qt.ErrorMatches, ".*not found.*")
@@ -72,6 +76,7 @@ func TestGetGroup(t *testing.T) {
 func TestRemoveGroup(t *testing.T) {
 	c := qt.New(t)
 	s := jimmtest.SetupJimmWithControllers(c)
+	ctx := t.Context()
 	conn := s.Open(c, nil, "alice@canonical.com", nil)
 	defer conn.Close()
 
@@ -82,7 +87,7 @@ func TestRemoveGroup(t *testing.T) {
 	})
 	c.Assert(err, qt.ErrorMatches, ".*not found.*")
 
-	_, err = client.AddGroup(&apiparams.AddGroupRequest{Name: "test-group"})
+	_, err = s.JIMM.Database.AddGroup(ctx, "test-group")
 	c.Assert(err, qt.IsNil)
 
 	err = client.RemoveGroup(&apiparams.RemoveGroupRequest{
@@ -94,7 +99,7 @@ func TestRemoveGroup(t *testing.T) {
 func TestRemoveGroupRemovesTuples(t *testing.T) {
 	c := qt.New(t)
 	s := jimmtest.SetupJimmWithControllers(c)
-	ctx := context.Background()
+	ctx := t.Context()
 	db := s.JIMM.Database
 
 	user, group, controller, model, _, _, _, client, closeClient := createTestControllerEnvironment(c, s)
@@ -144,7 +149,7 @@ func TestRemoveGroupRemovesTuples(t *testing.T) {
 	checkAccessTupleController := apiparams.RelationshipTuple{Object: u, Relation: "administrator", TargetObject: "controller-" + controller.UUID}
 	checkAccessTupleModel := apiparams.RelationshipTuple{Object: u, Relation: "writer", TargetObject: "model-" + model.UUID.String}
 
-	err = s.JIMM.OpenFGAClient.AddRelation(context.Background(), tuples...)
+	err = s.JIMM.OpenFGAClient.AddRelation(t.Context(), tuples...)
 	c.Assert(err, qt.IsNil)
 	// Check user has access to model and controller through group2
 	checkResp, err := client.CheckRelation(&apiparams.CheckRelationRequest{Tuple: checkAccessTupleController})
@@ -174,33 +179,24 @@ func TestRemoveGroupRemovesTuples(t *testing.T) {
 	c.Assert(checkResp.Allowed, qt.Equals, false)
 }
 
-func TestRenameGroup(t *testing.T) {
+func TestRenameGroupDeprecated(t *testing.T) {
 	c := qt.New(t)
 	s := jimmtest.SetupJimmWithControllers(c)
 	conn := s.Open(c, nil, "alice@canonical.com", nil)
 	defer conn.Close()
 
 	client := api.NewClient(conn)
-
 	err := client.RenameGroup(&apiparams.RenameGroupRequest{
 		Name:    "test-group",
 		NewName: "renamed-group",
 	})
-	c.Assert(err, qt.ErrorMatches, ".*not found.*")
-
-	_, err = client.AddGroup(&apiparams.AddGroupRequest{Name: "test-group"})
-	c.Assert(err, qt.IsNil)
-
-	err = client.RenameGroup(&apiparams.RenameGroupRequest{
-		Name:    "test-group",
-		NewName: "renamed-group",
-	})
-	c.Assert(err, qt.IsNil)
+	c.Assert(err, qt.ErrorMatches, ".*JAAS-managed group writes are deprecated.*")
 }
 
 func TestListGroups(t *testing.T) {
 	c := qt.New(t)
 	s := jimmtest.SetupJimmWithControllers(c)
+	ctx := t.Context()
 	conn := s.Open(c, nil, "alice@canonical.com", nil)
 	defer conn.Close()
 
@@ -214,7 +210,7 @@ func TestListGroups(t *testing.T) {
 	}
 
 	for _, name := range groupNames {
-		_, err := client.AddGroup(&apiparams.AddGroupRequest{Name: name})
+		_, err := s.JIMM.Database.AddGroup(ctx, name)
 		c.Assert(err, qt.IsNil)
 	}
 	req := apiparams.ListGroupsRequest{Limit: 10, Offset: 0}
@@ -234,6 +230,8 @@ func TestListGroups(t *testing.T) {
  Relation facade related tests
 */
 
+const testIDPGroup = "engineering-team"
+
 // createTuple wraps the underlying ofga tuple into a convenient ease-of-use method
 func createTuple(object, relation, target string) openfga.Tuple {
 	objectEntity, _ := openfga.ParseTag(object)
@@ -245,11 +243,25 @@ func createTuple(object, relation, target string) openfga.Tuple {
 	}
 }
 
+func openClientWithIDPGroups(c *qt.C, s jimmtest.JimmWithControllers, username string, groups []string) (*api.Client, func()) {
+	token, err := jwt.NewBuilder().
+		Subject(username).
+		Claim(auth.SessionTokenGroupsClaimKey, groups).
+		Build()
+	c.Assert(err, qt.IsNil)
+	serialisedToken, err := jwt.Sign(token, jwt.WithKey(jwa.HS256, []byte(jimmtest.JWTTestSecret)))
+	c.Assert(err, qt.IsNil)
+	b64Token := base64.StdEncoding.EncodeToString(serialisedToken)
+	conn, err := s.OpenCustomLoginProvider(c, nil, username, jujuapi.NewSessionTokenLoginProvider(b64Token, nil, nil))
+	c.Assert(err, qt.IsNil)
+	return api.NewClient(conn), func() { _ = conn.Close() }
+}
+
 // TestAddRelation currently verifies the following test cases,
 // when new relation control is to be added, please update this comment:
-// user -> group
 // user -> controller (name)
 // user -> controller (uuid)
+// user -> controller (jimm)
 // user -> model (name)
 // user -> model (uuid)
 // user -> applicationoffer (name)
@@ -260,27 +272,15 @@ func createTuple(object, relation, target string) openfga.Tuple {
 // group -> model (uuid)
 // group -> applicationoffer (name)
 // group -> applicationoffer (uuid)
-// group#member -> group
-// idpgroup#member -> model
+// idpgroup -> model (uuid)
 func TestAddRelation(t *testing.T) {
 	c := qt.New(t)
 	s := jimmtest.SetupJimmWithControllers(c)
-	ctx := context.Background()
-	db := s.JIMM.Database
+	ctx := t.Context()
 
 	user, group, controller, model, offer, _, _, client, closeClient := createTestControllerEnvironment(c, s)
 	defer closeClient()
 
-	_, err := db.AddGroup(ctx, "test-group2")
-	c.Assert(err, qt.IsNil)
-
-	group2 := &dbmodel.GroupEntry{
-		Name: "test-group2",
-	}
-	err = db.GetGroup(ctx, group2)
-	c.Assert(err, qt.IsNil)
-
-	c.Assert(err, qt.IsNil)
 	type tuple struct {
 		object   string
 		relation string
@@ -321,39 +321,6 @@ func TestAddRelation(t *testing.T) {
 			input: tuple{"user-" + user.Name, "administrator", "controller-" + controller.UUID},
 			want: createTuple(
 				"user:"+user.Name,
-				"administrator",
-				"controller:"+controller.UUID,
-			),
-			err:         false,
-			changesType: "controller",
-		},
-		// Test user -> group
-		{
-			input: tuple{"user-" + user.Name, "member", "group-" + group.Name},
-			want: createTuple(
-				"user:"+user.Name,
-				"member",
-				"group:"+group.UUID,
-			),
-			err:         false,
-			changesType: "group",
-		},
-		// Test username with dots and @ -> group
-		{
-			input: tuple{"user-" + "kelvin.lina.test@canonical.com", "member", "group-" + group.Name},
-			want: createTuple(
-				"user:"+"kelvin.lina.test@canonical.com",
-				"member",
-				"group:"+group.UUID,
-			),
-			err:         false,
-			changesType: "group",
-		},
-		// Test group -> controller
-		{
-			input: tuple{"group-" + "test-group#member", "administrator", "controller-" + controller.UUID},
-			want: createTuple(
-				"group:"+group.UUID+"#member",
 				"administrator",
 				"controller:"+controller.UUID,
 			),
@@ -470,25 +437,14 @@ func TestAddRelation(t *testing.T) {
 			err:         false,
 			changesType: "applicationoffer",
 		},
-		// Test group -> group
+		// Test idpgroup -> model by UUID
 		{
-			input: tuple{"group-" + group.Name + "#member", "member", "group-" + group2.Name},
-			want: createTuple(
-				"group:"+group.UUID+"#member",
-				"member",
-				"group:"+group2.UUID,
-			),
-			err:         false,
-			changesType: "group",
-		},
-		// Test IDP group -> model by UUID.
-		{
-			input: tuple{"idpgroup-4a8f49a8-df10-4a6d-a98f-f4df1d5a16ba#member", "reader", "model-" + model.UUID.String},
-			want: createTuple(
-				"idpgroup:4a8f49a8-df10-4a6d-a98f-f4df1d5a16ba#member",
-				"reader",
-				"model:"+model.UUID.String,
-			),
+			input: tuple{"idpgroup-" + testIDPGroup + "#member", "reader", "model-" + model.UUID.String},
+			want: openfga.Tuple{
+				Object:   ofganames.ConvertTagWithRelation(jimmnames.NewIdPGroupTag(testIDPGroup), ofganames.MemberRelation),
+				Relation: "reader",
+				Target:   ofganames.ConvertTag(model.ResourceTag()),
+			},
 			err:         false,
 			changesType: "model",
 		},
@@ -544,10 +500,11 @@ func TestAddRelation(t *testing.T) {
 // group -> model (uuid)
 // group -> applicationoffer (name)
 // group -> applicationoffer (uuid)
+// idpgroup -> model (uuid)
 func TestRemoveRelation(t *testing.T) {
 	c := qt.New(t)
 	s := jimmtest.SetupJimmWithControllers(c)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	user, group, controller, model, offer, _, _, client, closeClient := createTestControllerEnvironment(c, s)
 	defer closeClient()
@@ -566,6 +523,22 @@ func TestRemoveRelation(t *testing.T) {
 	}
 
 	tagTests := []tagTest{
+		// Test user -> group
+		{
+			toAdd: openfga.Tuple{
+				Object:   ofganames.ConvertTag(user.ResourceTag()),
+				Relation: "member",
+				Target:   ofganames.ConvertTag(group.ResourceTag()),
+			},
+			toRemove: tuple{"user-" + user.Name, "member", "group-" + group.Name},
+			want: createTuple(
+				"user:"+user.Name,
+				"member",
+				"group:"+group.UUID,
+			),
+			err:         false,
+			changesType: "group",
+		},
 		// Test user -> controller by name
 		{
 			toAdd: openfga.Tuple{
@@ -592,38 +565,6 @@ func TestRemoveRelation(t *testing.T) {
 			toRemove: tuple{"user-" + user.Name, "administrator", "controller-" + controller.UUID},
 			want: createTuple(
 				"user:"+user.Name,
-				"administrator",
-				"controller:"+controller.UUID,
-			),
-			err:         false,
-			changesType: "controller",
-		},
-		// Test user -> group
-		{
-			toAdd: openfga.Tuple{
-				Object:   ofganames.ConvertTag(user.ResourceTag()),
-				Relation: "member",
-				Target:   ofganames.ConvertTag(group.ResourceTag()),
-			},
-			toRemove: tuple{"user-" + user.Name, "member", "group-" + group.Name},
-			want: createTuple(
-				"user:"+user.Name,
-				"member",
-				"group:"+group.UUID,
-			),
-			err:         false,
-			changesType: "group",
-		},
-		// Test group -> controller
-		{
-			toAdd: openfga.Tuple{
-				Object:   ofganames.ConvertTagWithRelation(group.ResourceTag(), ofganames.MemberRelation),
-				Relation: "administrator",
-				Target:   ofganames.ConvertTag(controller.ResourceTag()),
-			},
-			toRemove: tuple{"group-" + group.Name + "#member", "administrator", "controller-" + controller.UUID},
-			want: createTuple(
-				"group:"+group.UUID+"#member",
 				"administrator",
 				"controller:"+controller.UUID,
 			),
@@ -790,12 +731,28 @@ func TestRemoveRelation(t *testing.T) {
 			err:         false,
 			changesType: "applicationoffer",
 		},
+		// Test idpgroup -> model by UUID
+		{
+			toAdd: openfga.Tuple{
+				Object:   ofganames.ConvertTagWithRelation(jimmnames.NewIdPGroupTag(testIDPGroup), ofganames.MemberRelation),
+				Relation: "reader",
+				Target:   ofganames.ConvertTag(model.ResourceTag()),
+			},
+			toRemove: tuple{"idpgroup-" + testIDPGroup + "#member", "reader", "model-" + model.UUID.String},
+			want: openfga.Tuple{
+				Object:   ofganames.ConvertTagWithRelation(jimmnames.NewIdPGroupTag(testIDPGroup), ofganames.MemberRelation),
+				Relation: "reader",
+				Target:   ofganames.ConvertTag(model.ResourceTag()),
+			},
+			err:         false,
+			changesType: "model",
+		},
 	}
 
 	for i, tc := range tagTests {
 		c.Logf("running test %d", i)
 		ofgaClient := s.JIMM.OpenFGAClient
-		err := ofgaClient.AddRelation(context.Background(), tc.toAdd)
+		err := ofgaClient.AddRelation(t.Context(), tc.toAdd)
 		c.Check(err, qt.IsNil)
 		changes, err := s.COFGAClient.ReadChanges(ctx, tc.changesType, 99, "")
 		c.Assert(err, qt.IsNil)
@@ -834,6 +791,7 @@ func TestRemoveRelation(t *testing.T) {
 func TestListRelationshipTuples(t *testing.T) {
 	c := qt.New(t)
 	s := jimmtest.SetupJimmWithControllers(c)
+	ctx := t.Context()
 
 	user, _, controller, _, applicationOffer, _, _, client, closeClient := createTestControllerEnvironment(c, s)
 	defer closeClient()
@@ -842,9 +800,16 @@ func TestListRelationshipTuples(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	initialTupleCount := len(response.Tuples)
 
-	_, err = client.AddGroup(&apiparams.AddGroupRequest{Name: "yellow"})
+	_, err = s.JIMM.Database.AddGroup(ctx, "yellow")
 	c.Assert(err, qt.IsNil)
-	_, err = client.AddGroup(&apiparams.AddGroupRequest{Name: "orange"})
+	_, err = s.JIMM.Database.AddGroup(ctx, "orange")
+	c.Assert(err, qt.IsNil)
+
+	groupYellow := dbmodel.GroupEntry{Name: "yellow"}
+	err = s.JIMM.Database.GetGroup(ctx, &groupYellow)
+	c.Assert(err, qt.IsNil)
+	groupOrange := dbmodel.GroupEntry{Name: "orange"}
+	err = s.JIMM.Database.GetGroup(ctx, &groupOrange)
 	c.Assert(err, qt.IsNil)
 
 	tuples := []apiparams.RelationshipTuple{{
@@ -865,7 +830,28 @@ func TestListRelationshipTuples(t *testing.T) {
 		TargetObject: "applicationoffer-" + applicationOffer.URL,
 	}}
 
-	err = client.AddRelation(&apiparams.AddRelationRequest{Tuples: tuples})
+	err = s.JIMM.OpenFGAClient.AddRelation(ctx,
+		openfga.Tuple{
+			Object:   ofganames.ConvertTagWithRelation(groupOrange.ResourceTag(), ofganames.MemberRelation),
+			Relation: "member",
+			Target:   ofganames.ConvertTag(groupYellow.ResourceTag()),
+		},
+		openfga.Tuple{
+			Object:   ofganames.ConvertTag(user.ResourceTag()),
+			Relation: "member",
+			Target:   ofganames.ConvertTag(groupOrange.ResourceTag()),
+		},
+		openfga.Tuple{
+			Object:   ofganames.ConvertTagWithRelation(groupYellow.ResourceTag(), ofganames.MemberRelation),
+			Relation: "administrator",
+			Target:   ofganames.ConvertTag(controller.ResourceTag()),
+		},
+		openfga.Tuple{
+			Object:   ofganames.ConvertTagWithRelation(groupOrange.ResourceTag(), ofganames.MemberRelation),
+			Relation: "administrator",
+			Target:   ofganames.ConvertTag(applicationOffer.ResourceTag()),
+		},
+	)
 	c.Assert(err, qt.IsNil)
 
 	response, err = client.ListRelationshipTuples(&apiparams.ListRelationshipTuplesRequest{ResolveUUIDs: true})
@@ -900,25 +886,24 @@ func TestListRelationshipTuples(t *testing.T) {
 func TestListRelationshipTuplesNoUUIDResolution(t *testing.T) {
 	c := qt.New(t)
 	s := jimmtest.SetupJimmWithControllers(c)
-	ctx := context.Background()
+	ctx := t.Context()
 	_, _, _, _, applicationOffer, _, _, client, closeClient := createTestControllerEnvironment(c, s)
 	defer closeClient()
 
-	_, err := client.AddGroup(&apiparams.AddGroupRequest{Name: "orange"})
-	c.Assert(err, qt.IsNil)
-
-	tuples := []apiparams.RelationshipTuple{{
-		Object:       "group-orange#member",
-		Relation:     "administrator",
-		TargetObject: "applicationoffer-" + applicationOffer.UUID,
-	}}
-
-	err = client.AddRelation(&apiparams.AddRelationRequest{Tuples: tuples})
+	_, err := s.JIMM.Database.AddGroup(ctx, "orange")
 	c.Assert(err, qt.IsNil)
 
 	groupOrange := dbmodel.GroupEntry{Name: "orange"}
 	err = s.JIMM.Database.GetGroup(ctx, &groupOrange)
 	c.Assert(err, qt.IsNil)
+
+	err = s.JIMM.OpenFGAClient.AddRelation(ctx, openfga.Tuple{
+		Object:   ofganames.ConvertTagWithRelation(groupOrange.ResourceTag(), ofganames.MemberRelation),
+		Relation: "administrator",
+		Target:   ofganames.ConvertTag(applicationOffer.ResourceTag()),
+	})
+	c.Assert(err, qt.IsNil)
+
 	expected := []apiparams.RelationshipTuple{{
 		Object:       "group-" + groupOrange.UUID + "#member",
 		Relation:     "administrator",
@@ -938,6 +923,7 @@ func TestListRelationshipTuplesNoUUIDResolution(t *testing.T) {
 func TestListRelationshipTuplesAfterDeletingGroup(t *testing.T) {
 	c := qt.New(t)
 	s := jimmtest.SetupJimmWithControllers(c)
+	ctx := t.Context()
 
 	user, _, controller, _, applicationOffer, _, _, client, closeClient := createTestControllerEnvironment(c, s)
 	defer closeClient()
@@ -946,9 +932,16 @@ func TestListRelationshipTuplesAfterDeletingGroup(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	initialTupleCount := len(response.Tuples)
 
-	_, err = client.AddGroup(&apiparams.AddGroupRequest{Name: "yellow"})
+	_, err = s.JIMM.Database.AddGroup(ctx, "yellow")
 	c.Assert(err, qt.IsNil)
-	_, err = client.AddGroup(&apiparams.AddGroupRequest{Name: "orange"})
+	_, err = s.JIMM.Database.AddGroup(ctx, "orange")
+	c.Assert(err, qt.IsNil)
+
+	groupYellow := dbmodel.GroupEntry{Name: "yellow"}
+	err = s.JIMM.Database.GetGroup(ctx, &groupYellow)
+	c.Assert(err, qt.IsNil)
+	groupOrange := dbmodel.GroupEntry{Name: "orange"}
+	err = s.JIMM.Database.GetGroup(ctx, &groupOrange)
 	c.Assert(err, qt.IsNil)
 
 	tuples := []apiparams.RelationshipTuple{{
@@ -969,7 +962,28 @@ func TestListRelationshipTuplesAfterDeletingGroup(t *testing.T) {
 		TargetObject: "applicationoffer-" + applicationOffer.URL,
 	}}
 
-	err = client.AddRelation(&apiparams.AddRelationRequest{Tuples: tuples})
+	err = s.JIMM.OpenFGAClient.AddRelation(ctx,
+		openfga.Tuple{
+			Object:   ofganames.ConvertTagWithRelation(groupOrange.ResourceTag(), ofganames.MemberRelation),
+			Relation: "member",
+			Target:   ofganames.ConvertTag(groupYellow.ResourceTag()),
+		},
+		openfga.Tuple{
+			Object:   ofganames.ConvertTag(user.ResourceTag()),
+			Relation: "member",
+			Target:   ofganames.ConvertTag(groupOrange.ResourceTag()),
+		},
+		openfga.Tuple{
+			Object:   ofganames.ConvertTagWithRelation(groupYellow.ResourceTag(), ofganames.MemberRelation),
+			Relation: "administrator",
+			Target:   ofganames.ConvertTag(controller.ResourceTag()),
+		},
+		openfga.Tuple{
+			Object:   ofganames.ConvertTagWithRelation(groupOrange.ResourceTag(), ofganames.MemberRelation),
+			Relation: "administrator",
+			Target:   ofganames.ConvertTag(applicationOffer.ResourceTag()),
+		},
+	)
 	c.Assert(err, qt.IsNil)
 
 	err = client.RemoveGroup(&apiparams.RemoveGroupRequest{Name: "yellow"})
@@ -996,7 +1010,7 @@ func TestListRelationshipTuplesAfterDeletingGroup(t *testing.T) {
 func TestListRelationshipTuplesWithMissingGroups(t *testing.T) {
 	c := qt.New(t)
 	s := jimmtest.SetupJimmWithControllers(c)
-	ctx := context.Background()
+	ctx := t.Context()
 	_, _, _, _, _, _, _, client, closeClient := createTestControllerEnvironment(c, s)
 	defer closeClient()
 
@@ -1004,9 +1018,16 @@ func TestListRelationshipTuplesWithMissingGroups(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	initialTupleCount := len(response.Tuples)
 
-	_, err = client.AddGroup(&apiparams.AddGroupRequest{Name: "yellow"})
+	_, err = s.JIMM.Database.AddGroup(ctx, "yellow")
 	c.Assert(err, qt.IsNil)
-	_, err = client.AddGroup(&apiparams.AddGroupRequest{Name: "orange"})
+	_, err = s.JIMM.Database.AddGroup(ctx, "orange")
+	c.Assert(err, qt.IsNil)
+
+	groupYellow := dbmodel.GroupEntry{Name: "yellow"}
+	err = s.JIMM.Database.GetGroup(ctx, &groupYellow)
+	c.Assert(err, qt.IsNil)
+	groupOrange := dbmodel.GroupEntry{Name: "orange"}
+	err = s.JIMM.Database.GetGroup(ctx, &groupOrange)
 	c.Assert(err, qt.IsNil)
 
 	tuples := []apiparams.RelationshipTuple{{
@@ -1015,7 +1036,11 @@ func TestListRelationshipTuplesWithMissingGroups(t *testing.T) {
 		TargetObject: "group-yellow",
 	}}
 
-	err = client.AddRelation(&apiparams.AddRelationRequest{Tuples: tuples})
+	err = s.JIMM.OpenFGAClient.AddRelation(ctx, openfga.Tuple{
+		Object:   ofganames.ConvertTagWithRelation(groupOrange.ResourceTag(), ofganames.MemberRelation),
+		Relation: "member",
+		Target:   ofganames.ConvertTag(groupYellow.ResourceTag()),
+	})
 	c.Assert(err, qt.IsNil)
 
 	// Delete a group without going through the API.
@@ -1067,7 +1092,7 @@ func TestCheckRelationAsNonAdmin(t *testing.T) {
 func TestCheckRelationOfferReaderFlow(t *testing.T) {
 	c := qt.New(t)
 	s := jimmtest.SetupJimmWithControllers(c)
-	ctx := context.Background()
+	ctx := t.Context()
 	ofgaClient := s.JIMM.OpenFGAClient
 
 	user, group, _, _, offer, _, _, client, closeClient := createTestControllerEnvironment(c, s)
@@ -1140,7 +1165,7 @@ func TestCheckRelationOfferReaderFlow(t *testing.T) {
 func TestCheckRelationOfferConsumerFlow(t *testing.T) {
 	c := qt.New(t)
 	s := jimmtest.SetupJimmWithControllers(c)
-	ctx := context.Background()
+	ctx := t.Context()
 	ofgaClient := s.JIMM.OpenFGAClient
 
 	user, group, _, _, offer, _, _, client, closeClient := createTestControllerEnvironment(c, s)
@@ -1211,7 +1236,7 @@ func TestCheckRelationOfferConsumerFlow(t *testing.T) {
 func TestCheckRelationModelReaderFlow(t *testing.T) {
 	c := qt.New(t)
 	s := jimmtest.SetupJimmWithControllers(c)
-	ctx := context.Background()
+	ctx := t.Context()
 	ofgaClient := s.JIMM.OpenFGAClient
 
 	user, group, _, model, _, _, _, client, closeClient := createTestControllerEnvironment(c, s)
@@ -1284,7 +1309,7 @@ func TestCheckRelationModelReaderFlow(t *testing.T) {
 func TestCheckRelationModelWriterFlow(t *testing.T) {
 	c := qt.New(t)
 	s := jimmtest.SetupJimmWithControllers(c)
-	ctx := context.Background()
+	ctx := t.Context()
 	ofgaClient := s.JIMM.OpenFGAClient
 
 	user, group, _, model, _, _, _, client, closeClient := createTestControllerEnvironment(c, s)
@@ -1355,7 +1380,7 @@ func TestCheckRelationModelWriterFlow(t *testing.T) {
 func TestCheckRelationControllerAdministratorFlow(t *testing.T) {
 	c := qt.New(t)
 	s := jimmtest.SetupJimmWithControllers(c)
-	ctx := context.Background()
+	ctx := t.Context()
 	ofgaClient := s.JIMM.OpenFGAClient
 
 	user, group, controller, model, offer, _, _, client, closeClient := createTestControllerEnvironment(c, s)
@@ -1452,6 +1477,123 @@ func TestCheckRelationControllerAdministratorFlow(t *testing.T) {
 			want: true,
 		},
 		// Test user-> writer -> model (due to group#member -> controller#admin unioned to model #admin)
+		{
+			input: apiparams.RelationshipTuple{
+				Object:       userJAASKey,
+				Relation:     "writer",
+				TargetObject: modelJAASKey,
+			},
+			want: true,
+		},
+		// Test user -> administrator -> offer
+		{
+			input: apiparams.RelationshipTuple{
+				Object:       userJAASKey,
+				Relation:     "administrator",
+				TargetObject: offerJAASKey,
+			},
+			want: true,
+		},
+	}
+
+	for _, tc := range tests {
+		req := apiparams.CheckRelationRequest{Tuple: tc.input}
+		res, err := client.CheckRelation(&req)
+		c.Assert(err, qt.IsNil)
+		c.Assert(res.Allowed, qt.Equals, tc.want)
+	}
+	// Check that the same tuples can be checked via the CheckRelations API
+	tuplesToCheck := apiparams.CheckRelationsRequest{}
+	expected := apiparams.CheckRelationsResponse{}
+	for _, tc := range tests {
+		tuplesToCheck.Tuples = append(tuplesToCheck.Tuples, tc.input)
+		expected.Results = append(expected.Results, apiparams.CheckRelationResponse{
+			Allowed: tc.want,
+		})
+	}
+	results, err := client.CheckRelations(&tuplesToCheck)
+	c.Assert(err, qt.IsNil)
+	c.Assert(results, qt.DeepEquals, expected)
+}
+
+func TestCheckRelationIDPGroupControllerAdministratorFlow(t *testing.T) {
+	c := qt.New(t)
+	s := jimmtest.SetupJimmWithControllers(c)
+	ctx := t.Context()
+	ofgaClient := s.JIMM.OpenFGAClient
+
+	user, _, controller, model, offer, _, _, _, cleanup := createTestControllerEnvironment(c, s)
+	defer cleanup()
+	client, closeClient := openClientWithIDPGroups(c, s, user.Name, []string{testIDPGroup})
+	defer closeClient()
+	modelTag := ofganames.ConvertTag(model.ResourceTag())
+	controllerTag := ofganames.ConvertTag(controller.ResourceTag())
+	offerTag := ofganames.ConvertTag(offer.ResourceTag())
+
+	// JAAS style keys, to be translated and checked against UUIDs/users/groups
+	userJAASKey := "user-" + user.Name
+	controllerJAASKey := "controller-" + controller.Name
+	modelJAASKey := "model-" + user.Name + "/" + model.Name
+	offerJAASKey := "applicationoffer-" + offer.URL
+
+	idpGroupToControllerAdmin := openfga.Tuple{
+		Object:   ofganames.ConvertTagWithRelation(jimmnames.NewIdPGroupTag(testIDPGroup), ofganames.MemberRelation),
+		Relation: "administrator",
+		Target:   controllerTag,
+	}
+	controllerToModelAdmin := openfga.Tuple{
+		Object:   controllerTag,
+		Relation: "controller",
+		Target:   modelTag,
+	}
+	modelToAppOfferAdmin := openfga.Tuple{
+		Object:   modelTag,
+		Relation: "model",
+		Target:   offerTag,
+	}
+
+	err := ofgaClient.AddRelation(
+		ctx,
+		idpGroupToControllerAdmin,
+		controllerToModelAdmin,
+		modelToAppOfferAdmin,
+	)
+	c.Assert(err, qt.IsNil)
+
+	type test struct {
+		input apiparams.RelationshipTuple
+		want  bool
+	}
+
+	tests := []test{
+		// Test user-> member -> controller via contextual IDP group membership
+		{
+			input: apiparams.RelationshipTuple{
+				Object:       userJAASKey,
+				Relation:     "administrator",
+				TargetObject: controllerJAASKey,
+			},
+			want: true,
+		},
+		// Test user-> administrator -> model via contextual IDP group membership
+		{
+			input: apiparams.RelationshipTuple{
+				Object:       userJAASKey,
+				Relation:     "administrator",
+				TargetObject: modelJAASKey,
+			},
+			want: true,
+		},
+		// Test user -> reader -> model (due to idpgroup#member -> controller#admin unioned to model #admin)
+		{
+			input: apiparams.RelationshipTuple{
+				Object:       userJAASKey,
+				Relation:     "reader",
+				TargetObject: modelJAASKey,
+			},
+			want: true,
+		},
+		// Test user-> writer -> model (due to idpgroup#member -> controller#admin unioned to model #admin)
 		{
 			input: apiparams.RelationshipTuple{
 				Object:       userJAASKey,
@@ -1688,7 +1830,7 @@ func createTestControllerEnvironment(c *qt.C, s jimmtest.JimmWithControllers) (
 		ModelID: model.ID,
 		URL:     offerURL.String(),
 	}
-	err = db.AddApplicationOffer(context.Background(), &offer)
+	err = db.AddApplicationOffer(c.Context(), &offer)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(offer.UUID), qt.Equals, 36)
 

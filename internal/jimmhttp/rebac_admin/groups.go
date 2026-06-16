@@ -20,6 +20,9 @@ import (
 	jimmnames "github.com/canonical/jimm/v3/pkg/names"
 )
 
+//nolint:gosec // This is a user-facing deprecation message, not a credential.
+const deprecatedJAASGroupWriteMessage = "JAAS-managed group writes are deprecated; group ownership is managed by the identity provider"
+
 // groupsService implements the `GroupsService` interface.
 type groupsService struct {
 	jimm jujuapi.JIMM
@@ -191,48 +194,10 @@ func (s *groupsService) GetGroupIdentities(ctx context.Context, groupId string, 
 
 // PatchGroupIdentities performs addition or removal of identities to/from a Group identified by `groupId`.
 func (s *groupsService) PatchGroupIdentities(ctx context.Context, groupId string, identityPatches []resources.GroupIdentitiesPatchItem) (bool, error) {
-	user, err := utils.GetUserFromContext(ctx)
-	if err != nil {
+	if _, err := utils.GetUserFromContext(ctx); err != nil {
 		return false, err
 	}
-	if !jimmnames.IsValidGroupId(groupId) {
-		return false, v1.NewValidationError("invalid group ID")
-	}
-	groupTag := jimmnames.NewGroupTag(groupId)
-	tuple := apiparams.RelationshipTuple{
-		Relation:     ofganames.MemberRelation.String(),
-		TargetObject: groupTag.String(),
-	}
-	var toRemove []apiparams.RelationshipTuple
-	var toAdd []apiparams.RelationshipTuple
-	for _, identityPatch := range identityPatches {
-		if !names.IsValidUser(identityPatch.Identity) {
-			return false, v1.NewValidationError(fmt.Sprintf("invalid identity: %s", identityPatch.Identity))
-		}
-		identity := names.NewUserTag(identityPatch.Identity)
-		if identityPatch.Op == resources.GroupIdentitiesPatchItemOpAdd {
-			t := tuple
-			t.Object = identity.String()
-			toAdd = append(toAdd, t)
-		} else {
-			t := tuple
-			t.Object = identity.String()
-			toRemove = append(toRemove, t)
-		}
-	}
-	if toAdd != nil {
-		err := s.jimm.PermissionManager().AddRelation(ctx, user, toAdd)
-		if err != nil {
-			return false, err
-		}
-	}
-	if toRemove != nil {
-		err := s.jimm.PermissionManager().RemoveRelation(ctx, user, toRemove)
-		if err != nil {
-			return false, err
-		}
-	}
-	return true, nil
+	return false, v1.NewValidationError(deprecatedJAASGroupWriteMessage)
 }
 
 // GetGroupRoles returns a page of Roles for Group `groupId`.

@@ -20,6 +20,7 @@ import (
 	"github.com/canonical/jimm/v3/internal/openfga/names"
 	"github.com/canonical/jimm/v3/internal/testutils/jimmtest"
 	apiparams "github.com/canonical/jimm/v3/pkg/api/params"
+	jimmnames "github.com/canonical/jimm/v3/pkg/names"
 )
 
 func (s *permissionManagerSuite) TestListRelationshipTuples(c *qt.C) {
@@ -253,7 +254,7 @@ func (s *permissionManagerSuite) TestListObjectRelations(c *qt.C) {
 	u := openfga.NewUser(&dbmodel.Identity{Name: "admin@canonical.com"}, s.ofgaClient)
 	u.JimmAdmin = true
 
-	user, group, controller, model, _, cloud, _, _ := jimmtest.CreateTestControllerEnvironment(ctx, c, s.db)
+	user, _, controller, model, _, cloud, _, _ := jimmtest.CreateTestControllerEnvironment(ctx, c, s.db)
 
 	err := s.manager.AddRelation(ctx, u, []apiparams.RelationshipTuple{
 		{
@@ -286,13 +287,7 @@ func (s *permissionManagerSuite) TestListObjectRelations(c *qt.C) {
 			Relation:     names.CanAddModelRelation.String(),
 			TargetObject: cloud.ResourceTag().String(),
 		},
-		{
-			Object:       user.Tag().String(),
-			Relation:     names.MemberRelation.String(),
-			TargetObject: group.ResourceTag().String(),
-		},
 	})
-
 	c.Assert(err, qt.IsNil)
 	type ExpectedTuple struct {
 		expectedRelation string
@@ -314,14 +309,14 @@ func (s *permissionManagerSuite) TestListObjectRelations(c *qt.C) {
 			object:               user.Tag().String(),
 			pageSize:             10,
 			expectNumPages:       1,
-			expectedTuplesLength: 7,
+			expectedTuplesLength: 6,
 		},
 		{
 			description:          "test listing all relations in multiple pages",
 			object:               user.Tag().String(),
 			pageSize:             2,
-			expectNumPages:       4,
-			expectedTuplesLength: 7,
+			expectNumPages:       3,
+			expectedTuplesLength: 6,
 		},
 		{
 			description:   "invalid initial token",
@@ -417,7 +412,7 @@ func (s *permissionManagerSuite) TestCheckPermissions(c *qt.C) {
 	u := openfga.NewUser(&dbmodel.Identity{Name: "admin@canonical.com"}, s.ofgaClient)
 	u.JimmAdmin = true
 
-	user, group, controller, model, _, cloud, _, _ := jimmtest.CreateTestControllerEnvironment(ctx, c, s.db)
+	user, _, controller, model, _, cloud, _, _ := jimmtest.CreateTestControllerEnvironment(ctx, c, s.db)
 	tuples := []apiparams.RelationshipTuple{
 		{
 			Object:       user.Tag().String(),
@@ -452,7 +447,7 @@ func (s *permissionManagerSuite) TestCheckPermissions(c *qt.C) {
 		{
 			Object:       user.Tag().String(),
 			Relation:     names.MemberRelation.String(),
-			TargetObject: group.ResourceTag().String(),
+			TargetObject: jimmnames.NewIdPGroupTag("engineering-team").String(),
 		},
 	}
 	err := s.manager.AddRelation(ctx, u, tuples)
@@ -644,7 +639,11 @@ func (s *permissionManagerSuite) TestGroupAndRoleRelationManagementRemainJimmAdm
 	for _, testCase := range testCases {
 		c.Run(testCase.description, func(c *qt.C) {
 			err := s.manager.AddRelation(ctx, grantor, []apiparams.RelationshipTuple{testCase.tuple})
-			c.Assert(err, qt.ErrorMatches, "unauthorized")
+			if testCase.tuple.Relation == names.MemberRelation.String() {
+				c.Assert(err, qt.ErrorMatches, "JAAS-managed group writes are deprecated.*")
+			} else {
+				c.Assert(err, qt.ErrorMatches, "unauthorized")
+			}
 
 			_, err = s.manager.CheckRelation(ctx, grantor, testCase.tuple, false)
 			c.Assert(err, qt.ErrorMatches, "unauthorized")
@@ -657,6 +656,73 @@ func (s *permissionManagerSuite) TestGroupAndRoleRelationManagementRemainJimmAdm
 
 			err = s.manager.RemoveRelation(ctx, grantor, []apiparams.RelationshipTuple{testCase.tuple})
 			c.Assert(err, qt.ErrorMatches, "unauthorized")
+		})
+	}
+}
+
+func (s *permissionManagerSuite) TestJAASGroupMembershipAddsAreDeprecatedButRemovalsAreAllowed(c *qt.C) {
+	c.Parallel()
+	ctx := context.Background()
+
+	userIdentity, err := dbmodel.NewIdentity(fmt.Sprintf("subject-%s", petname.Generate(2, "-")))
+	c.Assert(err, qt.IsNil)
+	c.Assert(s.db.DB.Create(userIdentity).Error, qt.IsNil)
+
+	_, group, _, _, _, _, _, _ := jimmtest.CreateTestControllerEnvironment(ctx, c, s.db)
+	secondGroup, err := s.db.AddGroup(ctx, fmt.Sprintf("extra-group-%s", petname.Generate(2, "-")))
+	c.Assert(err, qt.IsNil)
+
+	testCases := []struct {
+		description string
+		apiTuple    apiparams.RelationshipTuple
+		seedTuple   openfga.Tuple
+	}{
+		{
+			description: "direct user membership write is deprecated",
+			apiTuple: apiparams.RelationshipTuple{
+				Object:       userIdentity.Tag().String(),
+				Relation:     names.MemberRelation.String(),
+				TargetObject: group.ResourceTag().String(),
+			},
+			seedTuple: openfga.Tuple{
+				Object:   names.ConvertGenericTag(userIdentity.Tag()),
+				Relation: names.MemberRelation,
+				Target:   names.ConvertTag(group.ResourceTag()),
+			},
+		},
+		{
+			description: "nested group membership write is deprecated",
+			apiTuple: apiparams.RelationshipTuple{
+				Object:       secondGroup.ResourceTag().String() + "#member",
+				Relation:     names.MemberRelation.String(),
+				TargetObject: group.ResourceTag().String(),
+			},
+			seedTuple: openfga.Tuple{
+				Object:   names.ConvertTagWithRelation(secondGroup.ResourceTag(), names.MemberRelation),
+				Relation: names.MemberRelation,
+				Target:   names.ConvertTag(group.ResourceTag()),
+			},
+		},
+	}
+
+	for _, testCase := range testCases {
+		c.Run(testCase.description, func(c *qt.C) {
+			err := s.manager.AddRelation(ctx, s.adminUser, []apiparams.RelationshipTuple{testCase.apiTuple})
+			c.Assert(err, qt.ErrorMatches, ".*JAAS-managed group writes are deprecated.*")
+
+			err = s.ofgaClient.AddRelation(ctx, testCase.seedTuple)
+			c.Assert(err, qt.IsNil)
+
+			allowed, err := s.manager.CheckRelation(ctx, s.adminUser, testCase.apiTuple, false)
+			c.Assert(err, qt.IsNil)
+			c.Assert(allowed, qt.IsTrue)
+
+			err = s.manager.RemoveRelation(ctx, s.adminUser, []apiparams.RelationshipTuple{testCase.apiTuple})
+			c.Assert(err, qt.IsNil)
+
+			allowed, err = s.manager.CheckRelation(ctx, s.adminUser, testCase.apiTuple, false)
+			c.Assert(err, qt.IsNil)
+			c.Assert(allowed, qt.IsFalse)
 		})
 	}
 }

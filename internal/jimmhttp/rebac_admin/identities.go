@@ -248,48 +248,10 @@ func (s *identitiesService) GetIdentityGroups(ctx context.Context, identityId st
 
 // PatchIdentityGroups performs addition or removal of a Group to/from an Identity.
 func (s *identitiesService) PatchIdentityGroups(ctx context.Context, identityId string, groupPatches []resources.IdentityGroupsPatchItem) (bool, error) {
-	user, err := utils.GetUserFromContext(ctx)
-	if err != nil {
+	if _, err := utils.GetUserFromContext(ctx); err != nil {
 		return false, err
 	}
-
-	objUser, err := s.jimm.IdentityManager().FetchIdentity(ctx, identityId)
-	if err != nil {
-		return false, v1.NewNotFoundError(fmt.Sprintf("User with id %s not found", identityId))
-	}
-	additions := make([]apiparams.RelationshipTuple, 0)
-	deletions := make([]apiparams.RelationshipTuple, 0)
-	for _, p := range groupPatches {
-		if !jimmnames.IsValidGroupId(p.Group) {
-			return false, v1.NewValidationError(fmt.Sprintf("ID %s is not a valid group ID", p.Group))
-		}
-		t := apiparams.RelationshipTuple{
-			Object:       objUser.ResourceTag().String(),
-			Relation:     ofganames.MemberRelation.String(),
-			TargetObject: jimmnames.NewGroupTag(p.Group).String(),
-		}
-		switch p.Op {
-		case "add":
-			additions = append(additions, t)
-		case "remove":
-			deletions = append(deletions, t)
-		}
-	}
-	if len(additions) > 0 {
-		err = s.jimm.PermissionManager().AddRelation(ctx, user, additions)
-		if err != nil {
-			zapctx.Error(context.Background(), "cannot add relations", zap.Error(err))
-			return false, v1.NewUnknownError(err.Error())
-		}
-	}
-	if len(deletions) > 0 {
-		err = s.jimm.PermissionManager().RemoveRelation(ctx, user, deletions)
-		if err != nil {
-			zapctx.Error(context.Background(), "cannot remove relations", zap.Error(err))
-			return false, v1.NewUnknownError(err.Error())
-		}
-	}
-	return true, nil
+	return false, v1.NewValidationError(deprecatedJAASGroupWriteMessage)
 }
 
 // // GetIdentityEntitlements returns a page of Entitlements for identity `identityId`.

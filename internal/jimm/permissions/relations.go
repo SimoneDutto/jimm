@@ -54,6 +54,13 @@ var grantableObjectKinds = map[openfga.Kind]bool{
 	openfga.RoleType:     true,
 }
 
+//nolint:gosec // This is a user-facing deprecation message, not a credential.
+const deprecatedJAASGroupWriteMessage = "JAAS-managed group writes are deprecated; group ownership is managed by the identity provider"
+
+func isDeprecatedJAASGroupMembershipTuple(tuple openfga.Tuple) bool {
+	return tuple.Target != nil && tuple.Target.Kind == openfga.GroupType && tuple.Relation == ofganames.MemberRelation
+}
+
 // authorizeRelationTargetAdmin authorizes a non-JIMM-admin to manage the given
 // relation tuple. JIMM admins may manage any tuple. A non-admin may only grant
 // or revoke an access relation (resourceAdminRelations) to a grantee of an
@@ -115,6 +122,9 @@ func (j *PermissionManager) AddRelation(ctx context.Context, user *openfga.User,
 		return err
 	}
 	for _, tuple := range parsedTuples {
+		if isDeprecatedJAASGroupMembershipTuple(tuple) {
+			return errors.Codef(errors.CodeNotSupported, deprecatedJAASGroupWriteMessage)
+		}
 		if err := j.authorizeRelationTargetAdmin(ctx, user, tuple); err != nil {
 			return err
 		}

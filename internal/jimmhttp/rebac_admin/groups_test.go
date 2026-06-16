@@ -27,10 +27,9 @@ import (
 
 func TestCreateGroup(t *testing.T) {
 	c := qt.New(t)
-	var addErr error
 	groupManager := mocks.GroupManager{
 		AddGroup_: func(ctx context.Context, user *openfga.User, name string) (*dbmodel.GroupEntry, error) {
-			return &dbmodel.GroupEntry{UUID: "test-uuid", Name: name}, addErr
+			return nil, errors.New("JAAS-managed group writes are deprecated; group ownership is managed by the identity provider")
 		},
 	}
 	jimm := jimmtest.JIMM{
@@ -42,28 +41,18 @@ func TestCreateGroup(t *testing.T) {
 	ctx := context.Background()
 	ctx = rebac_handlers.ContextWithIdentity(ctx, &user)
 	groupSvc := rebac_admin.NewGroupService(&jimm)
-	resp, err := groupSvc.CreateGroup(ctx, &resources.Group{Name: "new-group"})
-	c.Assert(err, qt.IsNil)
-	c.Assert(*resp.Id, qt.Equals, "test-uuid")
-	c.Assert(resp.Name, qt.Equals, "new-group")
-	addErr = errors.New("foo")
-	_, err = groupSvc.CreateGroup(ctx, &resources.Group{Name: "new-group"})
-	c.Assert(err, qt.ErrorMatches, "foo")
+	_, err := groupSvc.CreateGroup(ctx, &resources.Group{Name: "new-group"})
+	c.Assert(err, qt.ErrorMatches, ".*JAAS-managed group writes are deprecated.*")
 }
 
 func TestUpdateGroup(t *testing.T) {
 	c := qt.New(t)
-	groupID := "group-id"
-	var renameErr error
 	groupManager := mocks.GroupManager{
 		GetGroupByUUID_: func(ctx context.Context, user *openfga.User, uuid string) (*dbmodel.GroupEntry, error) {
-			return &dbmodel.GroupEntry{UUID: groupID, Name: "test-group"}, nil
+			return &dbmodel.GroupEntry{UUID: uuid, Name: "test-group"}, nil
 		},
 		RenameGroup_: func(ctx context.Context, user *openfga.User, oldName, newName string) error {
-			if oldName != "test-group" {
-				return errors.New("invalid old group name")
-			}
-			return renameErr
+			return errors.New("JAAS-managed group writes are deprecated; group ownership is managed by the identity provider")
 		},
 	}
 	jimm := jimmtest.JIMM{
@@ -75,14 +64,11 @@ func TestUpdateGroup(t *testing.T) {
 	ctx := context.Background()
 	ctx = rebac_handlers.ContextWithIdentity(ctx, &user)
 	groupSvc := rebac_admin.NewGroupService(&jimm)
+	groupID := "group-id"
 	_, err := groupSvc.UpdateGroup(ctx, &resources.Group{Name: "new-group"})
 	c.Assert(err, qt.ErrorMatches, ".*missing group ID")
-	resp, err := groupSvc.UpdateGroup(ctx, &resources.Group{Id: &groupID, Name: "new-group"})
-	c.Assert(err, qt.IsNil)
-	c.Assert(resp, qt.DeepEquals, &resources.Group{Id: &groupID, Name: "new-group"})
-	renameErr = errors.New("foo")
 	_, err = groupSvc.UpdateGroup(ctx, &resources.Group{Id: &groupID, Name: "new-group"})
-	c.Assert(err, qt.ErrorMatches, "foo")
+	c.Assert(err, qt.ErrorMatches, ".*JAAS-managed group writes are deprecated.*")
 }
 
 func TestListGroups(t *testing.T) {
@@ -220,46 +206,17 @@ func TestGetGroupIdentities(t *testing.T) {
 
 func TestPatchGroupIdentities(t *testing.T) {
 	c := qt.New(t)
-	var patchTuplesErr error
-	permissionManager := mocks.PermissionManager{
-		AddRelation_: func(ctx context.Context, user *openfga.User, tuples []params.RelationshipTuple) error {
-			return patchTuplesErr
-		},
-		RemoveRelation_: func(ctx context.Context, user *openfga.User, tuples []params.RelationshipTuple) error {
-			return patchTuplesErr
-		},
-	}
-	jimm := jimmtest.JIMM{
-		PermissionManager_: func() jujuapi.PermissionManager {
-			return &permissionManager
-		},
-	}
+	jimm := jimmtest.JIMM{}
 	user := openfga.User{}
 	ctx := context.Background()
 	ctx = rebac_handlers.ContextWithIdentity(ctx, &user)
 	groupSvc := rebac_admin.NewGroupService(&jimm)
 
-	_, err := groupSvc.PatchGroupIdentities(ctx, "invalid-group-id", nil)
-	c.Assert(err, qt.ErrorMatches, ".* invalid group ID")
-
-	newUUID := uuid.New()
-	operations := []resources.GroupIdentitiesPatchItem{
-		{Identity: "foo@canonical.com", Op: resources.GroupIdentitiesPatchItemOpAdd},
-		{Identity: "bar@canonical.com", Op: resources.GroupIdentitiesPatchItemOpRemove},
-	}
-	res, err := groupSvc.PatchGroupIdentities(ctx, newUUID.String(), operations)
-	c.Assert(err, qt.IsNil)
-	c.Assert(res, qt.IsTrue)
-
-	operationsWithInvalidIdentity := []resources.GroupIdentitiesPatchItem{
-		{Identity: "foo_", Op: resources.GroupIdentitiesPatchItemOpAdd},
-	}
-	_, err = groupSvc.PatchGroupIdentities(ctx, newUUID.String(), operationsWithInvalidIdentity)
-	c.Assert(err, qt.ErrorMatches, ".*invalid identity.*")
-
-	patchTuplesErr = errors.New("foo")
-	_, err = groupSvc.PatchGroupIdentities(ctx, newUUID.String(), operations)
-	c.Assert(err, qt.ErrorMatches, "foo")
+	_, err := groupSvc.PatchGroupIdentities(ctx, uuid.NewString(), []resources.GroupIdentitiesPatchItem{{
+		Identity: "foo@canonical.com",
+		Op:       resources.GroupIdentitiesPatchItemOpAdd,
+	}})
+	c.Assert(err, qt.ErrorMatches, ".*JAAS-managed group writes are deprecated.*")
 }
 
 func TestGetGroupRoles(t *testing.T) {

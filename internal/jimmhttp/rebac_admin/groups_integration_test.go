@@ -9,6 +9,7 @@ import (
 	rebac_handlers "github.com/canonical/rebac-admin-ui-handlers/v1"
 	"github.com/canonical/rebac-admin-ui-handlers/v1/resources"
 	qt "github.com/frankban/quicktest"
+	"github.com/google/uuid"
 	"github.com/juju/names/v5"
 
 	"github.com/canonical/jimm/v3/internal/jimmhttp/rebac_admin"
@@ -40,8 +41,7 @@ func TestListGroupsWithFilterIntegration(t *testing.T) {
 
 	ctx := c.Context()
 	for i := range 10 {
-		_, err := s.JIMM.GroupManager.AddGroup(ctx, s.AdminUser, fmt.Sprintf("test-group-filter-%d", i))
-		c.Assert(err, qt.IsNil)
+		s.AddGroup(c, fmt.Sprintf("test-group-filter-%d", i))
 	}
 
 	ctx = rebac_handlers.ContextWithIdentity(ctx, s.AdminUser)
@@ -73,8 +73,7 @@ func TestGetGroupIdentitiesIntegration(t *testing.T) {
 	s := SetupGroupsTest(c)
 
 	ctx := c.Context()
-	group, err := s.JIMM.GroupManager.AddGroup(ctx, s.AdminUser, "test-group")
-	c.Assert(err, qt.IsNil)
+	group := s.AddGroup(c, "test-group")
 	tuple := openfga.Tuple{
 		Relation: ofganames.MemberRelation,
 		Target:   ofganames.ConvertTag(jimmnames.NewGroupTag(group.UUID)),
@@ -85,7 +84,7 @@ func TestGetGroupIdentitiesIntegration(t *testing.T) {
 		t.Object = ofganames.ConvertTag(names.NewUserTag(fmt.Sprintf("foo%d@canonical.com", i)))
 		tuples = append(tuples, t)
 	}
-	err = s.JIMM.OpenFGAClient.AddRelation(ctx, tuples...)
+	err := s.JIMM.OpenFGAClient.AddRelation(ctx, tuples...)
 	c.Assert(err, qt.IsNil)
 	// Request Subset of items
 	pageSize := 5
@@ -124,44 +123,12 @@ func TestPatchGroupIdentitiesIntegration(t *testing.T) {
 	s := SetupGroupsTest(c)
 
 	ctx := c.Context()
-	group, err := s.JIMM.GroupManager.AddGroup(ctx, s.AdminUser, "test-group")
-	c.Assert(err, qt.IsNil)
-	tuple := openfga.Tuple{
-		Relation: ofganames.MemberRelation,
-		Target:   ofganames.ConvertTag(jimmnames.NewGroupTag(group.UUID)),
-	}
-	var tuples []openfga.Tuple
-	for i := range 2 {
-		t := tuple
-		t.Object = ofganames.ConvertTag(names.NewUserTag(fmt.Sprintf("foo%d@canonical.com", i)))
-		tuples = append(tuples, t)
-	}
-	err = s.JIMM.OpenFGAClient.AddRelation(ctx, tuples...)
-	c.Assert(err, qt.IsNil)
-	allowed, err := s.JIMM.OpenFGAClient.CheckRelation(ctx, tuples[0], false)
-	c.Assert(err, qt.IsNil)
-	c.Assert(allowed, qt.Equals, true)
-	// Above we have added 2 users to the group, below, we will request those 2 users to be removed
-	// and add 2 different users to the group, in the same request.
-	entitlementPatches := []resources.GroupIdentitiesPatchItem{
-		{Identity: "foo0@canonical.com", Op: resources.GroupIdentitiesPatchItemOpRemove},
-		{Identity: "foo1@canonical.com", Op: resources.GroupIdentitiesPatchItemOpRemove},
-		{Identity: "foo2@canonical.com", Op: resources.GroupIdentitiesPatchItemOpAdd},
-		{Identity: "foo3@canonical.com", Op: resources.GroupIdentitiesPatchItemOpAdd},
-	}
 	ctx = rebac_handlers.ContextWithIdentity(ctx, s.AdminUser)
-	res, err := s.groupSvc.PatchGroupIdentities(ctx, group.UUID, entitlementPatches)
-	c.Assert(err, qt.IsNil)
-	c.Assert(res, qt.Equals, true)
-
-	allowed, err = s.JIMM.OpenFGAClient.CheckRelation(ctx, tuples[0], false)
-	c.Assert(err, qt.IsNil)
-	c.Assert(allowed, qt.Equals, false)
-	newTuple := tuples[0]
-	newTuple.Object = ofganames.ConvertTag(names.NewUserTag("foo2@canonical.com"))
-	allowed, err = s.JIMM.OpenFGAClient.CheckRelation(ctx, newTuple, false)
-	c.Assert(err, qt.IsNil)
-	c.Assert(allowed, qt.Equals, true)
+	_, err := s.groupSvc.PatchGroupIdentities(ctx, uuid.NewString(), []resources.GroupIdentitiesPatchItem{{
+		Identity: "foo0@canonical.com",
+		Op:       resources.GroupIdentitiesPatchItemOpAdd,
+	}})
+	c.Assert(err, qt.ErrorMatches, ".*JAAS-managed group writes are deprecated.*")
 }
 
 func TestGetGroupRolesIntegration(t *testing.T) {
@@ -236,8 +203,7 @@ func TestGetGroupEntitlementsIntegration(t *testing.T) {
 	s := SetupGroupsTest(c)
 
 	ctx := c.Context()
-	group, err := s.JIMM.GroupManager.AddGroup(ctx, s.AdminUser, "test-group")
-	c.Assert(err, qt.IsNil)
+	group := s.AddGroup(c, "test-group")
 	tuple := openfga.Tuple{
 		Object:   ofganames.ConvertTagWithRelation(jimmnames.NewGroupTag(group.UUID), ofganames.MemberRelation),
 		Relation: ofganames.AdministratorRelation,
@@ -253,7 +219,7 @@ func TestGetGroupEntitlementsIntegration(t *testing.T) {
 		t.Target = ofganames.ConvertTag(names.NewControllerTag(fmt.Sprintf("test-controller-%d", i)))
 		tuples = append(tuples, t)
 	}
-	err = s.JIMM.OpenFGAClient.AddRelation(ctx, tuples...)
+	err := s.JIMM.OpenFGAClient.AddRelation(ctx, tuples...)
 	c.Assert(err, qt.IsNil)
 
 	ctx = rebac_handlers.ContextWithIdentity(ctx, s.AdminUser)
@@ -344,8 +310,7 @@ func TestPatchGroupEntitlementsIntegration(t *testing.T) {
 	oldModels := []string{env.Models[0].UUID, env.Models[1].UUID}
 	newModels := []string{env.Models[2].UUID, env.Models[3].UUID}
 
-	group, err := s.JIMM.GroupManager.AddGroup(ctx, s.AdminUser, "test-group")
-	c.Assert(err, qt.IsNil)
+	group := s.AddGroup(c, "test-group")
 	tuple := openfga.Tuple{
 		Object:   ofganames.ConvertTagWithRelation(jimmnames.NewGroupTag(group.UUID), ofganames.MemberRelation),
 		Relation: ofganames.AdministratorRelation,
@@ -357,7 +322,7 @@ func TestPatchGroupEntitlementsIntegration(t *testing.T) {
 		t.Target = ofganames.ConvertTag(names.NewModelTag(oldModels[i]))
 		tuples = append(tuples, t)
 	}
-	err = s.JIMM.OpenFGAClient.AddRelation(ctx, tuples...)
+	err := s.JIMM.OpenFGAClient.AddRelation(ctx, tuples...)
 	c.Assert(err, qt.IsNil)
 	allowed, err := s.JIMM.OpenFGAClient.CheckRelation(ctx, tuples[0], false)
 	c.Assert(err, qt.IsNil)
