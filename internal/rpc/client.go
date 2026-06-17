@@ -178,7 +178,12 @@ func (c *Client) Call(ctx context.Context, facade string, version int, id, metho
 		Request: method,
 		Params:  json.RawMessage(argsb),
 	}
-	if traceID, spanID, flags, ok := telemetry.TraceScopeFromContext(ctx); ok {
+	scope := span.Scope()
+	if traceID, spanID, flags := scope.TraceID(), scope.SpanID(), scope.TraceFlags(); traceID != "" && spanID != "" {
+		req.TraceID = traceID
+		req.SpanID = spanID
+		req.TraceFlags = flags
+	} else if traceID, spanID, flags, ok := jujuTrace.ScopeFromContext(ctx); ok {
 		req.TraceID = traceID
 		req.SpanID = spanID
 		req.TraceFlags = flags

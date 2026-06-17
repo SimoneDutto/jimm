@@ -85,6 +85,8 @@ type otelSpan struct {
 	span oteltrace.Span
 }
 
+// Scope returns a jujuTrace.Scope that reflects the trace context of
+// the underlying OpenTelemetry span.
 func (s otelSpan) Scope() jujuTrace.Scope {
 	spanContext := s.span.SpanContext()
 	if !spanContext.IsValid() {
@@ -93,6 +95,7 @@ func (s otelSpan) Scope() jujuTrace.Scope {
 	return otelScope{spanContext: spanContext}
 }
 
+// AddEvent adds an event to the span with the given name and attributes.
 func (s otelSpan) AddEvent(name string, attributes ...jujuTrace.Attribute) {
 	attrs := toOTelAttributes(attributes)
 	if len(attrs) == 0 {
@@ -102,6 +105,7 @@ func (s otelSpan) AddEvent(name string, attributes ...jujuTrace.Attribute) {
 	s.span.AddEvent(name, oteltrace.WithAttributes(attrs...))
 }
 
+// RecordError records an error on the span with the given attributes.
 func (s otelSpan) RecordError(err error, attributes ...jujuTrace.Attribute) {
 	if err == nil {
 		return
@@ -115,6 +119,7 @@ func (s otelSpan) RecordError(err error, attributes ...jujuTrace.Attribute) {
 	s.span.SetStatus(codes.Error, err.Error())
 }
 
+// End ends the span with the given attributes.
 func (s otelSpan) End(attributes ...jujuTrace.Attribute) {
 	attrs := toOTelAttributes(attributes)
 	if len(attrs) != 0 {
@@ -127,18 +132,22 @@ type otelScope struct {
 	spanContext oteltrace.SpanContext
 }
 
+// TraceID returns the trace ID of the span context.
 func (s otelScope) TraceID() string {
 	return s.spanContext.TraceID().String()
 }
 
+// SpanID returns the span ID of the span context.
 func (s otelScope) SpanID() string {
 	return s.spanContext.SpanID().String()
 }
 
+// TraceFlags returns the trace flags of the span context.
 func (s otelScope) TraceFlags() int {
 	return int(s.spanContext.TraceFlags())
 }
 
+// IsSampled returns true if the span context is sampled.
 func (s otelScope) IsSampled() bool {
 	return s.spanContext.TraceFlags().IsSampled()
 }

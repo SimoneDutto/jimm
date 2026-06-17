@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	jujuTrace "github.com/juju/juju/core/trace"
-	jujuRPC "github.com/juju/juju/rpc"
 	"github.com/juju/zaputil/zapctx"
 	otlpgrpc "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	otlphttp "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
@@ -164,17 +163,4 @@ func parseEndpoint(endpoint string) (*url.URL, error) {
 		return nil, fmt.Errorf("unexpected path %q without scheme", parsed.Path)
 	}
 	return parsed, nil
-}
-
-// TraceScopeFromContext returns trace metadata from either the Juju trace
-// scope or the legacy juju/rpc tracing context.
-//
-// JIMM still needs to accept both context formats so older request paths can
-// continue to propagate trace IDs while the newer trace scope is present.
-func TraceScopeFromContext(ctx context.Context) (traceID, spanID string, flags int, ok bool) {
-	if traceID, spanID, flags, ok := jujuTrace.ScopeFromContext(ctx); ok {
-		return traceID, spanID, flags, true
-	}
-	traceID, spanID, flags = jujuRPC.TracingFromContext(ctx)
-	return traceID, spanID, flags, traceID != "" && spanID != ""
 }
