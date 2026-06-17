@@ -15,7 +15,6 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/juju/juju/api"
-	jujuTrace "github.com/juju/juju/core/trace"
 	jujuparams "github.com/juju/juju/rpc/params"
 	"github.com/juju/names/v6"
 	"github.com/juju/zaputil/zapctx"
@@ -27,7 +26,6 @@ import (
 	"github.com/canonical/jimm/v3/internal/logger"
 	"github.com/canonical/jimm/v3/internal/openfga"
 	"github.com/canonical/jimm/v3/internal/servermon"
-	"github.com/canonical/jimm/v3/internal/telemetry"
 	"github.com/canonical/jimm/v3/internal/utils"
 	apiparams "github.com/canonical/jimm/v3/pkg/api/params"
 )
@@ -187,9 +185,6 @@ func (c *writeLockConn) sendMessage(responseObject any, request *message) {
 	msg := new(message)
 	msg.RequestID = request.RequestID
 	msg.Response = request.Response
-	msg.TraceID = request.TraceID
-	msg.SpanID = request.SpanID
-	msg.TraceFlags = request.TraceFlags
 	if responseObject != nil {
 		responseData, err := json.Marshal(responseObject)
 		if err != nil {
@@ -249,10 +244,6 @@ func (msgs *inflightMsgs) removeMessage(msgID uint64) {
 	msgs.mu.Unlock()
 
 	if ok {
-		if req.span != nil {
-			req.span.Finish(nil)
-			req.span = nil
-		}
 		servermon.JujuCallDurationHistogram.WithLabelValues(
 			req.Type,
 			req.Request,
@@ -408,78 +399,33 @@ func (p *clientProxy) start(ctx context.Context) error {
 		if err := p.auditLogMessage(msg, false); err != nil {
 			zapctx.Error(ctx, "failed to audit log message", zap.Error(err))
 		}
-		childCtx := ctx
-		if msg.TraceID != "" && msg.SpanID != "" {
-			childCtx = jujuTrace.WithTraceScope(childCtx, msg.TraceID, msg.SpanID, msg.TraceFlags)
+		// All requests should be proxied as transparently as possible through to the controller
+		// except for auth related requests like Login because JIMM is auth gateway.
+		if msg.Type == "Admin" {
+			toClient, toController, err := p.handleAdminFacade(ctx, msg)
+			if err != nil {
+				p.sendError(ctx, p.src, msg, err)
+				continue
+			}
+			// If there is a response for the client, send it to the client and continue.
+			// If there is a message for the controller instead, use the normal path.
+			// We can't send the client a response from JIMM and send a message to the controller.
+			if toClient != nil {
+				p.src.sendMessage(nil, toClient)
+				continue
+			} else if toController != nil {
+				msg = toController
+				p.msgs.addLoginMessage(toController)
+			}
 		}
-		childCtx, childSpan := telemetry.StartSpan(
-			childCtx,
-			"jimm.model-proxy",
-			jujuTrace.StringAttr("rpc.facade", msg.Type),
-			jujuTrace.IntAttr("rpc.version", msg.Version),
-			jujuTrace.StringAttr("rpc.method", msg.Request),
-		)
-		msg.span = &childSpan
-		if scope := childSpan.Scope(); scope.TraceID() != "" && scope.SpanID() != "" {
-			msg.TraceID = scope.TraceID()
-			msg.SpanID = scope.SpanID()
-			msg.TraceFlags = scope.TraceFlags()
-		}
-
-		forwardMsg, forward := p.handleClientAdminMessage(ctx, childCtx, msg)
-		if !forward {
-			continue
-		}
-		msg = forwardMsg
 		p.msgs.addMessage(msg)
 		if err := p.dst.writeJson(msg); err != nil {
 			zapctx.Error(ctx, "clientProxy error writing to dst", zap.Error(err))
-			if msg.span != nil {
-				msg.span.Finish(err)
-				msg.span = nil
-			}
 			p.sendError(ctx, p.src, msg, err)
 			p.msgs.removeMessage(msg.RequestID)
 			continue
 		}
 	}
-}
-
-func (p *clientProxy) handleClientAdminMessage(ctx, msgCtx context.Context, msg *message) (*message, bool) {
-	// All requests should be proxied as transparently as possible through to the controller
-	// except for auth related requests like Login because JIMM is auth gateway.
-	if msg.Type != "Admin" {
-		return msg, true
-	}
-
-	toClient, toController, err := p.handleAdminFacade(msgCtx, msg)
-	if err != nil {
-		if msg.span != nil {
-			msg.span.Finish(err)
-			msg.span = nil
-		}
-		p.sendError(ctx, p.src, msg, err)
-		return nil, false
-	}
-	// If there is a response for the client, send it to the client and continue.
-	// If there is a message for the controller instead, use the normal path.
-	// We can't send the client a response from JIMM and send a message to the controller.
-	if toClient != nil {
-		p.src.sendMessage(nil, toClient)
-		if msg.span != nil {
-			msg.span.Finish(nil)
-			msg.span = nil
-		}
-		return nil, false
-	}
-	if toController != nil {
-		toController.TraceID = msg.TraceID
-		toController.SpanID = msg.SpanID
-		toController.TraceFlags = msg.TraceFlags
-		p.msgs.addLoginMessage(toController)
-		return toController, true
-	}
-	return msg, true
 }
 
 // makeControllerConnection dials a controller and starts a go routine for
@@ -599,8 +545,7 @@ func (p *controllerProxy) processControllerErrors(ctx context.Context, msg *mess
 		msg := p.msgs.getMessage(msg.RequestID)
 		if msg != nil {
 			if err := p.src.writeJson(msg); err != nil {
-				zapctx.Error(ctx, "failed to write back to controller", zap.Error(err))
-				p.handleError(ctx, msg, err)
+				zapctx.Error(context.Background(), "failed to write back to controller", zap.Error(err))
 			}
 		}
 		return false
@@ -609,12 +554,6 @@ func (p *controllerProxy) processControllerErrors(ctx context.Context, msg *mess
 }
 
 func (p *controllerProxy) handleError(ctx context.Context, msg *message, err error) {
-	if req := p.msgs.getMessage(msg.RequestID); req != nil {
-		if req.span != nil {
-			req.span.Finish(err)
-			req.span = nil
-		}
-	}
 	p.sendError(ctx, p.dst, msg, err)
 	p.msgs.removeMessage(msg.RequestID)
 }
@@ -723,9 +662,6 @@ func createErrResponse(err error, req *message) *message {
 	errMsg.ErrorInfo = errors.ErrorInfo(err)
 	errMsg.Error = err.Error()
 	errMsg.ErrorCode = string(errors.ErrorCode(err))
-	errMsg.TraceID = req.TraceID
-	errMsg.SpanID = req.SpanID
-	errMsg.TraceFlags = req.TraceFlags
 	return errMsg
 }
 
@@ -750,14 +686,6 @@ func modifyControllerResponse(msg *message) error {
 // a message to be sent to the destination
 // an error
 func (p *clientProxy) handleAdminFacade(ctx context.Context, msg *message) (clientResponse *message, controllerMessage *message, err error) {
-	ctx, span := telemetry.StartSpan(ctx, "jimm.auth",
-		jujuTrace.StringAttr("auth.endpoint", "model-proxy"),
-		jujuTrace.StringAttr("auth.method", msg.Request),
-	)
-	defer func() {
-		span.Finish(err)
-	}()
-
 	errorFnc := func(err error) (*message, *message, error) {
 		return nil, nil, err
 	}
