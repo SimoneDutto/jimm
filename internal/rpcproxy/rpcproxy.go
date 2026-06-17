@@ -408,25 +408,25 @@ func (p *clientProxy) start(ctx context.Context) error {
 		if err := p.auditLogMessage(msg, false); err != nil {
 			zapctx.Error(ctx, "failed to audit log message", zap.Error(err))
 		}
-		msgCtx := ctx
+		childCtx := ctx
 		if msg.TraceID != "" && msg.SpanID != "" {
-			msgCtx = jujuTrace.WithTraceScope(msgCtx, msg.TraceID, msg.SpanID, msg.TraceFlags)
+			childCtx = jujuTrace.WithTraceScope(childCtx, msg.TraceID, msg.SpanID, msg.TraceFlags)
 		}
-		msgCtx, span := telemetry.StartSpan(
-			msgCtx,
-			"jimm.juju-proxy",
+		childCtx, childSpan := telemetry.StartSpan(
+			childCtx,
+			"jimm.model-proxy",
 			jujuTrace.StringAttr("rpc.facade", msg.Type),
 			jujuTrace.IntAttr("rpc.version", msg.Version),
 			jujuTrace.StringAttr("rpc.method", msg.Request),
 		)
-		msg.span = &span
-		if scope := span.Scope(); scope.TraceID() != "" && scope.SpanID() != "" {
+		msg.span = &childSpan
+		if scope := childSpan.Scope(); scope.TraceID() != "" && scope.SpanID() != "" {
 			msg.TraceID = scope.TraceID()
 			msg.SpanID = scope.SpanID()
 			msg.TraceFlags = scope.TraceFlags()
 		}
 
-		forwardMsg, forward := p.handleClientAdminMessage(ctx, msgCtx, msg)
+		forwardMsg, forward := p.handleClientAdminMessage(ctx, childCtx, msg)
 		if !forward {
 			continue
 		}

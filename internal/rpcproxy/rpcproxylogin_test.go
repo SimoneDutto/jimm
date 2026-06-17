@@ -406,7 +406,7 @@ func TestProxySocketsProxiedEndpointStartsAndPropagatesTraceSpan(t *testing.T) {
 	scope := telemetrymocks.NewMockScope(ctrl)
 
 	tracer.EXPECT().Enabled().Return(true)
-	tracer.EXPECT().Start(gomock.Any(), "jimm.juju-proxy", gomock.Any()).DoAndReturn(
+	tracer.EXPECT().Start(gomock.Any(), "jimm.model-proxy", gomock.Any()).DoAndReturn(
 		func(ctx context.Context, _ string, _ ...jujuTrace.Option) (context.Context, jujuTrace.Span) {
 			return jujuTrace.WithSpan(ctx, span), span
 		},

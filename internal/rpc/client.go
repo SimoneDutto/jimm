@@ -12,7 +12,6 @@ import (
 
 	"github.com/gorilla/websocket"
 	jujuTrace "github.com/juju/juju/core/trace"
-	jujuRPC "github.com/juju/juju/rpc"
 	jujuparams "github.com/juju/juju/rpc/params"
 	"github.com/juju/zaputil/zapctx"
 	"go.uber.org/zap"
@@ -179,11 +178,7 @@ func (c *Client) Call(ctx context.Context, facade string, version int, id, metho
 		Request: method,
 		Params:  json.RawMessage(argsb),
 	}
-	if traceID, spanID, flags, ok := jujuTrace.ScopeFromContext(ctx); ok {
-		req.TraceID = traceID
-		req.SpanID = spanID
-		req.TraceFlags = flags
-	} else if traceID, spanID, flags := jujuRPC.TracingFromContext(ctx); traceID != "" && spanID != "" {
+	if traceID, spanID, flags, ok := telemetry.TraceScopeFromContext(ctx); ok {
 		req.TraceID = traceID
 		req.SpanID = spanID
 		req.TraceFlags = flags

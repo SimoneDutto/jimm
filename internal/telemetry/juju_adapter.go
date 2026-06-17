@@ -14,6 +14,7 @@ type otelTracer struct {
 	tracer oteltrace.Tracer
 }
 
+// Start implements jujuTrace.Tracer.
 func (t otelTracer) Start(ctx context.Context, name string, options ...jujuTrace.Option) (context.Context, jujuTrace.Span) {
 	if t.tracer == nil {
 		return ctx, jujuTrace.NoopSpan{}
@@ -40,6 +41,7 @@ func (t otelTracer) Start(ctx context.Context, name string, options ...jujuTrace
 	return ctx, wrapped
 }
 
+// Enabled implements jujuTrace.Tracer.
 func (t otelTracer) Enabled() bool {
 	return t.tracer != nil
 }
@@ -62,7 +64,7 @@ func remoteParentFromScope(ctx context.Context) context.Context {
 	if err != nil {
 		return ctx
 	}
-	if flags < 0 || flags > 0xff {
+	if flags < 0 || flags > 255 {
 		return ctx
 	}
 
