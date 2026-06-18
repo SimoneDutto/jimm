@@ -15,6 +15,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/juju/juju/api"
+	jujuTrace "github.com/juju/juju/core/trace"
 	jujuparams "github.com/juju/juju/rpc/params"
 	"github.com/juju/names/v6"
 	"github.com/juju/zaputil/zapctx"
@@ -26,6 +27,7 @@ import (
 	"github.com/canonical/jimm/v3/internal/logger"
 	"github.com/canonical/jimm/v3/internal/openfga"
 	"github.com/canonical/jimm/v3/internal/servermon"
+	"github.com/canonical/jimm/v3/internal/telemetry"
 	"github.com/canonical/jimm/v3/internal/utils"
 	apiparams "github.com/canonical/jimm/v3/pkg/api/params"
 )
@@ -225,16 +227,35 @@ func (msgs *inflightMsgs) getLoginMessage() *message {
 	return msgs.loginMessage
 }
 
-func (msgs *inflightMsgs) addMessage(msg *message) {
+func (msgs *inflightMsgs) addMessage(ctx context.Context, msg *message) {
 	msgs.mu.Lock()
 	defer msgs.mu.Unlock()
 
 	msg.start = time.Now()
+
+	// Continue the client's trace (no-op when TraceID is empty).
+	traceCtx := jujuTrace.WithTraceScope(ctx, msg.TraceID, msg.SpanID, msg.TraceFlags)
+
+	// Start a child span for the proxied RPC call.  When tracing is disabled
+	// (no-op tracer) StartSpan returns a no-op span and the fields below
+	// become empty strings, which json:"omitempty" drops automatically.
+	_, childSpan := telemetry.StartSpan(traceCtx, "jimm.model-proxy",
+		jujuTrace.StringAttr("rpc.facade", msg.Type),
+		jujuTrace.IntAttr("rpc.version", msg.Version),
+		jujuTrace.StringAttr("rpc.method", msg.Request),
+	)
+	msg.span = &childSpan
+
+	// Write trace propagation headers so the controller can continue the trace.
+	msg.TraceID = childSpan.Scope().TraceID()
+	msg.SpanID = childSpan.Scope().SpanID()
+	msg.TraceFlags = childSpan.Scope().TraceFlags()
+
 	msgs.messages[msg.RequestID] = msg
 }
 
 // removeMessage deletes the request message that corresponds
-// to the responses message ID.
+// to the responses message ID and finishes any active trace span.
 func (msgs *inflightMsgs) removeMessage(msgID uint64) {
 	msgs.mu.Lock()
 	req, ok := msgs.messages[msgID]
@@ -244,6 +265,7 @@ func (msgs *inflightMsgs) removeMessage(msgID uint64) {
 	msgs.mu.Unlock()
 
 	if ok {
+		req.finishSpan(nil)
 		servermon.JujuCallDurationHistogram.WithLabelValues(
 			req.Type,
 			req.Request,
@@ -418,9 +440,10 @@ func (p *clientProxy) start(ctx context.Context) error {
 				p.msgs.addLoginMessage(toController)
 			}
 		}
-		p.msgs.addMessage(msg)
+		p.msgs.addMessage(ctx, msg)
 		if err := p.dst.writeJson(msg); err != nil {
 			zapctx.Error(ctx, "clientProxy error writing to dst", zap.Error(err))
+			msg.finishSpan(err)
 			p.sendError(ctx, p.src, msg, err)
 			p.msgs.removeMessage(msg.RequestID)
 			continue
@@ -554,6 +577,8 @@ func (p *controllerProxy) processControllerErrors(ctx context.Context, msg *mess
 }
 
 func (p *controllerProxy) handleError(ctx context.Context, msg *message, err error) {
+	// Record the error on the span before removing (finishSpan is nil-receiver-safe).
+	p.msgs.getMessage(msg.RequestID).finishSpan(err)
 	p.sendError(ctx, p.dst, msg, err)
 	p.msgs.removeMessage(msg.RequestID)
 }
