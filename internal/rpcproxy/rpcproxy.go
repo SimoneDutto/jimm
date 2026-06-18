@@ -15,7 +15,6 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/juju/juju/api"
-	jujuTrace "github.com/juju/juju/core/trace"
 	jujuparams "github.com/juju/juju/rpc/params"
 	"github.com/juju/names/v6"
 	"github.com/juju/zaputil/zapctx"
@@ -27,7 +26,6 @@ import (
 	"github.com/canonical/jimm/v3/internal/logger"
 	"github.com/canonical/jimm/v3/internal/openfga"
 	"github.com/canonical/jimm/v3/internal/servermon"
-	"github.com/canonical/jimm/v3/internal/telemetry"
 	"github.com/canonical/jimm/v3/internal/utils"
 	apiparams "github.com/canonical/jimm/v3/pkg/api/params"
 )
@@ -232,26 +230,7 @@ func (msgs *inflightMsgs) addMessage(ctx context.Context, msg *message) {
 	defer msgs.mu.Unlock()
 
 	msg.start = time.Now()
-
-	// Continue the client's trace (no-op when TraceID is empty).
-	traceCtx := jujuTrace.WithTraceScope(ctx, msg.TraceID, msg.SpanID, msg.TraceFlags)
-
-	// Start a child span for the proxied RPC call.  When tracing is disabled
-	// (no-op tracer) StartSpan returns a no-op span and the fields below
-	// become empty strings, which json:"omitempty" drops automatically.
-	_, childSpan := telemetry.StartSpan(traceCtx, "jimm.model-proxy",
-		jujuTrace.StringAttr("rpc.facade", msg.Type),
-		jujuTrace.IntAttr("rpc.version", msg.Version),
-		jujuTrace.StringAttr("rpc.method", msg.Request),
-	)
-	msg.span = &childSpan
-
-	// Write trace propagation headers so the controller can continue the trace.
-	scope := childSpan.Scope()
-	msg.TraceID = scope.TraceID()
-	msg.SpanID = scope.SpanID()
-	msg.TraceFlags = scope.TraceFlags()
-
+	msg.startSpan(ctx)
 	msgs.messages[msg.RequestID] = msg
 }
 
