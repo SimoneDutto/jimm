@@ -493,9 +493,6 @@ type ImportModelRequest struct {
 
 	// Owner specifies the new owner of the model after import.
 	// Can be empty to skip switching the owner.
-	//
-	// NOTICE: This field is deprecated and will return an error
-	// if set.
 	Owner string `json:"owner"`
 }
 

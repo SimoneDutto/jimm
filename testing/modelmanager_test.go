@@ -122,7 +122,10 @@ func TestListModelSummariesWithoutControllerUUIDMasking(t *testing.T) {
 	client := modelmanager.NewClient(conn)
 	models, err := client.ListModelSummaries("bob@canonical.com", false)
 	c.Assert(err, qt.Equals, nil)
-	c.Assert(len(models), qt.Equals, 1)
+	// Alice is a controller admin on every backing controller, so each
+	// controller model is visible in addition to bob's model.
+	expectedCount := len(s.GetControllersConfig(c).Controllers) + 1
+	c.Assert(len(models), qt.Equals, expectedCount)
 	for _, model := range models {
 		c.Assert(model.ControllerUUID, qt.Not(qt.Equals), jimmtest.ControllerUUID)
 	}

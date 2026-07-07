@@ -38,6 +38,25 @@ func TestModelTag(t *testing.T) {
 	c.Check(m2, qt.DeepEquals, m)
 }
 
+func TestModelControllerFacingOwner(t *testing.T) {
+	c := qt.New(t)
+
+	// When no aliased backing owner is recorded, the JAAS owner is used.
+	c.Check(dbmodel.Model{OwnerIdentityName: "alice@canonical.com"}.ControllerFacingOwner(), qt.Equals, "alice@canonical.com")
+
+	// When a backing owner is recorded (e.g. controller model or imported model
+	// with a new owner), it is preferred over the JAAS owner.
+	c.Check(dbmodel.Model{
+		OwnerIdentityName:   "my-controller@controller",
+		ControllerOwnerName: "admin",
+	}.ControllerFacingOwner(), qt.Equals, "admin")
+
+	c.Check(dbmodel.Model{
+		OwnerIdentityName:   "bob@canonical.com",
+		ControllerOwnerName: "original-owner@canonical.com",
+	}.ControllerFacingOwner(), qt.Equals, "original-owner@canonical.com")
+}
+
 func TestRecreateDeletedModel(t *testing.T) {
 	c := qt.New(t)
 	db := gormDB(c)

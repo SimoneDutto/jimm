@@ -329,6 +329,108 @@ func (j *JujuManager) AddController(ctx context.Context, user *openfga.User, ctl
 		)
 	}
 
+	// Track the backing controller's model as a first-class JAAS model.
+	if err := j.ensureControllerModel(ctx, ctl); err != nil {
+		zapctx.Error(ctx, "failed to track controller model", zap.String("controller", ctl.Name), zap.Error(err))
+	}
+
+	return nil
+}
+
+// controllerModelOwner returns the synthetic identity that owns a backing
+// controller's model, i.e. "<controller-name>@controller".
+func controllerModelOwner(controllerName string) string {
+	return controllerName + dbmodel.ControllerModelOwnerSuffix
+}
+
+// ensureControllerModel tracks the backing controller's model as a first-class
+// JAAS model, persisting it in the database and relating it to the controller in
+// OpenFGA. It is idempotent and safe to call on every poll.
+//
+// The model is not granted to any specific user; it relies on the
+// "administrator from controller" inheritance so only controller admins can see
+// and operate it.
+func (j *JujuManager) ensureControllerModel(ctx context.Context, ctl *dbmodel.Controller) error {
+	api, err := j.dialController(ctx, ctl, nil)
+	if err != nil {
+		return fmt.Errorf("failed to dial controller: %w", err)
+	}
+	defer api.Close()
+	return j.ensureControllerModelWithAPI(ctx, ctl, api)
+}
+
+// ensureControllerModelWithAPI is the inner part of ensureControllerModel that
+// uses an existing API connection. It is used by the model poller to avoid
+// dialing a controller twice per cycle.
+func (j *JujuManager) ensureControllerModelWithAPI(ctx context.Context, ctl *dbmodel.Controller, api API) error {
+	modelUUID, err := api.ControllerModelUUID(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get controller model UUID: %w", err)
+	}
+
+	existing := dbmodel.Model{UUID: sql.NullString{String: modelUUID, Valid: true}}
+	if err := j.Database.GetModel(ctx, &existing); err == nil {
+		return nil
+	} else if errors.ErrorCode(err) != errors.CodeNotFound {
+		return err
+	}
+
+	// Read the model's owner as the backing controller reports it rather than
+	// assuming a fixed value, so we stay correct if Juju changes it.
+	modelInfo, err := api.ModelInfo(ctx, names.NewModelTag(modelUUID))
+	if err != nil {
+		return fmt.Errorf("failed to get controller model info: %w", err)
+	}
+	backingOwner := modelInfo.Owner
+
+	owner, err := dbmodel.NewIdentity(controllerModelOwner(ctl.Name))
+	if err != nil {
+		return err
+	}
+	if err := j.Database.GetIdentity(ctx, owner); err != nil {
+		return err
+	}
+
+	cloud := dbmodel.Cloud{Name: ctl.CloudName}
+	if err := j.Database.GetCloud(ctx, &cloud); err != nil {
+		return fmt.Errorf("failed to get controller cloud: %w", err)
+	}
+	region := cloud.Region(ctl.CloudRegion)
+	if region.ID == 0 {
+		return fmt.Errorf("controller cloud region %q not found", ctl.CloudRegion)
+	}
+
+	// The controller model has no real cloud credential, so attach a placeholder
+	// "empty" credential to avoid a NULL foreign key.
+	credential := dbmodel.CloudCredential{
+		Name:              dbmodel.ControllerModelName,
+		CloudName:         ctl.CloudName,
+		OwnerIdentityName: owner.Name,
+		AuthType:          "empty",
+	}
+	if err := j.Database.SetCloudCredential(ctx, &credential); err != nil {
+		return fmt.Errorf("failed to set controller model credential: %w", err)
+	}
+
+	model := dbmodel.Model{
+		Name:                dbmodel.ControllerModelName,
+		UUID:                sql.NullString{String: modelUUID, Valid: true},
+		OwnerIdentityName:   owner.Name,
+		ControllerOwnerName: backingOwner,
+		IsControllerModel:   true,
+		ControllerID:        ctl.ID,
+		CloudRegionID:       region.ID,
+		CloudCredentialID:   credential.ID,
+		Life:                "alive",
+	}
+	if err := j.Database.AddModel(ctx, &model); err != nil {
+		return fmt.Errorf("failed to add controller model: %w", err)
+	}
+
+	if err := j.OpenFGAClient.AddControllerModel(ctx, ctl.ResourceTag(), model.ResourceTag()); err != nil {
+		return fmt.Errorf("failed to add controller->model relation: %w", err)
+	}
+
 	return nil
 }
 
@@ -370,9 +472,11 @@ func (j *JujuManager) EarliestControllerVersion(ctx context.Context) (version.Nu
 }
 
 type modelImporter struct {
-	jimm          *JujuManager
-	model         dbmodel.Model
-	modelInfo     base.ModelInfo
+	jimm      *JujuManager
+	model     dbmodel.Model
+	modelInfo base.ModelInfo
+	// newOwner may be nil if the user wants to keep the original owner.
+	newOwner      *names.UserTag
 	originalOwner names.UserTag
 	offersToAdd   []*crossmodel.ApplicationOfferDetails
 }
@@ -381,9 +485,14 @@ func newModelImporter(jimm *JujuManager, newOwner string) (modelImporter, error)
 	modelImporter := modelImporter{
 		jimm: jimm,
 	}
-	if newOwner != "" {
-		return modelImporter, errors.Codef(errors.CodeBadRequest, "switching the imported model owner is no longer supported")
+	if newOwner == "" {
+		return modelImporter, nil
 	}
+	if !names.IsValidUser(newOwner) {
+		return modelImporter, errors.Codef(errors.CodeBadRequest, "invalid new username for new model owner")
+	}
+	newOwnerTag := names.NewUserTag(newOwner)
+	modelImporter.newOwner = &newOwnerTag
 	return modelImporter, nil
 }
 
@@ -431,17 +540,29 @@ func (m *modelImporter) fetchModelInfo(ctx context.Context, user *openfga.User, 
 }
 
 func (m *modelImporter) setModelOwner(ctx context.Context) error {
-	if m.originalOwner.IsLocal() {
-		return errors.New("cannot import model from local user")
+	var ownerTag names.UserTag
+	if m.newOwner != nil {
+		ownerTag = *m.newOwner
+	} else {
+		ownerTag = m.originalOwner
+	}
+
+	if ownerTag.IsLocal() {
+		return errors.New("cannot import model from local user, try --owner to switch the model owner")
 	}
 	owner := dbmodel.Identity{}
-	owner.SetTag(m.originalOwner)
+	owner.SetTag(ownerTag)
 
 	err := m.jimm.Database.GetIdentity(ctx, &owner)
 	if err != nil {
 		return err
 	}
 	m.model.SetOwner(&owner)
+
+	// The backing controller still knows the model under its original owner.
+	if m.originalOwner.Id() != owner.Name {
+		m.model.ControllerOwnerName = m.originalOwner.Id()
+	}
 
 	return nil
 }
@@ -478,16 +599,20 @@ func (m *modelImporter) setCloudCredential(ctx context.Context) error {
 	}
 	sourceCredentialTag := names.NewCloudCredentialTag(m.modelInfo.CloudCredential)
 
+	// The credential in JIMM is owned by the JAAS model owner (which may
+	// differ from the backing controller's credential owner when importing
+	// with a new owner), but the credential name and cloud come from the
+	// source model's credential tag.
 	cloudCredential := dbmodel.CloudCredential{
 		CloudName:         sourceCredentialTag.Cloud().Id(),
-		OwnerIdentityName: sourceCredentialTag.Owner().Id(),
+		OwnerIdentityName: m.model.Owner.Name,
 		Name:              sourceCredentialTag.Name(),
 	}
 	err := m.jimm.Database.GetCloudCredential(ctx, &cloudCredential)
 	if err != nil {
 		if errors.ErrorCode(err) == errors.CodeNotFound {
 			return errors.Codef(errors.CodeNotFound, "Failed to find cloud credential %q for user %s on cloud %s",
-				sourceCredentialTag.Name(), sourceCredentialTag.Owner().Id(), sourceCredentialTag.Cloud().Id())
+				sourceCredentialTag.Name(), m.model.Owner.Name, sourceCredentialTag.Cloud().Id())
 		}
 		return err
 	}
@@ -555,7 +680,8 @@ func (m *modelImporter) save(ctx context.Context) error {
 	})
 }
 
-// ImportModel imports a model and existing offers into JIMM.
+// ImportModel imports a model and existing offers into JIMM.  A new owner  must be set to
+// represent the external user who will own this model (if the original owner is a local user).
 func (j *JujuManager) ImportModel(ctx context.Context, user *openfga.User, controllerName string, modelTag names.ModelTag, newOwner string) error {
 
 	if err := j.checkJimmAdmin(user); err != nil {

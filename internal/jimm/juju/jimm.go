@@ -76,13 +76,19 @@ func (j *JujuManager) ControllerInfo(ctx context.Context, user *openfga.User, na
 }
 
 // ControllerModelCount returns the number of models hosted on the given
-// controller.
+// controller, excluding backing controller models.
 func (j *JujuManager) ControllerModelCount(ctx context.Context, ctl dbmodel.Controller) (int, error) {
 	models, err := j.Database.GetModelsByController(ctx, ctl)
 	if err != nil {
 		return 0, err
 	}
-	return len(models), nil
+	count := 0
+	for _, m := range models {
+		if !m.IsControllerModel {
+			count++
+		}
+	}
+	return count, nil
 }
 
 // GetControllerBootstrap returns the pending bootstrap reservation for a controller.
@@ -166,12 +172,20 @@ func (j *JujuManager) RemoveController(ctx context.Context, user *openfga.User, 
 		if err != nil {
 			return err
 		}
-		if len(models) > 0 && !force {
+		// Exclude controller models from the "still has models" check: they are
+		// always present on a tracked controller and are removed below.
+		userModels := make([]dbmodel.Model, 0, len(models))
+		for _, m := range models {
+			if !m.IsControllerModel {
+				userModels = append(userModels, m)
+			}
+		}
+		if len(userModels) > 0 && !force {
 			return errors.Codef(errors.CodeStillAlive, "controller still has models")
 		}
 
-		// Remove all models associated with the controller. If force is false,
-		// we can only reach here with an empty list of models.
+		// Remove all models associated with the controller (including the
+		// controller model). If force is false, only controller models remain.
 		for _, model := range models {
 			err := db.DeleteModel(ctx, &model)
 			if err != nil {

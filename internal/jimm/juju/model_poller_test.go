@@ -363,7 +363,10 @@ func TestPollModelsClosesControllerConnections(t *testing.T) {
 
 	dialer := newPerControllerDialer(&jimmtest.API{
 		ModelInfo_: func(ctx context.Context, model names.ModelTag) (jujuclient.ModelInfo, error) {
-			return jujuclient.ModelInfo{ModelInfo: base.ModelInfo{UUID: model.Id()}}, nil
+			return jujuclient.ModelInfo{ModelInfo: base.ModelInfo{UUID: model.Id(), Owner: "admin"}}, nil
+		},
+		ControllerModelUUID_: func(ctx context.Context) (string, error) {
+			return "controller-model-uuid", nil
 		},
 	})
 	s.jujuManager.Dialer = dialer
@@ -372,9 +375,11 @@ func TestPollModelsClosesControllerConnections(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// controller-1 owns model-1, model-2, and model-3 so it must be dialed
-	// exactly once.  controller-2 has no models and must not be dialed at all.
+	// exactly once. controller-2 has no user models but PollModels now also
+	// backfills controller models, so it is dialed once too.
 	c.Assert(dialer.openedCounts(), qt.DeepEquals, map[string]int{
 		"controller-1": 1,
+		"controller-2": 1,
 	})
 	// Every opened connection must have been closed – no leaks.
 	c.Assert(dialer.closedCounts(), qt.DeepEquals, dialer.openedCounts())

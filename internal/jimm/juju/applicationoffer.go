@@ -28,6 +28,35 @@ import (
 	ofganames "github.com/canonical/jimm/v3/internal/openfga/names"
 )
 
+// controllerFacingOfferURL translates a JAAS offer URL into the URL the backing
+// controller knows. If the URL's owner matches a tracked model's JAAS owner but
+// differs from its controller-facing owner (imported or controller models), the
+// owner is rewritten. If the model cannot be resolved the URL is returned
+// unchanged so that offers stored under their original URL still work.
+func (j *JujuManager) controllerFacingOfferURL(ctx context.Context, offerURL string) (string, error) {
+	ourl, err := crossmodel.ParseOfferURL(offerURL)
+	if err != nil {
+		// Pass the URL through unchanged so the DB lookup can still
+		// match offers stored under a URL that ParseOfferURL can't
+		// parse (e.g. legacy data).
+		//nolint:nilerr // Intentional: we deliberately ignore the parse error
+		// to preserve backward compatibility.
+		return offerURL, nil
+	}
+	if ourl.User == "" || ourl.ModelName == "" {
+		return offerURL, nil
+	}
+	m := dbmodel.Model{Name: ourl.ModelName, OwnerIdentityName: ourl.User}
+	if err := j.Database.GetModel(ctx, &m); err != nil {
+		if errors.ErrorCode(err) == errors.CodeNotFound {
+			return offerURL, nil
+		}
+		return "", err
+	}
+	ourl.User = m.ControllerFacingOwner()
+	return ourl.String(), nil
+}
+
 // AddApplicationOfferParams holds parameters for the Offer method.
 type AddApplicationOfferParams struct {
 	ModelTag               names.ModelTag
@@ -62,7 +91,9 @@ func (j *JujuManager) Offer(ctx context.Context, user *openfga.User, offer AddAp
 	}
 
 	offerURL := crossmodel.OfferURL{
-		User:      model.OwnerIdentityName,
+		// The offer URL must use the owner the backing controller knows, which
+		// can differ from the JAAS owner (see Model.ControllerFacingOwner).
+		User:      model.ControllerFacingOwner(),
 		ModelName: model.Name,
 		// Confusingly the application name in the offer URL is
 		// actually the offer name.
@@ -201,8 +232,15 @@ func (j *JujuManager) Offer(ctx context.Context, user *openfga.User, offer AddAp
 // the rest of the details.
 func (j *JujuManager) GetApplicationOfferConsumeDetails(ctx context.Context, user *openfga.User, details *jujuparams.ConsumeOfferDetails, v bakery.Version) error {
 
+	// Translate the JAAS offer URL to the controller-facing URL the offer is
+	// stored under and the backing controller expects.
+	controllerURL, err := j.controllerFacingOfferURL(ctx, details.Offer.OfferURL)
+	if err != nil {
+		return err
+	}
+
 	offer := dbmodel.ApplicationOffer{
-		URL: details.Offer.OfferURL,
+		URL: controllerURL,
 	}
 	if err := j.Database.GetApplicationOffer(ctx, &offer); err != nil {
 		if errors.ErrorCode(err) == errors.CodeNotFound {
@@ -233,7 +271,7 @@ func (j *JujuManager) GetApplicationOfferConsumeDetails(ctx context.Context, use
 	}
 	defer api.Close()
 
-	consumeDetails, err := api.GetApplicationOfferConsumeDetails(ctx, details.Offer.OfferURL)
+	consumeDetails, err := api.GetApplicationOfferConsumeDetails(ctx, controllerURL)
 	if err != nil {
 		return err
 	}
@@ -359,10 +397,16 @@ func (j *JujuManager) enrichOfferDetails(ctx context.Context, user *openfga.User
 // GetApplicationOffer returns details of the offer with the specified URL.
 func (j *JujuManager) GetApplicationOffer(ctx context.Context, user *openfga.User, offerURL string) (*crossmodel.ApplicationOfferDetails, error) {
 
-	offer := dbmodel.ApplicationOffer{
-		URL: offerURL,
+	// Translate the JAAS offer URL to the controller-facing URL.
+	controllerURL, err := j.controllerFacingOfferURL(ctx, offerURL)
+	if err != nil {
+		return nil, err
 	}
-	err := j.Database.GetApplicationOffer(ctx, &offer)
+
+	offer := dbmodel.ApplicationOffer{
+		URL: controllerURL,
+	}
+	err = j.Database.GetApplicationOffer(ctx, &offer)
 	if err != nil {
 		if errors.ErrorCode(err) == errors.CodeNotFound {
 			return nil, errors.Codef(errors.CodeNotFound, "application offer not found")
@@ -391,7 +435,7 @@ func (j *JujuManager) GetApplicationOffer(ctx context.Context, user *openfga.Use
 	}
 	defer api.Close()
 
-	offerDetails, err := api.GetApplicationOffer(ctx, offerURL)
+	offerDetails, err := api.GetApplicationOffer(ctx, controllerURL)
 	if err != nil {
 		if errors.ErrorCode(err) != errors.CodeNotFound {
 			return nil, err
@@ -416,8 +460,8 @@ func (j *JujuManager) GetApplicationOffer(ctx context.Context, user *openfga.Use
 
 // DestroyOffer removes the application offer.
 func (j *JujuManager) DestroyOffer(ctx context.Context, user *openfga.User, offerURL string, force bool) error {
-	err := j.doApplicationOfferAdmin(ctx, user, offerURL, func(offer *dbmodel.ApplicationOffer, api API) error {
-		if err := api.DestroyApplicationOffer(ctx, offerURL, force); err != nil {
+	err := j.doApplicationOfferAdmin(ctx, user, offerURL, func(offer *dbmodel.ApplicationOffer, api API, controllerURL string) error {
+		if err := api.DestroyApplicationOffer(ctx, controllerURL, force); err != nil {
 			return err
 		}
 		return j.deleteApplicationOffer(ctx, offer)
@@ -503,6 +547,24 @@ func (j *JujuManager) FindApplicationOffers(ctx context.Context, user *openfga.U
 		return nil, err
 	}
 
+	// When a filter identifies a specific model by JAAS owner and name, rewrite
+	// the owner to the model's controller-facing owner (which can differ for
+	// imported and controller models) so the backing controller matches it.
+	for i := range filters {
+		f := &filters[i]
+		if f.OwnerName == "" || f.ModelName == "" {
+			continue
+		}
+		m := dbmodel.Model{Name: f.ModelName, OwnerIdentityName: f.OwnerName}
+		if err := j.Database.GetModel(ctx, &m); err != nil {
+			if errors.ErrorCode(err) == errors.CodeNotFound {
+				continue
+			}
+			return nil, err
+		}
+		f.OwnerName = m.ControllerFacingOwner()
+	}
+
 	offers, err := j.queryControllersForOffers(ctx, user, controllers, func(api API) ([]*crossmodel.ApplicationOfferDetails, error) {
 		return api.FindApplicationOffers(ctx, filters)
 	})
@@ -520,7 +582,8 @@ func (j *JujuManager) ListApplicationOffers(ctx context.Context, user *openfga.U
 	}
 
 	controllers := make(map[uint]*dbmodel.Controller)
-	for _, f := range filters {
+	for i := range filters {
+		f := &filters[i]
 		if f.ModelName == "" {
 			return nil, errors.New("application offer filter must specify a model name")
 		}
@@ -536,6 +599,12 @@ func (j *JujuManager) ListApplicationOffers(ctx context.Context, user *openfga.U
 			return nil, err
 		}
 		controllers[m.Controller.ID] = &m.Controller
+
+		// The model is resolved by its JAAS owner, but the backing controller
+		// knows it under its controller-facing owner (which can differ for
+		// imported and controller models). Rewrite the filter so it matches on
+		// the controller.
+		f.OwnerName = m.ControllerFacingOwner()
 	}
 
 	offers, err := j.queryControllersForOffers(ctx, user, controllers, func(api API) ([]*crossmodel.ApplicationOfferDetails, error) {
@@ -597,10 +666,16 @@ func (j *JujuManager) queryControllersForOffers(ctx context.Context, user *openf
 // Note: The user does not need to have any access level on the offer itself.
 // As long as they are model admins or controller superusers they can also
 // manipulate the application offer as admins.
-func (j *JujuManager) doApplicationOfferAdmin(ctx context.Context, user *openfga.User, offerURL string, f func(offer *dbmodel.ApplicationOffer, api API) error) error {
+func (j *JujuManager) doApplicationOfferAdmin(ctx context.Context, user *openfga.User, offerURL string, f func(offer *dbmodel.ApplicationOffer, api API, controllerURL string) error) error {
+
+	// Translate the JAAS offer URL to the controller-facing URL.
+	controllerURL, err := j.controllerFacingOfferURL(ctx, offerURL)
+	if err != nil {
+		return err
+	}
 
 	offer := dbmodel.ApplicationOffer{
-		URL: offerURL,
+		URL: controllerURL,
 	}
 	if err := j.Database.GetApplicationOffer(ctx, &offer); err != nil {
 		return err
@@ -619,7 +694,7 @@ func (j *JujuManager) doApplicationOfferAdmin(ctx context.Context, user *openfga
 		return err
 	}
 	defer api.Close()
-	if err := f(&offer, api); err != nil {
+	if err := f(&offer, api, controllerURL); err != nil {
 		return err
 	}
 	return nil

@@ -46,6 +46,11 @@ func (j *JujuManager) pollModels(ctx context.Context, models []*dbmodel.Model) e
 			zapctx.Error(ctx, "error getting model info", zap.Error(err))
 		}
 	}
+
+	// Ensure the controller model is tracked, reusing the open connection.
+	if err := j.ensureControllerModelWithAPI(ctx, &ctrl, api); err != nil {
+		zapctx.Error(ctx, "failed to ensure controller model", zap.String("controller", ctrl.Name), zap.Error(err))
+	}
 	return nil
 }
 
@@ -59,7 +64,7 @@ func (j *JujuManager) PollModels(ctx context.Context) (err error) {
 	durationObserver := servermon.DurationObserver(servermon.JimmMethodsDurationHistogram, op)
 	defer durationObserver()
 
-	// Step 1: Group models by controller
+	// Group models by controller.
 	controllerModels := make(map[string][]*dbmodel.Model)
 	err = j.Database.ForEachModel(ctx, func(m *dbmodel.Model) error {
 		key := m.Controller.UUID
@@ -70,15 +75,21 @@ func (j *JujuManager) PollModels(ctx context.Context) (err error) {
 		return err
 	}
 
-	// Step 2: Loop over controllers and process their models
-	// This way we only dial each controller once.
-	for _, models := range controllerModels {
-		if len(models) == 0 {
-			continue
+	// Iterate every known controller once. Controllers with user models are
+	// polled (and their controller model ensured within the same dial).
+	// Controllers without user models are handled here to ensure their
+	// controller model is tracked too.
+	err = j.Database.ForEachController(ctx, func(c *dbmodel.Controller) error {
+		if models, ok := controllerModels[c.UUID]; ok && len(models) > 0 {
+			_ = j.pollModels(ctx, models)
+		} else {
+			if err := j.ensureControllerModel(ctx, c); err != nil {
+				zapctx.Error(ctx, "failed to ensure controller model", zap.String("controller", c.Name), zap.Error(err))
+			}
 		}
-		_ = j.pollModels(ctx, models)
-	}
-	return nil
+		return nil
+	})
+	return err
 }
 
 // checkModelMigratedInternal checks if the model has been migrated from

@@ -55,6 +55,17 @@ type Model struct {
 	OwnerIdentityName string   `gorm:"uniqueIndex:unique_model_names;not null"`
 	Owner             Identity `gorm:"foreignkey:OwnerIdentityName;references:Name"`
 
+	// ControllerOwnerName is the model owner as known by the backing Juju
+	// controller. JAAS can alias a model's owner locally (imported models with a
+	// new owner, or backing controller models), so this preserves the owner the
+	// backing controller actually knows. When empty, OwnerIdentityName is also
+	// the controller-facing owner.
+	ControllerOwnerName string
+
+	// IsControllerModel records whether this model is a backing controller's
+	// model tracked by JAAS.
+	IsControllerModel bool `gorm:"not null;default:false"`
+
 	// Controller is the controller that is hosting the model.
 	ControllerID uint
 	Controller   Controller
@@ -77,9 +88,35 @@ type Model struct {
 	MigrationMode MigrationMode `gorm:"default:''"`
 }
 
+const (
+	// ControllerModelOwnerSuffix is the suffix of the synthetic identity that
+	// owns a backing controller's model within JAAS. The owner is
+	// "<controller-name>@controller", which lets us alias the (otherwise
+	// identically named) "controller" model of each backing controller to a
+	// unique "<controller-name>@controller/controller" address.
+	ControllerModelOwnerSuffix = "@controller"
+
+	// ControllerModelName is the name a controller model always has on its
+	// backing Juju controller.
+	ControllerModelName = "controller"
+)
+
 // Tag returns a names.Tag for the model.
 func (m Model) Tag() names.Tag {
 	return m.ResourceTag()
+}
+
+// ControllerFacingOwner returns the model owner as known by the backing Juju
+// controller. JAAS can alias a model's owner locally (imported models with a
+// new owner, or backing controller models), so operations that address the
+// model on the backing controller (e.g. building offer URLs) must use this
+// owner rather than OwnerIdentityName. When no aliased owner is recorded, the
+// JAAS owner is also the controller-facing owner.
+func (m Model) ControllerFacingOwner() string {
+	if m.ControllerOwnerName != "" {
+		return m.ControllerOwnerName
+	}
+	return m.OwnerIdentityName
 }
 
 // ResourceTag returns a tag for the model.  This method
