@@ -234,9 +234,9 @@ func (j *JujuManager) updateCredential(ctx context.Context, credential *dbmodel.
 	return nil
 }
 
-// checkControllerCloudCredential validates that the given credential would be
-// accepted by all models currently using it on the controller reachable via
-// api. The attributes passed are the NEW ones being validated.
+// checkControllerCloudCredential checks that a given credential is safe to
+// update across all of the models it is currently used. This is useful for
+// doing a cross-controller check credential update safety.
 func (j *JujuManager) checkControllerCloudCredential(
 	ctx context.Context,
 	cred *dbmodel.CloudCredential,
@@ -253,10 +253,6 @@ func (j *JujuManager) checkControllerCloudCredential(
 	if err != nil {
 		return nil, err
 	}
-	// Shouldn't happen, the Juju client presumes that
-	// the returned slice will always contain a result
-	// for each credential passed in, but handle it just
-	// in case.
 	if len(out) == 0 {
 		return nil, nil
 	}
@@ -266,22 +262,15 @@ func (j *JujuManager) checkControllerCloudCredential(
 	return out[0].Models, nil
 }
 
-// forceUpdateControllerCloudCredential force-updates the credential on the
-// controller reachable via api. If attrs is nil the attributes are fetched
-// from the credential store; otherwise the supplied attrs are applied.
+// forceUpdateControllerCloudCredential updates a cloud credential for a
+// given controller. It presumes the caller has run checkControllerCloudCredential
+// prior.
 func (j *JujuManager) forceUpdateControllerCloudCredential(
 	ctx context.Context,
 	cred *dbmodel.CloudCredential,
 	attrs map[string]string,
 	api API,
 ) ([]jujuparams.UpdateCredentialModelResult, error) {
-	if attrs == nil {
-		fetched, err := j.getCloudCredentialAttributes(ctx, cred)
-		if err != nil {
-			return nil, err
-		}
-		attrs = fetched
-	}
 	out, err := api.UpdateCloudsCredentialForce(ctx, jujuparams.TaggedCredential{
 		Tag: cred.Tag().String(),
 		Credential: jujuparams.CloudCredential{
@@ -292,10 +281,6 @@ func (j *JujuManager) forceUpdateControllerCloudCredential(
 	if err != nil {
 		return nil, err
 	}
-	// Shouldn't happen, the Juju client presumes that
-	// the returned slice will always contain a result
-	// for each credential passed in, but handle it just
-	// in case.
 	if len(out) == 0 {
 		return nil, nil
 	}
