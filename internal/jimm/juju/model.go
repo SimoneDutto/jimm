@@ -820,7 +820,7 @@ func (j *JujuManager) ChangeModelCredential(ctx context.Context, user *openfga.U
 
 	var m *dbmodel.Model
 	err = j.doModelAdmin(ctx, user, modelTag, func(model *dbmodel.Model, api API) error {
-		_, err = j.updateControllerCloudCredential(ctx, &credential, api.UpdateCloudsCredentialForce)
+		_, err = j.forceUpdateControllerCloudCredential(ctx, &credential, nil, api)
 		if err != nil {
 			return err
 		}

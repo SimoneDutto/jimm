@@ -176,7 +176,7 @@ func (j *JujuManager) UpdateCloudCredential(ctx context.Context, user *openfga.U
 
 	if !args.SkipCheck {
 		err := j.forEachController(ctx, controllers, func(ctl *dbmodel.Controller, api API) error {
-			models, err := j.updateControllerCloudCredential(ctx, &credential, api.CheckCredentialModels)
+			models, err := j.checkControllerCloudCredential(ctx, &credential, args.Credential.Attributes, api)
 			resultMu.Lock()
 			defer resultMu.Unlock()
 			result = append(result, models...)
@@ -204,7 +204,7 @@ func (j *JujuManager) UpdateCloudCredential(ctx context.Context, user *openfga.U
 	}
 
 	err = j.forEachController(ctx, controllers, func(ctl *dbmodel.Controller, api API) error {
-		models, err := j.updateControllerCloudCredential(ctx, &credential, api.UpdateCloudsCredentialForce)
+		models, err := j.forceUpdateControllerCloudCredential(ctx, &credential, args.Credential.Attributes, api)
 		if err != nil {
 			return err
 		}
@@ -234,29 +234,25 @@ func (j *JujuManager) updateCredential(ctx context.Context, credential *dbmodel.
 	return nil
 }
 
-func (j *JujuManager) updateControllerCloudCredential(
+// checkControllerCloudCredential validates that the given credential would be
+// accepted by all models currently using it on the controller reachable via
+// api. The attributes passed are the NEW ones being validated.
+func (j *JujuManager) checkControllerCloudCredential(
 	ctx context.Context,
 	cred *dbmodel.CloudCredential,
-	f func(context.Context, jujuparams.TaggedCredential) ([]jujuparams.UpdateCredentialResult, error),
+	attrs map[string]string,
+	api API,
 ) ([]jujuparams.UpdateCredentialModelResult, error) {
-
-	attr, err := j.getCloudCredentialAttributes(ctx, cred)
-	if err != nil {
-		return nil, err
-	}
-
-	out, err := f(ctx, jujuparams.TaggedCredential{
+	out, err := api.CheckCredentialModels(ctx, jujuparams.TaggedCredential{
 		Tag: cred.Tag().String(),
 		Credential: jujuparams.CloudCredential{
 			AuthType:   cred.AuthType,
-			Attributes: attr,
+			Attributes: attrs,
 		},
 	})
-
 	if err != nil {
 		return nil, err
 	}
-
 	// Shouldn't happen, the Juju client presumes that
 	// the returned slice will always contain a result
 	// for each credential passed in, but handle it just
@@ -264,11 +260,48 @@ func (j *JujuManager) updateControllerCloudCredential(
 	if len(out) == 0 {
 		return nil, nil
 	}
-
 	if out[0].Error != nil {
 		return out[0].Models, out[0].Error
 	}
+	return out[0].Models, nil
+}
 
+// forceUpdateControllerCloudCredential force-updates the credential on the
+// controller reachable via api. If attrs is nil the attributes are fetched
+// from the credential store; otherwise the supplied attrs are applied.
+func (j *JujuManager) forceUpdateControllerCloudCredential(
+	ctx context.Context,
+	cred *dbmodel.CloudCredential,
+	attrs map[string]string,
+	api API,
+) ([]jujuparams.UpdateCredentialModelResult, error) {
+	if attrs == nil {
+		fetched, err := j.getCloudCredentialAttributes(ctx, cred)
+		if err != nil {
+			return nil, err
+		}
+		attrs = fetched
+	}
+	out, err := api.UpdateCloudsCredentialForce(ctx, jujuparams.TaggedCredential{
+		Tag: cred.Tag().String(),
+		Credential: jujuparams.CloudCredential{
+			AuthType:   cred.AuthType,
+			Attributes: attrs,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	// Shouldn't happen, the Juju client presumes that
+	// the returned slice will always contain a result
+	// for each credential passed in, but handle it just
+	// in case.
+	if len(out) == 0 {
+		return nil, nil
+	}
+	if out[0].Error != nil {
+		return out[0].Models, out[0].Error
+	}
 	return out[0].Models, nil
 }
 
