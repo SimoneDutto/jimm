@@ -32,6 +32,8 @@ const maxConcurrentModelQueries = 10
 // If a result is erroneous, for example, bad data type parsing, the resulting struct field
 // Errors will contain a map from model UUID -> []error. Otherwise, the Results field
 // will contain model UUID -> []Jq result.
+//
+//nolint:gocognit
 func (j *JujuManager) QueryModelsJq(ctx context.Context, modelUUIDs []string, jqQuery string) (params.CrossModelQueryResponse, error) {
 	results := params.CrossModelQueryResponse{
 		Results: make(map[string][]any),
@@ -50,10 +52,10 @@ func (j *JujuManager) QueryModelsJq(ctx context.Context, modelUUIDs []string, jq
 
 	g, _ := errgroup.WithContext(ctx)
 	g.SetLimit(maxConcurrentModelQueries)
-	mux := sync.Mutex{}
+	m := sync.Mutex{}
 	addItem := func(modelUUID string, result any, err error) {
-		mux.Lock()
-		defer mux.Unlock()
+		m.Lock()
+		defer m.Unlock()
 		if err != nil {
 			results.Errors[modelUUID] = append(results.Errors[modelUUID], err.Error())
 			return
