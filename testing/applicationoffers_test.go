@@ -577,6 +577,46 @@ func TestFindApplicationOffers(t *testing.T) {
 	}})
 }
 
+// TestFindApplicationOffersOnlyReturnsAccessibleOffers verifies that an
+// unqualified find returns offers the caller can access and omits offers from
+// source models where they have no offer access.
+func TestFindApplicationOffersOnlyReturnsAccessibleOffers(t *testing.T) {
+	c := qt.New(t)
+	s, modelWithAccess := SetupAppOfferTest(c)
+	modelWithoutAccess := s.CreateModelForCharlie(c)
+	s.DeployApplication(c, s.AdminUser, modelWithoutAccess.Tag(), jimmtest.DeployApplicationParams{
+		App:   "app-without-access",
+		Charm: "juju-qa-dummy-sink",
+	})
+
+	bobConn := s.Open(c, nil, "bob@canonical.com", nil)
+	defer bobConn.Close()
+	bobClient := applicationoffers.NewClient(bobConn)
+	results, err := bobClient.Offer(t.Context(),
+		modelWithAccess.UUID.String, "test-app", []string{"source"},
+		"bob@canonical.com", "accessible-offer", "")
+	c.Assert(err, qt.IsNil)
+	c.Assert(results, qt.HasLen, 1)
+	c.Assert(results[0].Error, qt.IsNil)
+
+	charlieConn := s.Open(c, nil, "charlie@canonical.com", nil)
+	defer charlieConn.Close()
+	charlieClient := applicationoffers.NewClient(charlieConn)
+	results, err = charlieClient.Offer(t.Context(),
+		modelWithoutAccess.UUID.String, "app-without-access", []string{"source"},
+		"charlie@canonical.com", "inaccessible-offer", "")
+	c.Assert(err, qt.IsNil)
+	c.Assert(results, qt.HasLen, 1)
+	c.Assert(results[0].Error, qt.IsNil)
+
+	offers, err := bobClient.FindApplicationOffers(t.Context(), crossmodel.ApplicationOfferFilter{})
+	c.Assert(err, qt.IsNil)
+	c.Assert(offers, qt.HasLen, 1)
+	c.Check(offers[0].OfferName, qt.Equals, "accessible-offer")
+	c.Check(offers[0].OfferURL, qt.Equals,
+		"bob@canonical.com/"+modelWithAccess.Name+".accessible-offer")
+}
+
 func TestApplicationOffers(t *testing.T) {
 	c := qt.New(t)
 	s, model := SetupAppOfferTest(c)

@@ -65,6 +65,30 @@ func (d *Database) GetApplicationOffer(ctx context.Context, offer *dbmodel.Appli
 	return nil
 }
 
+// GetApplicationOffersByUUID returns the application offers whose UUIDs are
+// in offerUUIDs. UUIDs that do not exist in the database are omitted.
+func (d *Database) GetApplicationOffersByUUID(ctx context.Context, offerUUIDs []string) (_ []dbmodel.ApplicationOffer, err error) {
+	const op = "db.GetApplicationOffersByUUID"
+
+	if len(offerUUIDs) == 0 {
+		return []dbmodel.ApplicationOffer{}, nil
+	}
+	if err := d.ready(); err != nil {
+		return nil, err
+	}
+
+	durationObserver := servermon.DurationObserver(servermon.DBQueryDurationHistogram, op)
+	defer durationObserver()
+	defer servermon.ErrorCounter(servermon.DBQueryErrorCount, &err, op)
+
+	var offers []dbmodel.ApplicationOffer
+	db := d.DB.WithContext(ctx).Preload("Model").Preload("Model.Controller")
+	if err := db.Where("uuid IN ?", offerUUIDs).Find(&offers).Error; err != nil {
+		return nil, dbError(err)
+	}
+	return offers, nil
+}
+
 // DeleteApplicationOffer deletes the application offer.
 func (d *Database) DeleteApplicationOffer(ctx context.Context, offer *dbmodel.ApplicationOffer) (err error) {
 	const op = "db.DeleteApplicationOffer"

@@ -2080,5 +2080,53 @@ func TestFindApplicationOffers_MultipleControllers(t *testing.T) {
 	c.Assert(offers, qt.HasLen, 1)
 	c.Check(offers[0].OfferURL, qt.Equals, expectedOffer.OfferURL)
 	c.Check(offers[0].OfferUUID, qt.Equals, expectedOffer.OfferUUID)
-	c.Check(controller1Dialed, qt.IsTrue)
+	c.Check(controller1Dialed, qt.IsFalse)
+}
+
+func TestFindApplicationOffers_UnqualifiedFilterQueriesAccessibleOfferControllers(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	controller1Dialed := false
+	controller2Dialed := false
+	var controller2Filters []crossmodel.ApplicationOfferFilter
+	j := newTestJujuManager(c, &parameters{
+		Dialer: jimmtest.DialerMap{
+			"controller-1": &jimmtest.Dialer{
+				API: &jimmtest.API{
+					FindApplicationOffers_: func(context.Context, []crossmodel.ApplicationOfferFilter) ([]*crossmodel.ApplicationOfferDetails, error) {
+						controller1Dialed = true
+						return nil, nil
+					},
+				},
+			},
+			"controller-2": &jimmtest.Dialer{
+				API: &jimmtest.API{
+					FindApplicationOffers_: func(_ context.Context, filters []crossmodel.ApplicationOfferFilter) ([]*crossmodel.ApplicationOfferDetails, error) {
+						controller2Dialed = true
+						controller2Filters = filters
+						return nil, nil
+					},
+				},
+			},
+		},
+	})
+
+	env := jimmtest.ParseEnvironment(c, offerNotFoundTestEnv)
+	env.PopulateDBAndPermissions(c, j.ResourceTag(), j.Database, j.OpenFGAClient)
+	user, err := dbmodel.NewIdentity("bob@canonical.com")
+	c.Assert(err, qt.IsNil)
+
+	offers, err := j.FindApplicationOffers(ctx, openfga.NewUser(user, j.OpenFGAClient), crossmodel.ApplicationOfferFilter{
+		OfferName: "offer-1",
+	})
+	c.Assert(err, qt.IsNil)
+	c.Check(offers, qt.HasLen, 0)
+	c.Check(controller1Dialed, qt.IsFalse)
+	c.Check(controller2Dialed, qt.IsTrue)
+	c.Check(controller2Filters, qt.DeepEquals, []crossmodel.ApplicationOfferFilter{{
+		OfferName:      "offer-1",
+		ModelName:      "model-1",
+		ModelQualifier: "bob@canonical.com",
+	}})
 }

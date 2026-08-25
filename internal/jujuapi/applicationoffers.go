@@ -157,9 +157,8 @@ func (r *controllerRoot) ListApplicationOffers(ctx context.Context, args jujupar
 	return results, nil
 }
 
-// FindApplicationOffers returns all offers matching the specified filters
-// as long as the user has read access to each offer. It also omits details
-// on users and connections.
+// FindApplicationOffers returns all matching offers the user can access. It
+// includes administrator details only when the user has administrator access.
 func (r *controllerRoot) FindApplicationOffers(ctx context.Context, args jujuparams.OfferFilters) (jujuparams.QueryApplicationOffersResultsV5, error) {
 
 	results := jujuparams.QueryApplicationOffersResultsV5{}

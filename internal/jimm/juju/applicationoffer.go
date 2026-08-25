@@ -479,6 +479,11 @@ type offers struct {
 	offers []*crossmodel.ApplicationOfferDetails
 }
 
+type offerControllerQuery struct {
+	controller *dbmodel.Controller
+	filters    []crossmodel.ApplicationOfferFilter
+}
+
 func (o *offers) addOffer(offer *crossmodel.ApplicationOfferDetails) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -489,20 +494,12 @@ func (o *offers) addOffer(offer *crossmodel.ApplicationOfferDetails) {
 // FindApplicationOffers returns details of offers matching the specified filter.
 func (j *JujuManager) FindApplicationOffers(ctx context.Context, user *openfga.User, filters ...crossmodel.ApplicationOfferFilter) ([]*crossmodel.ApplicationOfferDetails, error) {
 
-	if len(filters) == 0 {
-		return nil, errors.Codef(errors.CodeBadRequest, "at least one filter must be specified")
-	}
-
-	controllers := make(map[uint]*dbmodel.Controller)
-	err := j.Database.ForEachController(ctx, func(ctl *dbmodel.Controller) error {
-		controllers[ctl.ID] = ctl
-		return nil
-	})
+	controllers, err := j.findOfferControllerQueries(ctx, user, filters)
 	if err != nil {
 		return nil, err
 	}
 
-	offers, err := j.queryControllersForOffers(ctx, user, controllers, func(api API) ([]*crossmodel.ApplicationOfferDetails, error) {
+	offers, err := j.queryControllersForOffers(ctx, user, controllers, func(api API, filters []crossmodel.ApplicationOfferFilter) ([]*crossmodel.ApplicationOfferDetails, error) {
 		return api.FindApplicationOffers(ctx, filters)
 	})
 	if err != nil {
@@ -511,33 +508,80 @@ func (j *JujuManager) FindApplicationOffers(ctx context.Context, user *openfga.U
 	return offers, nil
 }
 
-// ListApplicationOffers returns details of offers matching the specified filter.
-func (j *JujuManager) ListApplicationOffers(ctx context.Context, user *openfga.User, filters ...crossmodel.ApplicationOfferFilter) ([]*crossmodel.ApplicationOfferDetails, error) {
-
+// findOfferControllerQueries limits controller queries to models containing an
+// offer the user can read. Application-offer reader includes consumer and
+// administrator access, including access inherited from a model or controller.
+func (j *JujuManager) findOfferControllerQueries(ctx context.Context, user *openfga.User, filters []crossmodel.ApplicationOfferFilter) (map[uint]*offerControllerQuery, error) {
 	if len(filters) == 0 {
 		return nil, errors.Codef(errors.CodeBadRequest, "at least one filter must be specified")
 	}
 
-	controllers := make(map[uint]*dbmodel.Controller)
-	for _, f := range filters {
-		if f.ModelName == "" {
-			return nil, errors.New("application offer filter must specify a model name")
-		}
-		if f.ModelQualifier == "" {
-			f.ModelQualifier = coremodel.Qualifier(user.Name)
-		}
-
-		m := dbmodel.Model{
-			Name:              f.ModelName,
-			OwnerIdentityName: f.ModelQualifier.String(),
-		}
-		if err := j.Database.GetModel(ctx, &m); err != nil {
-			return nil, err
-		}
-		controllers[m.Controller.ID] = &m.Controller
+	offerUUIDs, err := user.ListApplicationOffers(ctx, ofganames.ReaderRelation)
+	if err != nil {
+		return nil, fmt.Errorf("list accessible application offers: %w", err)
+	}
+	offers, err := j.Database.GetApplicationOffersByUUID(ctx, offerUUIDs)
+	if err != nil {
+		return nil, err
 	}
 
-	offers, err := j.queryControllersForOffers(ctx, user, controllers, func(api API) ([]*crossmodel.ApplicationOfferDetails, error) {
+	accessibleModels := make(map[uint]dbmodel.Model)
+	for _, offer := range offers {
+		accessibleModels[offer.Model.ID] = offer.Model
+	}
+
+	controllers := make(map[uint]*offerControllerQuery)
+	addFilter := func(model dbmodel.Model, filter crossmodel.ApplicationOfferFilter) {
+		query, ok := controllers[model.Controller.ID]
+		if !ok {
+			query = &offerControllerQuery{controller: &model.Controller}
+			controllers[model.Controller.ID] = query
+		}
+		query.filters = append(query.filters, filter)
+	}
+
+	if len(filters) == 1 && filters[0].ModelName == "" {
+		for _, model := range accessibleModels {
+			filter := filters[0]
+			filter.ModelName = model.Name
+			filter.ModelQualifier = coremodel.Qualifier(model.OwnerIdentityName)
+			addFilter(model, filter)
+		}
+		return controllers, nil
+	}
+
+	for i := range filters {
+		if filters[i].ModelName == "" {
+			return nil, errors.New("application offer filter must specify a model name")
+		}
+		if filters[i].ModelQualifier == "" {
+			filters[i].ModelQualifier = coremodel.Qualifier(user.Name)
+		}
+
+		model := dbmodel.Model{
+			Name:              filters[i].ModelName,
+			OwnerIdentityName: filters[i].ModelQualifier.String(),
+		}
+		if err := j.Database.GetModel(ctx, &model); err != nil {
+			return nil, err
+		}
+		if _, ok := accessibleModels[model.ID]; ok {
+			addFilter(model, filters[i])
+		}
+	}
+
+	return controllers, nil
+}
+
+// ListApplicationOffers returns details of offers matching the specified filter.
+func (j *JujuManager) ListApplicationOffers(ctx context.Context, user *openfga.User, filters ...crossmodel.ApplicationOfferFilter) ([]*crossmodel.ApplicationOfferDetails, error) {
+
+	controllers, err := j.listOfferControllerQueries(ctx, user, filters)
+	if err != nil {
+		return nil, err
+	}
+
+	offers, err := j.queryControllersForOffers(ctx, user, controllers, func(api API, filters []crossmodel.ApplicationOfferFilter) ([]*crossmodel.ApplicationOfferDetails, error) {
 		return api.ListApplicationOffers(ctx, filters)
 	})
 	if err != nil {
@@ -546,21 +590,57 @@ func (j *JujuManager) ListApplicationOffers(ctx context.Context, user *openfga.U
 	return offers, nil
 }
 
-func (j *JujuManager) queryControllersForOffers(ctx context.Context, user *openfga.User, controllers map[uint]*dbmodel.Controller, query func(API) ([]*crossmodel.ApplicationOfferDetails, error)) ([]*crossmodel.ApplicationOfferDetails, error) {
+// listOfferControllerQueries returns the controllers that can contain offers
+// matching filters. Every filter must identify a model and is sent only to
+// that model's controller.
+func (j *JujuManager) listOfferControllerQueries(ctx context.Context, user *openfga.User, filters []crossmodel.ApplicationOfferFilter) (map[uint]*offerControllerQuery, error) {
+	if len(filters) == 0 {
+		return nil, errors.Codef(errors.CodeBadRequest, "at least one filter must be specified")
+	}
+
+	controllers := make(map[uint]*offerControllerQuery)
+	for i := range filters {
+		if filters[i].ModelName == "" {
+			return nil, errors.New("application offer filter must specify a model name")
+		}
+		if filters[i].ModelQualifier == "" {
+			filters[i].ModelQualifier = coremodel.Qualifier(user.Name)
+		}
+
+		model := dbmodel.Model{
+			Name:              filters[i].ModelName,
+			OwnerIdentityName: filters[i].ModelQualifier.String(),
+		}
+		if err := j.Database.GetModel(ctx, &model); err != nil {
+			return nil, err
+		}
+		query, ok := controllers[model.Controller.ID]
+		if !ok {
+			query = &offerControllerQuery{controller: &model.Controller}
+			controllers[model.Controller.ID] = query
+		}
+		query.filters = append(query.filters, filters[i])
+	}
+
+	return controllers, nil
+}
+
+func (j *JujuManager) queryControllersForOffers(ctx context.Context, user *openfga.User, controllers map[uint]*offerControllerQuery, query func(API, []crossmodel.ApplicationOfferFilter) ([]*crossmodel.ApplicationOfferDetails, error)) ([]*crossmodel.ApplicationOfferDetails, error) {
 	var offerDetails offers
 	eg, ctx := errgroup.WithContext(ctx)
 
-	for _, ctl := range controllers {
+	for _, controllerQuery := range controllers {
+		controllerQuery := controllerQuery
 		eg.Go(func() error {
 			// Return early if a single controller has an error
 			// to avoid misleading clients about what exists which
 			// could cause unneeded reconciliation.
-			api, err := j.dial(ctx, ctl, names.ModelTag{}, user)
+			api, err := j.dial(ctx, controllerQuery.controller, names.ModelTag{}, user)
 			if err != nil {
 				return err
 			}
 			defer api.Close()
-			controllerOffers, err := query(api)
+			controllerOffers, err := query(api, controllerQuery.filters)
 			if err != nil {
 				if errors.ErrorCode(err) == errors.CodeNotFound {
 					return nil

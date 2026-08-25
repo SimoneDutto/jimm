@@ -154,6 +154,32 @@ func (s *dbSuite) TestGetApplicationOffer(c *qt.C) {
 	c.Assert(errors.ErrorCode(err), qt.Equals, errors.CodeNotFound)
 }
 
+func (s *dbSuite) TestGetApplicationOffersByUUID(c *qt.C) {
+	env := initTestEnvironment(c, s.Database)
+
+	offer := dbmodel.ApplicationOffer{
+		Name:    "offer",
+		UUID:    "00000000-0000-0000-0000-000000000001",
+		URL:     "offer-url",
+		ModelID: env.model.ID,
+	}
+	c.Assert(s.Database.AddApplicationOffer(context.Background(), &offer), qt.IsNil)
+
+	offers, err := s.Database.GetApplicationOffersByUUID(context.Background(), []string{
+		offer.UUID,
+		"00000000-0000-0000-0000-000000000002",
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(offers, qt.HasLen, 1)
+	c.Check(offers[0].UUID, qt.Equals, offer.UUID)
+	c.Check(offers[0].Model.ID, qt.Equals, env.model.ID)
+	c.Check(offers[0].Model.Controller.ID, qt.Equals, env.controller.ID)
+
+	offers, err = s.Database.GetApplicationOffersByUUID(context.Background(), nil)
+	c.Assert(err, qt.IsNil)
+	c.Check(offers, qt.HasLen, 0)
+}
+
 func (s *dbSuite) TestDeleteApplicationOffer(c *qt.C) {
 	env := initTestEnvironment(c, s.Database)
 
