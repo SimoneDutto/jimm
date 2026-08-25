@@ -2039,6 +2039,8 @@ func TestFindApplicationOffers_MultipleControllers(t *testing.T) {
 	}
 
 	controller1Dialed := false
+	controller2Dialed := false
+	var controller2Filters []crossmodel.ApplicationOfferFilter
 	// Setup dialers for two controllers
 	dialers := jimmtest.DialerMap{
 		"controller-1": &jimmtest.Dialer{
@@ -2052,6 +2054,8 @@ func TestFindApplicationOffers_MultipleControllers(t *testing.T) {
 		"controller-2": &jimmtest.Dialer{
 			API: &jimmtest.API{
 				FindApplicationOffers_: func(ctx context.Context, filters []crossmodel.ApplicationOfferFilter) ([]*crossmodel.ApplicationOfferDetails, error) {
+					controller2Dialed = true
+					controller2Filters = filters
 					return []*crossmodel.ApplicationOfferDetails{&expectedOffer}, nil
 				},
 			},
@@ -2080,5 +2084,7 @@ func TestFindApplicationOffers_MultipleControllers(t *testing.T) {
 	c.Assert(offers, qt.HasLen, 1)
 	c.Check(offers[0].OfferURL, qt.Equals, expectedOffer.OfferURL)
 	c.Check(offers[0].OfferUUID, qt.Equals, expectedOffer.OfferUUID)
-	c.Check(controller1Dialed, qt.IsTrue)
+	c.Check(controller1Dialed, qt.IsFalse)
+	c.Check(controller2Dialed, qt.IsTrue)
+	c.Check(controller2Filters, qt.DeepEquals, filters)
 }

@@ -7,6 +7,8 @@ import (
 	"database/sql"
 	stderrors "errors"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 	"sync"
 
@@ -489,27 +491,23 @@ func (o *offers) addOffer(offer *crossmodel.ApplicationOfferDetails) {
 
 // FindApplicationOffers returns details of offers matching the specified filter.
 func (j *JujuManager) FindApplicationOffers(ctx context.Context, user *openfga.User, filters ...crossmodel.ApplicationOfferFilter) ([]*crossmodel.ApplicationOfferDetails, error) {
-
 	if len(filters) == 0 {
 		return nil, errors.Codef(errors.CodeBadRequest, "at least one filter must be specified")
 	}
 
-	controllers := make(map[uint]*dbmodel.Controller)
-	err := j.Database.ForEachController(ctx, func(ctl *dbmodel.Controller) error {
-		controllers[ctl.ID] = ctl
-		return nil
-	})
+	// Only query the controllers that host at least one offer the user
+	// can read; the filters are passed to them unchanged.
+	offerUUIDs, err := user.ListApplicationOffers(ctx, ofganames.ReaderRelation)
+	if err != nil {
+		return nil, fmt.Errorf("list accessible application offers: %w", err)
+	}
+	controllers, err := j.Database.GetControllersForApplicationOffers(ctx, offerUUIDs)
 	if err != nil {
 		return nil, err
 	}
-
-	offers, err := j.queryControllersForOffers(ctx, user, controllers, func(api API) ([]*crossmodel.ApplicationOfferDetails, error) {
+	return j.queryControllersForOffers(ctx, user, controllers, func(api API) ([]*crossmodel.ApplicationOfferDetails, error) {
 		return api.FindApplicationOffers(ctx, filters)
 	})
-	if err != nil {
-		return nil, err
-	}
-	return offers, nil
 }
 
 // ListApplicationOffers returns details of offers matching the specified filter.
@@ -519,7 +517,7 @@ func (j *JujuManager) ListApplicationOffers(ctx context.Context, user *openfga.U
 		return nil, errors.Codef(errors.CodeBadRequest, "at least one filter must be specified")
 	}
 
-	controllers := make(map[uint]*dbmodel.Controller)
+	controllerSet := make(map[uint]dbmodel.Controller)
 	for _, f := range filters {
 		if f.ModelName == "" {
 			return nil, errors.New("application offer filter must specify a model name")
@@ -535,8 +533,9 @@ func (j *JujuManager) ListApplicationOffers(ctx context.Context, user *openfga.U
 		if err := j.Database.GetModel(ctx, &m); err != nil {
 			return nil, err
 		}
-		controllers[m.Controller.ID] = &m.Controller
+		controllerSet[m.Controller.ID] = m.Controller
 	}
+	controllers := slices.Collect(maps.Values(controllerSet))
 
 	offers, err := j.queryControllersForOffers(ctx, user, controllers, func(api API) ([]*crossmodel.ApplicationOfferDetails, error) {
 		return api.ListApplicationOffers(ctx, filters)
@@ -547,11 +546,12 @@ func (j *JujuManager) ListApplicationOffers(ctx context.Context, user *openfga.U
 	return offers, nil
 }
 
-func (j *JujuManager) queryControllersForOffers(ctx context.Context, user *openfga.User, controllers map[uint]*dbmodel.Controller, query func(API) ([]*crossmodel.ApplicationOfferDetails, error)) ([]*crossmodel.ApplicationOfferDetails, error) {
+func (j *JujuManager) queryControllersForOffers(ctx context.Context, user *openfga.User, controllers []dbmodel.Controller, query func(API) ([]*crossmodel.ApplicationOfferDetails, error)) ([]*crossmodel.ApplicationOfferDetails, error) {
 	var offerDetails offers
 	eg, ctx := errgroup.WithContext(ctx)
 
-	for _, ctl := range controllers {
+	for i := range controllers {
+		ctl := &controllers[i]
 		eg.Go(func() error {
 			// Return early if a single controller has an error
 			// to avoid misleading clients about what exists which

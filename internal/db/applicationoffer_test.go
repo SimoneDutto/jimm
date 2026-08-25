@@ -154,6 +154,81 @@ func (s *dbSuite) TestGetApplicationOffer(c *qt.C) {
 	c.Assert(errors.ErrorCode(err), qt.Equals, errors.CodeNotFound)
 }
 
+func (s *dbSuite) TestGetControllersForApplicationOffers(c *qt.C) {
+	env := initTestEnvironment(c, s.Database)
+
+	controller2 := dbmodel.Controller{
+		Name:        "test-controller-2",
+		UUID:        "00000000-0000-0000-0000-000000000002",
+		CloudName:   env.cloud.Name,
+		CloudRegion: env.cloud.Regions[0].Name,
+	}
+	c.Assert(s.Database.DB.Create(&controller2).Error, qt.IsNil)
+
+	model2 := dbmodel.Model{
+		Name: "test-model-3",
+		UUID: sql.NullString{
+			String: "00000001-0000-0000-0000-000000000003",
+			Valid:  true,
+		},
+		Owner:           env.u,
+		Controller:      controller2,
+		CloudRegion:     env.cloud.Regions[0],
+		CloudCredential: env.cred,
+		Life:            state.Alive.String(),
+	}
+	c.Assert(s.Database.DB.Create(&model2).Error, qt.IsNil)
+
+	offers := []dbmodel.ApplicationOffer{{
+		Name:    "offer-1",
+		UUID:    "00000000-0000-0000-0000-000000000001",
+		URL:     "offer-1-url",
+		ModelID: env.model.ID,
+	}, {
+		Name:    "offer-2",
+		UUID:    "00000000-0000-0000-0000-000000000002",
+		URL:     "offer-2-url",
+		ModelID: env.model1.ID,
+	}, {
+		Name:    "offer-3",
+		UUID:    "00000000-0000-0000-0000-000000000003",
+		URL:     "offer-3-url",
+		ModelID: model2.ID,
+	}}
+	for i := range offers {
+		c.Assert(s.Database.AddApplicationOffer(context.Background(), &offers[i]), qt.IsNil)
+	}
+
+	for _, test := range []struct {
+		about       string
+		offerUUIDs  []string
+		controllers []uint
+	}{
+		{
+			about:       "offers on one controller",
+			offerUUIDs:  []string{offers[0].UUID, offers[1].UUID},
+			controllers: []uint{env.controller.ID},
+		}, {
+			about:       "offers on different controllers",
+			offerUUIDs:  []string{offers[0].UUID, offers[2].UUID},
+			controllers: []uint{env.controller.ID, controller2.ID},
+		},
+	} {
+		c.Run(test.about, func(c *qt.C) {
+			controllers, err := s.Database.GetControllersForApplicationOffers(context.Background(), test.offerUUIDs)
+			c.Assert(err, qt.IsNil)
+			c.Assert(controllers, qt.HasLen, len(test.controllers))
+			controllerIDs := make(map[uint]bool)
+			for _, controller := range controllers {
+				controllerIDs[controller.ID] = true
+			}
+			for _, id := range test.controllers {
+				c.Check(controllerIDs[id], qt.IsTrue)
+			}
+		})
+	}
+}
+
 func (s *dbSuite) TestDeleteApplicationOffer(c *qt.C) {
 	env := initTestEnvironment(c, s.Database)
 

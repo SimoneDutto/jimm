@@ -65,6 +65,36 @@ func (d *Database) GetApplicationOffer(ctx context.Context, offer *dbmodel.Appli
 	return nil
 }
 
+// GetControllersForApplicationOffers returns the distinct controllers
+// hosting the application offers whose UUIDs are in offerUUIDs. UUIDs that
+// do not exist in the database are ignored.
+func (d *Database) GetControllersForApplicationOffers(ctx context.Context, offerUUIDs []string) (_ []dbmodel.Controller, err error) {
+	const op = "db.GetControllersForApplicationOffers"
+
+	if len(offerUUIDs) == 0 {
+		return []dbmodel.Controller{}, nil
+	}
+	if err := d.ready(); err != nil {
+		return nil, err
+	}
+
+	durationObserver := servermon.DurationObserver(servermon.DBQueryDurationHistogram, op)
+	defer durationObserver()
+	defer servermon.ErrorCounter(servermon.DBQueryErrorCount, &err, op)
+
+	var controllers []dbmodel.Controller
+	if err := d.DB.WithContext(ctx).
+		Model(&dbmodel.Controller{}).
+		Distinct().
+		Joins("JOIN models ON models.controller_id = controllers.id").
+		Joins("JOIN application_offers ON application_offers.model_id = models.id").
+		Where("application_offers.uuid IN ?", offerUUIDs).
+		Find(&controllers).Error; err != nil {
+		return nil, dbError(err)
+	}
+	return controllers, nil
+}
+
 // DeleteApplicationOffer deletes the application offer.
 func (d *Database) DeleteApplicationOffer(ctx context.Context, offer *dbmodel.ApplicationOffer) (err error) {
 	const op = "db.DeleteApplicationOffer"
