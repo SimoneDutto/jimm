@@ -18,6 +18,7 @@ import (
 	gossh "golang.org/x/crypto/ssh"
 
 	jimmssh "github.com/canonical/jimm/v3/internal/jimm/ssh"
+	"github.com/canonical/jimm/v3/internal/logger"
 	"github.com/canonical/jimm/v3/internal/openfga"
 )
 
@@ -82,7 +83,7 @@ func NewJumpServer(ctx context.Context, config Config, sshManager SSHManager) (S
 			PublicKeyHandler: func(ctx ssh.Context, key ssh.PublicKey) bool {
 				user, err := sshManager.PublicKeyHandler(ctx, ctx.User(), key.Marshal())
 				if err != nil {
-					zapctx.Debug(ctx, fmt.Sprintf("cannot verify key for user %s", ctx.User()), zap.Error(err))
+					logger.LogFailedSSHConnection(ctx, ctx.User(), "SSH public key authentication failed")
 					return false
 				}
 				ctx.SetValue(publicKeySSHUserKey{}, user)
@@ -171,12 +172,12 @@ func directTCPIPHandler(sshManager SSHManager) func(srv *ssh.Server, conn *gossh
 			rejectConnectionAndLogError(ctx, newChan, "failed to create tunnel to controller", err)
 			return
 		}
-
 		clientConn, reqs, err := newChan.Accept()
 		if err != nil {
 			rejectConnectionAndLogError(ctx, newChan, "failed to accept channel creation request", err)
 			return
 		}
+		logger.LogSuccessfulSSHConnection(ctx, user.Name, fmt.Sprintf("SSH connection to %s succeeded", d.DestAddr))
 		// gossh.Request are requests sent outside of the normal stream of data (ex. pty-req for an interactive session).
 		// Since we only need the raw data to redirect, we can discard them.
 		go gossh.DiscardRequests(reqs)

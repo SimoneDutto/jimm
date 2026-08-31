@@ -60,6 +60,24 @@ func LogSuccessfulLogin(ctx context.Context, identityId string) {
 	})
 }
 
+// LogFailedSSHConnection logs a failed SSH connection attempt for the given identityId.
+func LogFailedSSHConnection(ctx context.Context, identityId string, description string) {
+	logSecurityEvent(ctx, securityEvent{
+		Event:       "ssh_connection_fail:" + identityId,
+		Description: description,
+		Severity:    warning,
+	})
+}
+
+// LogSuccessfulSSHConnection logs a successful SSH connection for the given identityId.
+func LogSuccessfulSSHConnection(ctx context.Context, identityId string, description string) {
+	logSecurityEvent(ctx, securityEvent{
+		Event:       "ssh_connection_success:" + identityId,
+		Description: description,
+		Severity:    warning,
+	})
+}
+
 // LogUnauthorizedAccess logs an unauthorized access attempt for the given identityId.
 func LogUnauthorizedAccess(ctx context.Context, identityId string, description string) {
 	logSecurityEvent(ctx, securityEvent{
