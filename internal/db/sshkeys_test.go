@@ -130,6 +130,41 @@ func (s *sshKeysSuite) TestRemoveSSHKeyByFingerprint(c *qt.C) {
 	c.Assert(keys, qt.HasLen, 1)
 }
 
+func (s *sshKeysSuite) TestRemoveSSHKeyByComment(c *qt.C) {
+	ctx := context.Background()
+
+	otherUser, err := dbmodel.NewIdentity("alice@canonical.com")
+	c.Assert(err, qt.IsNil)
+	c.Assert(s.Database.DB.Create(otherUser).Error, qt.IsNil)
+
+	key := dbmodel.SSHKey{
+		Identity:       s.User,
+		PublicKey:      []byte("first-key"),
+		KeyComment:     "shared-comment",
+		MD5Fingerprint: "first-fingerprint",
+		Model:          s.Model,
+	}
+	otherUserKey := dbmodel.SSHKey{
+		Identity:       *otherUser,
+		PublicKey:      []byte("second-key"),
+		KeyComment:     "shared-comment",
+		MD5Fingerprint: "second-fingerprint",
+		Model:          s.Model,
+	}
+	c.Assert(s.Database.AddSSHKey(ctx, &key), qt.IsNil)
+	c.Assert(s.Database.AddSSHKey(ctx, &otherUserKey), qt.IsNil)
+
+	err = s.Database.RemoveSSHKeyByComment(ctx, s.User.Name, db.SSHKeyModelFilter{ModelUUID: s.Model.UUID.String}, "shared-comment")
+	c.Assert(err, qt.IsNil)
+
+	keys, err := s.Database.ListSSHKeysForUser(ctx, s.User.Name, db.SSHKeyModelFilter{ModelUUID: s.Model.UUID.String})
+	c.Assert(err, qt.IsNil)
+	c.Check(keys, qt.HasLen, 0)
+	keys, err = s.Database.ListSSHKeysForUser(ctx, otherUser.Name, db.SSHKeyModelFilter{ModelUUID: s.Model.UUID.String})
+	c.Assert(err, qt.IsNil)
+	c.Check(keys, qt.HasLen, 1)
+}
+
 func (s *sshKeysSuite) TestListSSHKeysForUser(c *qt.C) {
 	ctx := context.Background()
 
