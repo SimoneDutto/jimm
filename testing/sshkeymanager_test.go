@@ -40,13 +40,20 @@ func TestModelSSHKeys(t *testing.T) {
 	authorizedKey := fmt.Sprintf("%s %s %s", publicKey.Type(), base64.StdEncoding.EncodeToString(publicKey.Marshal()), "model-ssh-key")
 	fingerprint := gossh.FingerprintLegacyMD5(publicKey)
 
-	addResults, err := client.AddKeys(c.Context(), "unused", authorizedKey)
+	addResults, err := client.AddKeys(c.Context(), bobOwnerTag.Id(), authorizedKey)
 	c.Assert(err, qt.IsNil)
-	c.Check(addResults, qt.HasLen, 0)
-	keys, err := client.ListKeys(c.Context(), ssh.Fingerprints)
+	if keysAreStoredByJIMM {
+		// Juju 4 returns no per-key results when every key is added successfully.
+		c.Check(addResults, qt.HasLen, 0)
+	} else {
+		// Juju 3 returns one successful result for each requested key.
+		c.Check(addResults, qt.HasLen, 1)
+		c.Check(addResults[0].Error == nil, qt.IsTrue)
+	}
+	keys, err := client.ListKeys(c.Context(), ssh.Fingerprints, bobOwnerTag.Id())
 	c.Assert(err, qt.IsNil)
 	c.Assert(keys, qt.HasLen, 1)
-	c.Check(keys[0].Error, qt.IsNil)
+	c.Check(keys[0].Error == nil, qt.IsTrue)
 	c.Check(keys[0].Result, qt.DeepEquals, []string{fmt.Sprintf("%s (%s)", fingerprint, "model-ssh-key")})
 	if keysAreStoredByJIMM {
 		dbKeys, err := s.JIMM.Database.ListSSHKeysForUser(c.Context(), bobOwnerTag.Id(), db.SSHKeyModelFilter{ModelUUID: model.UUID.String})
@@ -54,9 +61,16 @@ func TestModelSSHKeys(t *testing.T) {
 		c.Check(dbKeys, qt.HasLen, 1)
 	}
 
-	deleteResults, err := client.DeleteKeys(c.Context(), "unused", fingerprint)
+	deleteResults, err := client.DeleteKeys(c.Context(), bobOwnerTag.Id(), fingerprint)
 	c.Assert(err, qt.IsNil)
-	c.Check(deleteResults, qt.HasLen, 0)
+	if keysAreStoredByJIMM {
+		// Juju 4 returns no per-key results when every key is deleted successfully.
+		c.Check(deleteResults, qt.HasLen, 0)
+	} else {
+		// Juju 3 returns one successful result for each requested key.
+		c.Check(deleteResults, qt.HasLen, 1)
+		c.Check(deleteResults[0].Error == nil, qt.IsTrue)
+	}
 	if keysAreStoredByJIMM {
 		dbKeys, err := s.JIMM.Database.ListSSHKeysForUser(c.Context(), bobOwnerTag.Id(), db.SSHKeyModelFilter{ModelUUID: model.UUID.String})
 		c.Assert(err, qt.IsNil)

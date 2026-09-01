@@ -4,6 +4,7 @@
 
 set -euo pipefail
 
+JIMM_CONTROLLER_NAME="${JIMM_CONTROLLER_NAME:-jimm-dev}"
 key_path="$(mktemp -u "${TMPDIR:-/tmp}/jimm-ssh-test-key.XXXXXX")"
 model_name="ssh-test-$RANDOM"
 
@@ -13,12 +14,16 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Tests run sequentially and share Juju's current controller/model. Start on
+# JIMM's controller, then create and select this test's model before executing
+# model-scoped commands.
+juju switch "$JIMM_CONTROLLER_NAME"
+juju add-model "$model_name" localhost
+
 ssh-keygen -q -t rsa -N "" -f "$key_path"
 juju add-ssh-key "$(cat "$key_path.pub")"
-
-juju add-model "$model_name"
 juju add-machine
 until [ "$(juju status 0 --format json | jq -r '.machines["0"]["juju-status"].current')" = "started" ]; do
 	sleep 5
 done
-juju ssh --jump 0 true
+juju ssh 0 true
