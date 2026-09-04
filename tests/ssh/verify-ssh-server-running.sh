@@ -5,8 +5,12 @@
 set -euo pipefail
 
 JIMM_CONTROLLER_NAME="${JIMM_CONTROLLER_NAME:-jimm-dev}"
+BACKING_CONTROLLER_NAME="${BACKING_CONTROLLER_NAME:-qa-lxd}"
 key_path="$(mktemp -u "${TMPDIR:-/tmp}/jimm-ssh-test-key.XXXXXX")"
 model_name="ssh-test-$RANDOM"
+
+# Source the `JAAS` variable for executing jaas commands.
+source "local/jimm/detect-jaas.sh"
 
 cleanup() {
 	rm -f "$key_path" "$key_path.pub"
@@ -18,7 +22,7 @@ trap cleanup EXIT
 # JIMM's controller, then create and select this test's model before executing
 # model-scoped commands.
 juju switch "$JIMM_CONTROLLER_NAME"
-juju add-model "$model_name" localhost
+$JAAS add-model "$model_name" localhost --target-controller "$BACKING_CONTROLLER_NAME"
 
 ssh-keygen -q -t rsa -N "" -f "$key_path"
 juju add-ssh-key "$(cat "$key_path.pub")"
