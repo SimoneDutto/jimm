@@ -1,0 +1,7 @@
+clouds:
+  host-lxd:
+    type: lxd
+    auth-types: [certificate]
+    endpoint: https://192.168.1.14:8443
+    regions:
+      default: {}

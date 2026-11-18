@@ -1,0 +1,62 @@
+name: microjaas
+version: poc
+summary: Local JAAS playground with JIMM, Dashboard, OpenFGA and Dex
+description: |
+  Experimental local JAAS appliance. Setup provisions dedicated databases
+  on a configured PostgreSQL server and starts JIMM, Dashboard, OpenFGA and Dex.
+  Fixed development credentials and database-stored secrets: not for production.
+base: core24
+grade: devel
+confinement: strict
+environment:
+  PATH: $SNAP/usr/bin:$SNAP/bin
+  OPENSSL_CONF: $SNAP/etc/ssl/openssl.cnf
+
+apps:
+  dashboard:
+    command: usr/sbin/nginx -p $SNAP_COMMON/ -c $SNAP/templates/dashboard.conf -e stderr
+    plugs: [network, network-bind]
+    daemon: simple
+    install-mode: disable
+    restart-delay: 5s
+    after: [jimm]
+  microjaas:
+    command: usr/bin/bash $SNAP/runtime/microjaas.sh
+    plugs: [network, network-bind]
+  dex:
+    command: bin/dex serve $SNAP_COMMON/config/dex.json
+    plugs: [network, network-bind]
+    daemon: simple
+    install-mode: disable
+    restart-delay: 5s
+  openfga:
+    command: bin/openfga run
+    plugs: [network, network-bind]
+    command-chain: [usr/bin/bash, runtime/load-env]
+    daemon: simple
+    install-mode: disable
+    restart-delay: 5s
+  jimm:
+    command: bin/jimmsrv
+    plugs: [network, network-bind]
+    command-chain: [usr/bin/bash, runtime/load-env]
+    daemon: simple
+    install-mode: disable
+    restart-delay: 5s
+    stop-timeout: 30s
+    after: [dex, openfga]
+
+parts:
+  microjaas:
+    plugin: dump
+    source: payload
+    stage-packages:
+      - bash
+      - coreutils
+      - util-linux
+      - curl
+      - jq
+      - openssl
+      - openssh-client
+      - nginx
+      - postgresql-client-16

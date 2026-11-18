@@ -1,0 +1,26 @@
+cloudinit-userdata: |
+  preruncmd:
+    - echo "192.168.1.14    microjaas.test" >> /etc/hosts
+  ca-certs:
+    trusted:
+      - |
+        -----BEGIN CERTIFICATE-----
+        MIIDQzCCAiugAwIBAgIUAggqtK9bhG2dsIQRg6ZPyU6dneUwDQYJKoZIhvcNAQEL
+        BQAwKTEnMCUGA1UEAwweTWljcm9KQUFTIGxvY2FsIGRldmVsb3BtZW50IENBMB4X
+        DTI2MTExODEzMDUyNVoXDTI3MTExODEzMDUyNVowKTEnMCUGA1UEAwweTWljcm9K
+        QUFTIGxvY2FsIGRldmVsb3BtZW50IENBMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A
+        MIIBCgKCAQEAr7NDzXQV2fskM7COqKMMDLO8FDLI54GpJn728XBcNfaef0wGvGAb
+        CQLE6qYCgxVObOjf8Dgd8tY0R6KwHS3XtK8e1Lb2fYGoqYhUZQlYNKEjaJzaPzU2
+        etDxzFWyH6/wLwmRcxziCcMu5jePCsjWvLodrYIYrYnmcEO0GtAcSrP5Q4rA8Y+D
+        1uhhAoqq2v4f8keyLNr+ECoSUUIa3E0LcW/M9voTop2vt3XW0pQSyNyFhrQY+9k/
+        TyOW5VUJBBmrl7tEQuir8E1I70n8Oq6LIrkTWTRY9YIgEs3T/rmFqH5ohFMoV6Gt
+        L4MqDUy+BX7BF87oqfIeIauuY/lJg1FjWQIDAQABo2MwYTAdBgNVHQ4EFgQUHArn
+        L5+HacVGgOR72SMx30+dQcwwHwYDVR0jBBgwFoAUHArnL5+HacVGgOR72SMx30+d
+        QcwwDwYDVR0TAQH/BAUwAwEB/zAOBgNVHQ8BAf8EBAMCAQYwDQYJKoZIhvcNAQEL
+        BQADggEBADhv1h9fohT/bAhDyWzges4VUUdAnov2F+EKakdCSjC+SKpuLeTJCaYM
+        TY4xxVqMFYS+MmL+sQrITR6E4POE0lynKYuUYZCAT0hEJ1ntBnbgfuiMg2o3m0jY
+        teQj6vLE2AdiU2SokPlVEe1ruJb29RBdh0ENMWQ+AXyJI80CvukqMUnAY8KeT6aO
+        UNaUBkbYaTvu5nXBrRrMam/jjwIIsBEiwwlu9RqS1V1lnNqxyj1RUk93IzCbAICP
+        hbf/fZtqgyN/2IgK5lBijXOGmLXNVLnY73XezuYh3AbMD0Ur4xRuBLILnZtduWYM
+        u0rrKL5YVPzxiTDFfOScFHH8Rb9muSs=
+        -----END CERTIFICATE-----

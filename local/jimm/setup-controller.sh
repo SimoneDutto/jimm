@@ -10,6 +10,8 @@ CLOUDINIT_FILE=${CLOUDINIT_FILE:-"cloudinit.temp.yaml"}
 CONTROLLER_NAME="${CONTROLLER_NAME:-qa-lxd}"
 SKIP_CONNECT_JIMM="${SKIP_CONNECT_JIMM:-false}"
 JWKS_DNS="${JWKS_DNS:-jimm.localhost}"
+JWKS_ADDRESS="${JWKS_ADDRESS:-$(lxc network get lxdbr0 ipv4.address | cut -f1 -d/)}"
+JWKS_CA_FILE="${JWKS_CA_FILE:-local/traefik/certs/ca.crt}"
 CLOUDINIT_TEMPLATE=$'cloudinit-userdata: |
   preruncmd:
     - echo "%s    %s" >> /etc/hosts
@@ -19,7 +21,7 @@ CLOUDINIT_TEMPLATE=$'cloudinit-userdata: |
 
 # shellcheck disable=SC2059
 # We are using the variable as the printf template
-printf "$CLOUDINIT_TEMPLATE" "$(lxc network get lxdbr0 ipv4.address | cut -f1 -d/)" "${JWKS_DNS}" "$(cat local/traefik/certs/ca.crt | sed -e 's/^/        /')" > "${CLOUDINIT_FILE}"
+printf "$CLOUDINIT_TEMPLATE" "$JWKS_ADDRESS" "${JWKS_DNS%%:*}" "$(cat "$JWKS_CA_FILE" | sed -e 's/^/        /')" > "${CLOUDINIT_FILE}"
 echo "created cloud-init file"
 
 if [ "${SKIP_BOOTSTRAP:-false}" == true ]; then

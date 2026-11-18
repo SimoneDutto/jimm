@@ -57,6 +57,11 @@ func start(ctx context.Context, s *service.Service) error {
 	if addr == "" {
 		addr = ":http-alt"
 	}
+	tlsCert := os.Getenv("JIMM_TLS_CERT")
+	tlsKey := os.Getenv("JIMM_TLS_KEY")
+	if (tlsCert == "") != (tlsKey == "") {
+		return errors.New("JIMM_TLS_CERT and JIMM_TLS_KEY must be set together")
+	}
 	macaroonExpiryDuration := 24 * time.Hour
 	durationString := os.Getenv("JIMM_MACAROON_EXPIRY_DURATION")
 	if durationString != "" {
@@ -338,8 +343,13 @@ func start(ctx context.Context, s *service.Service) error {
 	})
 
 	zapctx.Info(ctx, "Registered all River workers")
-	s.Go(httpsrv.ListenAndServe)
-	zapctx.Info(ctx, "Started JIMM HTTP server")
+	s.Go(func() error {
+		if tlsCert != "" {
+			return httpsrv.ListenAndServeTLS(tlsCert, tlsKey)
+		}
+		return httpsrv.ListenAndServe()
+	})
+	zapctx.Info(ctx, "Started JIMM public server", zap.Bool("tls", tlsCert != ""))
 	s.Go(internalSrv.ListenAndServe)
 	zapctx.Info(ctx, "Started JIMM internal HTTP server")
 	s.Go(sshServer.ListenAndServe)

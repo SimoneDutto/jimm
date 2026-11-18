@@ -110,6 +110,9 @@ jimm-snap:
 	cp ./snaps/jimm/snapcraft.yaml ./snap/
 	snapcraft
 
+microjaas-snap:
+	bash ./snaps/microjaas/setup/build.sh
+
 jaas-snap:
 	mkdir -p ./snap
 	cp -R ./snaps/jaas/* ./snap/

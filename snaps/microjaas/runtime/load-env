@@ -1,0 +1,4 @@
+#!/bin/sh
+set -aeu
+. "$SNAP/templates/${1##*/}.env"
+exec "$@"
